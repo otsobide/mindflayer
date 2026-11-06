@@ -10,7 +10,8 @@ reaches the block (#44), the names a suggestion ranks a repository by (#58),
 what an MCP server's definition is held to for each agent (#87), the
 entry Claude's `.mcp.json` is given of one (#90), the one Codex's
 `.codex/config.toml` is (#91) and the one OpenCode's `opencode.json` is
-(#92), and the MCP installs to come (#93, #94).
+(#92), the MCP installs they serve (#93, #94), and what `mindweaver doctor`
+finds keeps an agent from what a project gives it (#96).
 [docs/architecture.md](architecture.md) says what Mindweaver does with these
 facts and why; this page says what the agents do.
 
@@ -562,7 +563,7 @@ developers.openai.com/codex to learn.chatgpt.com.
 | The project chain shares a 32 KiB budget (`project_doc_max_bytes`) and a file past it is truncated; the global file is not counted. | docs-only | Source, [agents_md.rs](https://github.com/openai/codex/blob/main/codex-rs/core/src/agents_md.rs). Fallback: #42 warns as the chain nears the budget; counting the global file too would only warn earlier. |
 | There is no `@`-import. | docs-only | [agents-md](https://learn.chatgpt.com/docs/agent-configuration/agents-md). Why D-03 writes rule text into `AGENTS.md` itself. |
 | `.claude/rules` is not read: the instruction files are the `AGENTS.md` chain above, and Codex's own "rules" are Starlark command policy under `rules/`, not instructions. | docs-only | [agents-md](https://learn.chatgpt.com/docs/agent-configuration/agents-md), [rules](https://learn.chatgpt.com/docs/agent-configuration/rules). Fallback: #43 warns that a path-scoped rule reaches Claude only; were Codex to read it after all, the warning would be too cautious, never wrong about Claude. |
-| A project marked `trust_level = "untrusted"` skips project `AGENTS.md`; one with no trust entry still reads it. | docs-only | Source, [agents_md.rs](https://github.com/openai/codex/blob/main/codex-rs/core/src/agents_md.rs), [config_toml.rs](https://github.com/openai/codex/blob/main/codex-rs/config/src/config_toml.rs). Check 5 was not run. Fallback: a check that reads Codex's config (#96) can say a project is distrusted. |
+| A project marked `trust_level = "untrusted"` skips project `AGENTS.md`; one with no trust entry still reads it. | docs-only | Source, [agents_md.rs](https://github.com/openai/codex/blob/main/codex-rs/core/src/agents_md.rs), [config_toml.rs](https://github.com/openai/codex/blob/main/codex-rs/config/src/config_toml.rs). Check 5 was not run. Fallback: `mindweaver doctor` (#96) reads Codex's config and says a project it marks `untrusted` (`doctor_codex_distrusted`). |
 | An ignored `AGENTS.md` is read. | docs-only | Source search only. Fallback: shared mode, or `edit_tracked` for a tracked `AGENTS.md`, which no exclude touches. |
 | `CODEX_HOME` moves `~/.codex`. | docs-only | [config-reference](https://learn.chatgpt.com/docs/config-file/config-reference). Fallback: `--codex-home` names the folder outright. |
 | How an empty `CODEX_HOME` is read. | docs-only | The docs are silent. The source requires a set `CODEX_HOME` to name an existing folder ([home-dir](https://github.com/openai/codex/blob/main/codex-rs/utils/home-dir/src/lib.rs)), so an empty one may be refused rather than taken for unset; not run. Fallback: Mindweaver reads an empty variable as no folder, as it reads an empty `$MINDWEAVER_HOME`, so if the agent takes it for unset and reads its default folder, a check leaves that folder out; `--codex-home` names it outright. An [open question](architecture.md#open-questions). |
@@ -585,6 +586,7 @@ opencode.ai/v2/docs) ([releases](https://github.com/anomalyco/opencode/releases)
 | V1 given one name twice logs `duplicate skill name`, and the winner is whichever copy finishes parsing last. | docs-only | Source, [skill/index.ts](https://github.com/anomalyco/opencode/blob/v1.19.4/packages/opencode/src/skill/index.ts). Check 2 was not run. Fallback: D-07 writes both copies identically in one staged step, so either winner is the same skill. |
 | `OPENCODE_DISABLE_CLAUDE_CODE` or `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` turns `.claude/skills` off in V1. | docs-only | [V1 rules](https://opencode.ai/docs/rules/). Fallback: the `.agents/skills` copy still reaches it. |
 | V2 reads `~/.config/opencode/skills`, `~/.claude/skills`, `~/.agents/skills`, `.opencode/skills`, `.claude/skills` and `.agents/skills` from the start directory up to the project root, plus `skills` config entries. A skill's ID is its folder name. Later sources win: built-in, `.claude/skills`, `.agents/skills`, `~/.config/opencode/skills`, project `.opencode/skills`, config; within a group the global folder comes first, then the farthest ancestor down. Hidden folders and `node_modules` are skipped, six levels deep at most. | docs-only | [V2 skills](https://opencode.ai/v2/docs/skills/). Fallback: the copies are identical, so which wins does not matter. `~/.agents/skills` beating a project's `.claude/skills` is why doctor reports shadowing (D-22). |
+| Whether `$CLAUDE_CONFIG_DIR` moves the `~/.claude/skills` either line reads. | docs-only | The [V1 skills](https://opencode.ai/docs/skills/) and [V2 skills](https://opencode.ai/v2/docs/skills/) docs name `~/.claude/skills` and are silent on `$CLAUDE_CONFIG_DIR`; not run. Fallback: Mindweaver takes `~/.claude/skills` whatever `$CLAUDE_CONFIG_DIR` says, as it takes `~/.config/opencode` whatever `$XDG_CONFIG_HOME` says (`AgentHomes::claude_dir_in_home` while the variable moves Claude's folder), so if OpenCode follows it, `mindweaver doctor` (#96) compares a project's skills with the wrong folder while it is set; `--claude-config-dir` names the one folder outright, for both agents. |
 | Ignored files are read: V1's scan has no gitignore option. | docs-only | Source search only, [skill/index.ts](https://github.com/anomalyco/opencode/blob/v1.19.4/packages/opencode/src/skill/index.ts). Fallback: shared mode (D-02). |
 
 ### Rules
@@ -601,8 +603,9 @@ opencode.ai/v2/docs) ([releases](https://github.com/anomalyco/opencode/releases)
 
 | Fact | Mark | Source, and the fallback |
 |---|---|---|
-| `OPENCODE_CONFIG_DIR` adds a folder loaded after `~/.config/opencode` and the project's `.opencode`; it does not replace `~/.config/opencode`. | docs-only | [config](https://opencode.ai/docs/config/). Fallback: still an [open question](architecture.md#open-questions); `AgentHomes` takes both folders when a check first reads OpenCode's. |
+| `OPENCODE_CONFIG_DIR` adds a folder loaded after `~/.config/opencode` and the project's `.opencode`; it does not replace `~/.config/opencode`. | docs-only | [config](https://opencode.ai/docs/config/). Fallback: still an [open question](architecture.md#open-questions); `AgentHomes` takes both folders since `mindweaver doctor` (#96), the first check to read OpenCode's, read them: `~/.config/opencode` beneath the folder the variable names (`opencode_dir_in_home`), each read for skills and servers, and an option naming the one folder outright. Were the variable to replace it after all, doctor would read a folder too many, a finding too cautious, never one missed. |
 | Whether `$XDG_CONFIG_HOME` moves `~/.config/opencode`. | docs-only | The [config](https://opencode.ai/docs/config/) docs name `~/.config/opencode` and are silent on `$XDG_CONFIG_HOME`; not run. Fallback: Mindweaver takes `~/.config/opencode` whatever `$XDG_CONFIG_HOME` says, so if OpenCode follows it, a check reads the wrong folder while it is set; `--opencode-config-dir` names the right one outright. An [open question](architecture.md#open-questions). |
+| Its global config is `config.json`, `opencode.json` and `opencode.jsonc` in its own folder, and a project's config is merged over it key by key, its `mcp` servers among it, so a server of one name in both is read as one made of both. | docs-only | [config](https://opencode.ai/docs/config/), which merges config files rather than replacing one with another; the three names are the ones the probe's guards keep out of the temp home ([MCP servers](#how-they-are-run)). Fallback: `mindweaver doctor` (#96) reports a server of an installed one's name in any of them; were OpenCode to take the project's whole, the finding would be too cautious, never wrong about what reaches OpenCode. |
 | How an empty `OPENCODE_CONFIG_DIR` is read. | docs-only | The [config](https://opencode.ai/docs/config/) docs are silent; not run. Fallback: Mindweaver reads an empty variable as no folder, as it reads an empty `$MINDWEAVER_HOME`, so if the agent takes it for unset and reads its default folder, a check leaves that folder out; `--opencode-config-dir` names it outright. An [open question](architecture.md#open-questions). |
 
 ## MCP servers
@@ -654,6 +657,18 @@ stands now that #18's runs have been made:
 | OpenCode | `{env:` written as it is where no input stands, in the command, the arguments, the environment, the folder, the URL or the headers, cannot be expressed in either line: both fill `{env:NAME}` in over the config file's text before they parse it, a variable's value or nothing in its place. Nor can `{file:`, which they fill in with a file's contents. | verified for `{env:}` on 2.2.5, 2.1.3 and 1.19.4; the folder and `{file:` docs-only | #92; the OpenCode runs below expand a `{env:}` the file holds in the command, its first word too, the environment, the URL and the headers, inside a longer value too, and the [config](https://opencode.ai/docs/config/) docs say `{file:path}` is filled in the same way. Mindweaver refuses any `{env:` or `{file:`, rather than only what OpenCode's pattern takes, since a reference it writes for an input after one may close it. A run with a `{file:}` in a header would move that part. |
 | OpenCode | V1's shape, `mcp.<name>`, has no key for a program's folder, where V2's has `cwd`: an entry written in V1's, into a file that keeps its servers so, is written without it. | docs-only | #92; V1's [MCP servers](https://opencode.ai/docs/mcp-servers/) docs give a local server `type`, `command`, `environment`, `enabled` and `timeout`, and none of #18's checks writes a folder. Mindweaver says what it leaves out (`opencode_mcp_v1_cwd`); were V1 to take `cwd`, a server it could be given whole starts where OpenCode starts it. |
 
+
+### What an agent asks before it starts one
+
+What an install says of each agent once it has written a server's entry
+(#95, `Agent::starts_a_server`), from what the runs and the docs below
+say:
+
+| Agent | Before it starts a project's server | Mark | Source |
+|---|---|---|---|
+| Claude Code | Asks somebody working in a session to approve the project's servers; a `-p` run starts every one the file names, approved or not. | docs-only for the session, verified for `-p` | [Claude Code's `.mcp.json`](#claude-codes-mcpjson); `claude-mcp` on 2.1.318 started `probe-unapproved` |
+| Codex | Reads `.codex/config.toml` only in a project its user's config marks trusted, which an install says as `codex_mcp_untrusted` when nothing marks it. | docs-only | [Codex's `.codex/config.toml`](#codexs-codexconfigtoml); `codex-mcp-trusted` and `codex-mcp-untrusted` pending |
+| OpenCode | Asks nothing: it connects to every server the project's file names. | verified for `opencode mcp list` | [OpenCode's `opencode.json`](#opencodes-opencodejson); the OpenCode runs on 2.2.5, 2.1.3 and 1.19.4 connected each stand-in, nothing approved |
 
 ### Running them
 
@@ -1256,6 +1271,8 @@ project's OpenCode config, on what the runs above and the
   background server fills them from its own (`opencode-mcp-service`):
   whether Mindweaver says so, and doctor checks the server's variables, is
   the owner's to decide ([D-11](architecture.md#d-11-mcp-secrets-are-environment-references)).
+  `mindweaver doctor` (#96) checks the variables set where it runs, and
+  says nothing of a V2 server's own.
 
 ### Assumptions the run confirms
 
@@ -1360,8 +1377,8 @@ the five `PROBE_MCP_*` values above, for Claude's
 reads at its root above one holding nothing (#58), by name alone:
 `Agent::reads_at_root` in `apps/core/src/agent.rs`. Each name is the folder
 of a place the tables above say the agent reads a kind from, an instruction
-file they list, or the file [D-10](architecture.md#d-10-an-mcp-server-is-one-owned-entry-per-agent)
-puts the agent's project MCP servers in. The fallback for every docs-only row
+file they list, or a file [D-10](architecture.md#d-10-an-mcp-server-is-one-owned-entry-per-agent)
+may put the agent's project MCP servers in. The fallback for every docs-only row
 is the same: a name wrongly counted ranks a repository a little high, and
 one missed ranks it a little low, but the suggestion still lists every
 repository it finds, so neither hides one.
@@ -1369,15 +1386,15 @@ repository it finds, so neither hides one.
 | Agent | Names at a project's root | Mark | Source, and the fallback |
 |---|---|---|---|
 | Claude Code | `.claude`, `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md` | verified | [Skills](#skills) and [rules](#rules-and-instruction-files) above: `.claude/skills`, the instruction files, and `AGENTS.md` read natively when no `CLAUDE.md` is there. |
-| Claude Code | `.mcp.json`, its project's MCP servers | docs-only | [mcp](https://code.claude.com/docs/en/mcp); D-10 writes into it. |
+| Claude Code | `.mcp.json`, its project's MCP servers | verified | [Claude Code's `.mcp.json`](#claude-codes-mcpjson) above: Claude Code 2.1.318 started every server it named (`claude-mcp`); D-10 writes into it. |
 | Codex | `.agents`, `AGENTS.md`, `AGENTS.override.md` | docs-only | [Skills](#skills-1) and [rules](#rules) above. |
 | Codex | `.codex`, which holds a trusted project's `config.toml` and `skills` | docs-only | [config-reference](https://learn.chatgpt.com/docs/config-file/config-reference), and `.codex/skills` above; D-10 writes into `.codex/config.toml`. Counted though `.codex/skills` is never targeted: a folder of Codex's own shows Codex is used there, trusted or not. |
 | OpenCode | `.agents`, `.claude`, `.opencode`, `AGENTS.md`, and `CLAUDE.md`, which V1 reads when there is no `AGENTS.md` | docs-only | [Skills](#skills-2) and [rules](#rules-1) above. |
-| OpenCode | `opencode.json`, its project's configuration | docs-only | [config](https://opencode.ai/docs/config/); D-10 writes into it, as JSONC. |
+| OpenCode | `opencode.json` and `opencode.jsonc`, its project's configuration, whose two in `.opencode` count as `.opencode` | docs-only | [config](https://opencode.ai/docs/config/), and [OpenCode's `opencode.json`](#opencodes-opencodejson) above; D-10 writes into the first of the four there is, as JSONC, or a new `opencode.json`. |
 
 ## Facts the roadmap cites
 
-Where every fact #28, #34, #42 to #44, #87 and #90 to #94 build on stands. A
+Where every fact #28, #34, #42 to #44, #87, #90 to #94 and #96 build on stands. A
 docs-only one carries its fallback in the tables above, one of #87's what
 would move it, and a pending one the check that will settle it, under [MCP
 servers](#mcp-servers).
@@ -1439,4 +1456,10 @@ servers](#mcp-servers).
 | #92 | Both lines read a project's config from `opencode.json`, `opencode.jsonc`, `.opencode/opencode.json` or `.opencode/opencode.jsonc`, each as JSONC, comments and trailing commas included. | docs-only: [config](https://opencode.ai/docs/config/); every run wrote a strict `opencode.json` |
 | #92 | Both lines fill `{file:path}` in over the config's text, as they fill `{env:}`. | docs-only: [config](https://opencode.ai/docs/config/); no run wrote one |
 | #92 | V1's shape has no key for a program's folder; V2's has `cwd`. | docs-only: V1's [MCP servers](https://opencode.ai/docs/mcp-servers/) docs, and V2's shape as #92 gives it; no run wrote a folder |
-| #93, #94 | Each agent loads its project's servers from the one file the target table will name: `.mcp.json`, `.codex/config.toml` (trusted), `opencode.json`. | verified for `.mcp.json` and `opencode.json`; docs-only for `.codex/config.toml`, whose runs were not made (every MCP run) |
+| #93, #94 | Each agent loads its project's servers from the one file the target table names (`Agent::mcp_file`): `.mcp.json`, `.codex/config.toml` (trusted), OpenCode's first of four there is, `opencode.json` when none is. | verified for `.mcp.json` and `opencode.json`; docs-only for `.codex/config.toml`, whose runs were not made (every MCP run) |
+| #96 | Codex reads a project's `.codex/config.toml` only in a project its user's config marks trusted, and one marked `untrusted` loses its `AGENTS.md` too. | docs-only: `codex-mcp-trusted` and `codex-mcp-untrusted` pending, and Codex's check 5 not run |
+| #96 | An `AGENTS.override.md` hides `AGENTS.md` from Codex, Codex reads only the start directory without a git root, and cuts the chain off at 32 KiB. | docs-only, as #42's rows above |
+| #96 | A `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` in or above a project keeps Claude from its `AGENTS.md`. | verified for `CLAUDE.md` and `CLAUDE.local.md`, as #44's rows above |
+| #96 | OpenCode reads `.agents/skills`, `.claude/skills` and `.opencode/skills`, and given one name twice loads one of them. | docs-only |
+| #96, D-22 | At user scope Claude reads `<config dir>/skills`, Codex `~/.agents/skills`, and OpenCode `~/.config/opencode/skills`, the one in the folder `$OPENCODE_CONFIG_DIR` names, `~/.claude/skills` whatever `$CLAUDE_CONFIG_DIR` says, and `~/.agents/skills`, and one name at both scopes resolves differently in each. | verified in part for Claude's folder; docs-only for the rest |
+| #96 | Codex reads a project's servers over `$CODEX_HOME/config.toml`'s key by key, and OpenCode merges a project's config over its global config key by key. | docs-only |

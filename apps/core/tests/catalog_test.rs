@@ -943,6 +943,7 @@ fn record(ledger: &Ledger, name: &str, paths: &[&str]) {
                         content_hash: None,
                     })
                     .collect(),
+                entries: Vec::new(),
             },
         )
         .unwrap();
@@ -1044,6 +1045,7 @@ fn a_project_the_workspace_does_not_link_has_no_record_in_its_ledger() {
                     path: String::from(".claude/skills/deploy"),
                     content_hash: None,
                 }],
+                entries: Vec::new(),
             },
         )
         .unwrap();

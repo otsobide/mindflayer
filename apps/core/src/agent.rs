@@ -1,7 +1,8 @@
 //! What core knows about the agents that read what Mindweaver manages.
 //!
 //! Which agents there are ([`Agent`]), where each kind goes in a project for
-//! each of them to read it ([`TargetTable`]), every folder in a project each
+//! each of them to read it ([`TargetTable`], and for an MCP server's entry
+//! the config file [`Agent::mcp_file`] names), every folder in a project each
 //! reads it from, whoever put it there ([`Agent::reads`]), and where each
 //! keeps what it reads for every project ([`AgentHomes`]). The checks that will need those
 //! last folders (Claude's user memory, Codex's config, the skills in
@@ -21,9 +22,13 @@ use serde::{Serialize, Serializer};
 use thiserror::Error;
 
 use crate::agents_md;
+use crate::claude_mcp;
 use crate::claude_md::{CLAUDE_LOCAL_MD, CLAUDE_MD};
 use crate::code::codes;
+use crate::codex_mcp;
+use crate::config_entry::FileError;
 use crate::kind::Kind;
+use crate::opencode_mcp;
 
 /// A coding agent Mindweaver puts skills and rules where it reads them.
 ///
@@ -143,6 +148,70 @@ impl Agent {
         files.sort();
         files
     }
+
+    /// The config file this agent is given an MCP server's entry in, in the
+    /// project at `root`, as a route from it, `/` separated: where D-10
+    /// writes a server's one entry for it, and what the ledger records the
+    /// entry under.
+    ///
+    /// Asked of the renderer that writes the file, never spelled again here,
+    /// so the file an entry is recorded in is the file it is written into:
+    /// Claude's `.mcp.json` ([`claude_mcp::FILE`]) and Codex's
+    /// `.codex/config.toml` ([`codex_mcp::FILE`]) wherever the project is,
+    /// and OpenCode's the first of its four config files there is, or the
+    /// `opencode.json` made when none is ([`opencode_mcp::FILES`]). Not a
+    /// row of the [`TargetTable`], which is pure: which of OpenCode's files
+    /// it is depends on what the project holds, so that one is looked for on
+    /// disk, and only that one can fail.
+    pub fn mcp_file(self, root: &Path) -> Result<&'static str, FileError> {
+        match self {
+            Agent::Claude => Ok(claude_mcp::FILE),
+            Agent::Codex => Ok(codex_mcp::FILE),
+            Agent::OpenCode => opencode_mcp::chosen(root),
+        }
+    }
+
+    /// What this agent asks before it starts an MCP server a project's
+    /// config file gives it: what an install says once it has written one,
+    /// as `docs/agents.md` ("MCP servers") records it, never decided again
+    /// by a front end. Matched with no wildcard, so an agent added says it
+    /// before it compiles.
+    pub const fn starts_a_server(self) -> Starts {
+        match self {
+            // In a session somebody works in, once they approve it
+            // (docs-only); a `-p` run starts every server the file names,
+            // approved or not (verified on 2.1.318, `claude-mcp`).
+            Agent::Claude => Starts::OnceApproved,
+            // Only in a project its user's config marks trusted
+            // (docs-only, `codex-mcp-trusted` and `codex-mcp-untrusted`
+            // pending), which an install says by `codex_mcp_untrusted`.
+            Agent::Codex => Starts::InATrustedProject,
+            // Unasked: `opencode mcp list` connected every server the
+            // project's file named, nothing approved (verified on 2.2.5,
+            // 2.1.3 and 1.19.4, the OpenCode runs).
+            Agent::OpenCode => Starts::Unasked,
+        }
+    }
+}
+
+/// What an agent asks before it starts an MCP server its project's config
+/// file gives it ([`Agent::starts_a_server`]).
+///
+/// By its name in snake_case in JSON, `"once_approved"`: a word of core's
+/// a front end says in words of its own, as it says a state, and no word a
+/// command line takes, so derived.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum Starts {
+    /// Once somebody approves the project's servers when it asks; a run
+    /// with no one to ask starts them all the same.
+    OnceApproved,
+    /// Only in a project its user's config marks trusted.
+    InATrustedProject,
+    /// With nothing asked.
+    Unasked,
 }
 
 /// The files `agent` reads in a project, beside the folders [`read`] names,
@@ -150,26 +219,39 @@ impl Agent {
 ///
 /// One arm per agent with no wildcard, as `read`'s, so a new agent does not
 /// compile until somebody has said what it reads there. Each configuration
-/// file is the one D-10 puts an MCP server's entry in.
+/// file is one D-10 puts an MCP server's entry in, named by the renderer
+/// that writes it, as [`Agent::mcp_file`] names it.
 fn files(agent: Agent) -> Vec<PathBuf> {
-    let at_root = |names: &[&str]| names.iter().map(PathBuf::from).collect::<Vec<_>>();
+    // Joined a folder at a time, as `standard` joins them, so a route with a
+    // folder in it has one kind of separator on Windows too.
+    let at_root = |routes: &[&str]| {
+        routes
+            .iter()
+            .map(|route| route.split('/').collect::<PathBuf>())
+            .collect::<Vec<_>>()
+    };
     match agent {
         // Verified on Claude Code 2.1.309: `CLAUDE.md`, `CLAUDE.local.md`,
         // and `AGENTS.md` natively when neither is there. `.mcp.json`, its
-        // project's MCP servers, is docs-only.
-        Agent::Claude => at_root(&[CLAUDE_MD, CLAUDE_LOCAL_MD, agents_md::FILE, ".mcp.json"]),
+        // project's MCP servers, verified on 2.1.318 (`claude-mcp`).
+        Agent::Claude => at_root(&[
+            CLAUDE_MD,
+            CLAUDE_LOCAL_MD,
+            agents_md::FILE,
+            claude_mcp::FILE,
+        ]),
         // Docs-only: `AGENTS.md`, or `AGENTS.override.md` in its place, and
-        // a trusted project's `.codex/config.toml`, joined a folder at a
-        // time as `standard` joins them, so it has one kind of separator on
-        // Windows too.
-        Agent::Codex => {
-            let mut files = at_root(&[agents_md::FILE, agents_md::OVERRIDE]);
-            files.push(Path::new(".codex").join("config.toml"));
+        // a trusted project's `.codex/config.toml`.
+        Agent::Codex => at_root(&[agents_md::FILE, agents_md::OVERRIDE, codex_mcp::FILE]),
+        // Docs-only: `AGENTS.md`, the `CLAUDE.md` V1 reads when there is no
+        // `AGENTS.md`, and each of the four files its project's
+        // configuration may be in, the first of them there is the one read,
+        // so a snapshot reading the one there is reads one named here.
+        Agent::OpenCode => {
+            let mut files = at_root(&[agents_md::FILE, CLAUDE_MD]);
+            files.extend(at_root(&opencode_mcp::FILES));
             files
         }
-        // Docs-only: `AGENTS.md`, the `CLAUDE.md` V1 reads when there is no
-        // `AGENTS.md`, and `opencode.json`, its project's configuration.
-        Agent::OpenCode => at_root(&[agents_md::FILE, CLAUDE_MD, "opencode.json"]),
     }
 }
 
@@ -301,8 +383,9 @@ impl fmt::Display for UnknownAgent {
 /// with none is a kind that reaches that agent some other way, or not at
 /// all, which is every rule: D-03 puts rules in a block of `AGENTS.md`, one
 /// file every agent shares rather than a folder a copy goes in, rendered
-/// outside the table ([`crate::install::rules`]), and every MCP server, which
-/// will be an entry in each agent's own file (D-10).
+/// outside the table ([`crate::install::rules`]), and every MCP server, an
+/// entry in each agent's own config file (D-10), which [`Agent::mcp_file`]
+/// names, since OpenCode's is looked for on disk.
 ///
 /// Pure: no entry is looked for on disk, and every location is relative to
 /// a project's root.
@@ -398,7 +481,8 @@ fn standard(kind: Kind, agent: Agent) -> Option<PathBuf> {
         (Kind::Skill, Agent::Codex | Agent::OpenCode) => Some(Path::new(".agents").join("skills")),
         (Kind::Rule, Agent::Claude | Agent::Codex | Agent::OpenCode) => None,
         // An entry in each agent's own config file, rendered outside the
-        // table as a rule's section is (D-10), which no release writes yet.
+        // table as a rule's section is (D-10), in the file `Agent::mcp_file`
+        // names, which no release writes yet.
         (Kind::Mcp, Agent::Claude | Agent::Codex | Agent::OpenCode) => None,
     }
 }
@@ -443,6 +527,18 @@ pub struct AgentHomes {
     /// The user's `~/.agents`, which belongs to no one agent: several read
     /// skills from it, whatever their own folders say.
     pub agents_dir: Option<PathBuf>,
+    /// `~/.claude`, while `$CLAUDE_CONFIG_DIR` moves Claude Code's folder
+    /// elsewhere: OpenCode reads Claude's skills in `~/.claude/skills`
+    /// whatever that variable says (docs/agents.md, docs-only). None while
+    /// `claude_config_dir` is that folder already, or an option names it
+    /// outright, which every agent reading it is taken to read.
+    pub claude_dir_in_home: Option<PathBuf>,
+    /// `~/.config/opencode`, while `$OPENCODE_CONFIG_DIR` names another
+    /// folder for `opencode_config_dir`: OpenCode loads that one on top of
+    /// this one, never in its place (docs/agents.md, docs-only), so both
+    /// are read. None while `opencode_config_dir` is that folder already,
+    /// or an option names OpenCode's outright.
+    pub opencode_dir_in_home: Option<PathBuf>,
 }
 
 impl AgentHomes {
@@ -454,10 +550,44 @@ impl AgentHomes {
             ("Codex", &self.codex_home),
             ("OpenCode", &self.opencode_config_dir),
             ("more than one agent", &self.agents_dir),
+            ("OpenCode", &self.claude_dir_in_home),
+            ("OpenCode", &self.opencode_dir_in_home),
         ]
         .into_iter()
         .filter_map(|(reader, folder)| Some((reader, folder.as_deref()?)))
         .collect()
+    }
+
+    /// Every folder these homes name that `agent` reads skills from at user
+    /// scope, in the order docs/agents.md lists them: a skill there is read
+    /// beside a project's in every project, which is what doctor compares a
+    /// project's skills with (D-22). Mindweaver writes in none of them.
+    ///
+    /// One arm per agent with no wildcard, as `read`'s, so a new agent does
+    /// not compile until somebody has said where it reads at user scope.
+    pub fn skills_read_by(&self, agent: Agent) -> Vec<PathBuf> {
+        let skills = |home: &Option<PathBuf>| home.as_ref().map(|home| home.join("skills"));
+        let folders = match agent {
+            // Verified in part on Claude Code 2.1.309: `<config dir>/skills`.
+            Agent::Claude => vec![skills(&self.claude_config_dir)],
+            // Docs-only: `$HOME/.agents/skills`, whatever `$CODEX_HOME` says.
+            // Not `$CODEX_HOME/skills`, which is deprecated.
+            Agent::Codex => vec![skills(&self.agents_dir)],
+            // Docs-only, V1 and V2: its own folder's, `~/.config/opencode`'s
+            // beneath the one `$OPENCODE_CONFIG_DIR` names, `~/.claude/skills`
+            // whatever `$CLAUDE_CONFIG_DIR` says, and `~/.agents/skills`.
+            Agent::OpenCode => vec![
+                skills(&self.opencode_dir_in_home),
+                skills(&self.opencode_config_dir),
+                skills(if self.claude_dir_in_home.is_some() {
+                    &self.claude_dir_in_home
+                } else {
+                    &self.claude_config_dir
+                }),
+                skills(&self.agents_dir),
+            ],
+        };
+        folders.into_iter().flatten().collect()
     }
 
     /// Where each agent keeps its folder when nothing moves it: the fallback a
@@ -476,7 +606,20 @@ impl AgentHomes {
             // the path has one kind of separator on Windows too.
             opencode_config_dir: Some(user_home.join(".config").join("opencode")),
             agents_dir: Some(user_home.join(".agents")),
+            // Each is one of the above, which no variable has moved.
+            claude_dir_in_home: None,
+            opencode_dir_in_home: None,
         }
+    }
+
+    /// OpenCode's own folders, each of them it reads, in the order it loads
+    /// them: `~/.config/opencode`, then the one `$OPENCODE_CONFIG_DIR`
+    /// names on top of it (docs/agents.md, docs-only).
+    pub fn opencode_dirs(&self) -> Vec<&Path> {
+        [&self.opencode_dir_in_home, &self.opencode_config_dir]
+            .into_iter()
+            .filter_map(Option::as_deref)
+            .collect()
     }
 }
 

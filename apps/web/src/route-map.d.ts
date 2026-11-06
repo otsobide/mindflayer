@@ -87,6 +87,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/mcp': RouteRecordInfo<
+      '/mcp',
+      '/mcp',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/new': RouteRecordInfo<
       '/new',
       '/new',
@@ -201,6 +208,14 @@ declare module 'vue-router/auto-routes' {
     'src/pages/loads.vue': {
       routes:
         | '/loads'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/mcp.vue': {
+      routes:
+        | '/mcp'
       views:
         | never
       pathParamNames:

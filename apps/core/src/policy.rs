@@ -37,11 +37,15 @@ use std::path::{Component, Path, PathBuf};
 use thiserror::Error;
 
 use crate::code::codes;
+use crate::create::{self, CreateError};
 use crate::install;
+use crate::kind::Kind;
 use crate::known::Switchable;
+use crate::mcp::Given;
 use crate::names::Names;
 use crate::paths;
 use crate::resolve::Reason;
+use crate::value::Redacted;
 use crate::workspace::{Loaded, Member, WeaverWorkspace, WorkspaceError};
 
 /// Why a value a request holds is not one it may name.
@@ -63,6 +67,26 @@ pub enum PolicyError {
     /// or a path somebody put together, none of which is gone to.
     #[error("`{given}` is none of the workspaces this machine knows, nor the one the panel was launched on: only one of those is switched to")]
     Unlisted { given: String },
+    /// A yes sent with an install that waits for none: anything but an
+    /// MCP server from elsewhere than the library, by the place it comes
+    /// from as `--from` takes it, or from no place named, which is not
+    /// told until the line runs (`install::asks_first`). The one yes a
+    /// request may carry is to such a server, once somebody has been shown
+    /// what each agent would run of it. The place as `--from` took it, a
+    /// source's address among them, without any credential it was typed
+    /// with, as an install's refusal says one: it goes back to whoever
+    /// sent it, and into whatever logs that.
+    #[error("{} {name}{}: nothing is asked before it is installed, so no yes is sent with it", .kind.noun(), .from.as_ref().map_or_else(|| String::from(" from no place named"), |from| format!(" from {from}")))]
+    YesUnasked {
+        kind: Kind,
+        name: String,
+        from: Option<Redacted>,
+    },
+    /// A server's options a line cannot say as given, a name beside a
+    /// value that holds `=`, refused by `add`'s own check, and by its code
+    /// ([`sayable`]).
+    #[error(transparent)]
+    Server(CreateError),
     /// An entry no registry holds, or a path no entry points at: the
     /// workspace's own error for an unlink or an unload of one, since it is
     /// the condition they meet too.
@@ -76,9 +100,45 @@ codes!(PolicyError {
     Self::Unnormalized { .. } => "path_unnormalized",
     Self::InWeaverDir { .. } => "path_in_mindflayer",
     Self::Unlisted { .. } => "switch_unlisted",
+    Self::YesUnasked { .. } => "install_yes_unasked",
 } carried {
+    Self::Server(error) => error,
     Self::Workspace(error) => error,
 });
+
+/// A yes a request sends with an install of `kind` `name` from `from`, as
+/// `--from` takes it: one only for an install that waits for one
+/// ([`install::asks_first`]), an MCP server from elsewhere than the
+/// library, named by where it comes from.
+///
+/// Held here, with every value a request may name, rather than passed on
+/// for the line to ignore: a yes is a front end saying somebody was shown
+/// what each agent would run, and one sent where nothing asks it says that
+/// of nothing, which a request that could carry it anywhere would come to
+/// mean of everything.
+pub fn confirmed(kind: Kind, name: &str, from: Option<&str>) -> Result<(), PolicyError> {
+    if from.is_some_and(|from| install::asks_first(kind, from)) {
+        return Ok(());
+    }
+    Err(PolicyError::YesUnasked {
+        kind,
+        name: name.to_owned(),
+        from: from.map(Redacted::new),
+    })
+}
+
+/// A server's options a request sends with an `add` or an `edit`, `given`:
+/// refused when a line cannot carry one of its names as given, one beside
+/// a value that holds `=`, which the line's option would end at the first
+/// one (`create::sayable`).
+///
+/// Held here, before a line is built, as every value a request sends is:
+/// the line would write a pair other than the one its draft was judged
+/// as, and the command would never be told. Refused by the code `add`'s
+/// check gives the draft, so the two say one thing.
+pub fn sayable(given: &Given) -> Result<(), PolicyError> {
+    create::sayable(given).map_err(PolicyError::Server)
+}
 
 /// `given`, as a path a request may name: absolute, spelled exactly as
 /// [`paths::normalize`] would spell it, and outside every `.mindweaver` and

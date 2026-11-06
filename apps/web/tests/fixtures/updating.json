@@ -14,15 +14,7 @@
   ],
   "boxes": [
     {
-      "closed": [
-        {
-          "kind": "mcp",
-          "why": {
-            "code": "not_installable",
-            "message": "MCP servers cannot be installed into a project yet"
-          }
-        }
-      ],
+      "closed": [],
       "entry": "api",
       "held": [
         {
@@ -49,15 +41,7 @@
       ]
     },
     {
-      "closed": [
-        {
-          "kind": "mcp",
-          "why": {
-            "code": "not_installable",
-            "message": "MCP servers cannot be installed into a project yet"
-          }
-        }
-      ],
+      "closed": [],
       "entry": "web",
       "held": [
         {
@@ -95,6 +79,53 @@
       ],
       "entry": "gone",
       "held": []
+    }
+  ],
+  "doctor": [
+    {
+      "entry": "api",
+      "failures": [],
+      "findings": [],
+      "name": "api",
+      "path": "/home/you/Updating/api"
+    },
+    {
+      "entry": "web",
+      "failures": [],
+      "findings": [
+        {
+          "agents": [
+            "opencode"
+          ],
+          "code": "doctor_copies_differ",
+          "fix": "make the copies hold the same, or keep one and remove the others",
+          "message": "/home/you/Updating/web/.agents/skills/lint: `lint` is also at /home/you/Updating/web/.claude/skills/lint, which OpenCode reads too, and the copies differ, so it loads one of them",
+          "path": "/home/you/Updating/web/.agents/skills/lint"
+        },
+        {
+          "agents": [
+            "opencode"
+          ],
+          "code": "doctor_copies_differ",
+          "fix": "make the copies hold the same, or keep one and remove the others",
+          "message": "/home/you/Updating/web/.agents/skills/release: `release` is also at /home/you/Updating/web/.claude/skills/release, which OpenCode reads too, and the copies differ, so it loads one of them",
+          "path": "/home/you/Updating/web/.agents/skills/release"
+        }
+      ],
+      "name": "web",
+      "path": "/home/you/Updating/web"
+    },
+    {
+      "entry": "gone",
+      "failures": [
+        {
+          "code": "not_a_project",
+          "message": "/home/you/Updating/gone: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
+        }
+      ],
+      "findings": [],
+      "name": null,
+      "path": "/home/you/Updating/gone"
     }
   ],
   "format": 1,
@@ -247,6 +278,7 @@
       }
     ],
     "origin": "workspace",
+    "servers": [],
     "templates": [
       {
         "kind": "skill",
@@ -346,6 +378,7 @@
           "path": "rules"
         }
       ],
+      "entries": [],
       "entry": "api",
       "failures": [],
       "health": "attention",
@@ -490,6 +523,7 @@
           "path": "rules"
         }
       ],
+      "entries": [],
       "entry": "web",
       "failures": [
         {
@@ -579,6 +613,7 @@
       "agents": [],
       "artifacts": [],
       "directories": [],
+      "entries": [],
       "entry": "gone",
       "failures": [],
       "health": "stale",

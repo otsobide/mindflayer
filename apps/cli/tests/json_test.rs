@@ -37,6 +37,7 @@ struct Library {
     holders: Vec<LibraryHolder>,
     templates: Vec<Template>,
     failures: Vec<Said>,
+    servers: Vec<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -62,6 +63,7 @@ struct Project {
     health: String,
     directories: Vec<Directory>,
     artifacts: Vec<Held>,
+    entries: Vec<Value>,
     tally: Value,
     templates: Vec<Template>,
     unreached: Vec<Value>,

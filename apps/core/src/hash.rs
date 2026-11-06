@@ -5,11 +5,12 @@
 //! Defined here and nowhere else. Every target of an installation is compared
 //! with the one hash recorded for it, on whichever machine the comparison
 //! runs, so two spellings of the recipe (or one that depended on the
-//! platform) would call an untouched copy edited. Two recipes, one for a
-//! folder ([`tree`]) and one for a file written whole ([`bytes`]), each for
-//! its own kind of target and never compared with the other.
+//! platform) would call an untouched copy edited. Three recipes, one for a
+//! folder ([`tree`]), one for a file written whole ([`bytes`]) and one for
+//! an MCP server's entry in an agent's config file ([`fingerprint`]), each
+//! for its own kind of target and never compared with another.
 //!
-//! What either makes is a [`ContentHash`], the value it is, rather than the
+//! What each makes is a [`ContentHash`], the value it is, rather than the
 //! text it is written as: only these recipes, and a digest somebody hands
 //! over that [`ContentHash::parse`] reads, make one.
 
@@ -91,6 +92,23 @@ pub fn tree(root: &Path) -> Result<ContentHash, io::Error> {
 /// between.
 pub fn bytes(contents: &[u8]) -> ContentHash {
     hex(Sha256::new_with_prefix(contents))
+}
+
+/// The fingerprint of an MCP server's entry: the SHA-256 of its canonical
+/// form, as 64 lowercase hex digits.
+///
+/// What the ledger keeps of an entry Mindweaver wrote into an agent's config
+/// file (D-10), as [`tree`] is what it keeps of a copy: an entry can carry
+/// no mark of its own, so this is the one sign that it holds what was
+/// written. Handed the canonical text rather than the entry, since that is
+/// each renderer's to make (`Entry::canonical` in [`crate::claude_mcp`],
+/// [`crate::codex_mcp`] and [`crate::opencode_mcp`]) and what
+/// [`crate::config_entry::Value::canonical`] gives of one read back, so an
+/// entry is fingerprinted alike as it is written and as a file holds it,
+/// however the file lays it out. The text alone, not the key it is under nor
+/// the file, as a copy's own name is not part of its tree's hash.
+pub fn fingerprint(canonical: &str) -> ContentHash {
+    hex(Sha256::new_with_prefix(canonical.as_bytes()))
 }
 
 /// Whether `text` is a hash as [`bytes`] and [`tree`] spell one: 64 hex

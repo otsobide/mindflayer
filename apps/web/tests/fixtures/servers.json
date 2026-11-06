@@ -1,0 +1,178 @@
+[
+  {
+    "answer": {
+      "issues": [],
+      "refused": null
+    },
+    "query": {
+      "draft": {
+        "description": "Acme's tools",
+        "kind": "mcp",
+        "name": "acme",
+        "server": {
+          "arg_env": [],
+          "args": [
+            "-y",
+            "@acme/server"
+          ],
+          "command": "npx",
+          "env": [],
+          "secret_env": [
+            "ACME_TOKEN"
+          ],
+          "type": "program"
+        },
+        "template": null,
+        "type": "add"
+      },
+      "holder": {
+        "type": "workspace"
+      },
+      "type": "validate"
+    }
+  },
+  {
+    "answer": {
+      "issues": [],
+      "refused": {
+        "code": "add_mcp_unfit",
+        "message": "`acme` would be a definition `validate` calls invalid, so nothing was written: input `ACME-TOKEN` is read from `ACME-TOKEN`, which not every agent can refer to: an environment variable's name is letters, digits and underscores, and does not start with a digit"
+      }
+    },
+    "query": {
+      "draft": {
+        "description": "Acme's tools",
+        "kind": "mcp",
+        "name": "acme",
+        "server": {
+          "arg_env": [],
+          "args": [
+            "-y",
+            "@acme/server"
+          ],
+          "command": "npx",
+          "env": [],
+          "secret_env": [
+            "ACME-TOKEN"
+          ],
+          "type": "program"
+        },
+        "template": null,
+        "type": "add"
+      },
+      "holder": {
+        "type": "workspace"
+      },
+      "type": "validate"
+    }
+  },
+  {
+    "answer": {
+      "issues": [],
+      "refused": null
+    },
+    "query": {
+      "draft": {
+        "name": "github",
+        "server": {
+          "arg_env": [],
+          "args": [
+            "run",
+            "-i",
+            "ghcr.io/github/github-mcp-server"
+          ],
+          "command": "docker",
+          "env": [],
+          "secret_env": [
+            "GITHUB_PERSONAL_ACCESS_TOKEN"
+          ],
+          "type": "program"
+        },
+        "type": "edit_server"
+      },
+      "holder": {
+        "type": "workspace"
+      },
+      "type": "validate"
+    }
+  },
+  {
+    "answer": {
+      "asks": [
+        {
+          "confirmed": {
+            "from": "load:../team",
+            "kind": "mcp",
+            "name": "sentry",
+            "projects": [
+              "web"
+            ],
+            "type": "install",
+            "yes": true
+          },
+          "lines": [
+            "mcp sentry into web, from load:../team:",
+            "  claude runs: npx -y @sentry/mcp-server",
+            "  opencode runs: npx -y @sentry/mcp-server"
+          ],
+          "task": 0
+        }
+      ],
+      "conflicts": [],
+      "locked": [],
+      "tasks": [
+        {
+          "from": "load:../team",
+          "kind": "mcp",
+          "name": "sentry",
+          "projects": [
+            "web"
+          ],
+          "type": "install",
+          "yes": false
+        }
+      ]
+    },
+    "query": {
+      "selection": [
+        {
+          "origin": "load:../team",
+          "project": "web",
+          "reference": "mcp:sentry",
+          "wanted": true
+        }
+      ],
+      "type": "plan"
+    }
+  },
+  {
+    "answer": {
+      "asks": [],
+      "conflicts": [],
+      "locked": [],
+      "tasks": [
+        {
+          "from": "workspace",
+          "kind": "mcp",
+          "name": "linear",
+          "projects": [
+            "web"
+          ],
+          "type": "install",
+          "yes": false
+        }
+      ]
+    },
+    "query": {
+      "selection": [
+        {
+          "origin": "workspace",
+          "project": "web",
+          "reference": "mcp:linear",
+          "wanted": true
+        }
+      ],
+      "type": "plan"
+    }
+  }
+]

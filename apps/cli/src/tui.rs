@@ -22,11 +22,13 @@ use std::thread;
 use std::time::Duration;
 
 use mindweaver_core::code::Said;
+use mindweaver_core::doctor::Examined;
 use mindweaver_core::gather::Watch;
 use mindweaver_core::resolve::{self, resolve, Intent, Resolved};
+use mindweaver_core::status::{EntryStatus, State};
 use mindweaver_core::view::{self, Directory, Held, LoadedWorkspace, Snapshot};
 use mindweaver_core::{
-    scan, Kind, MarkerFile, MindProject, Template, WeaverWorkspace, WorkspaceError,
+    scan, AgentHomes, Kind, MarkerFile, MindProject, Template, WeaverWorkspace, WorkspaceError,
 };
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::crossterm::terminal::{self, EnterAlternateScreen};
@@ -282,6 +284,7 @@ pub fn perform(task: &Task, app: &App) -> Performed {
         Task::OpenInstall => open_install(
             &base,
             app.workspace().is_some_and(|workspace| !workspace.made),
+            &app.lookup.agents,
         ),
         // Asked about rather than failed: `mindweaver link` would refuse it, and
         // `mind init` is what would make it work.
@@ -407,7 +410,7 @@ const INPUT_IN_A_SCREEN: &str =
 /// from the ledger as it is, as `mindweaver install` builds it, so opening the
 /// screen makes nothing and scrubs nothing: the first line applying it runs
 /// opens the ledger to write, as that command does from the shell.
-fn open_install(base: &Path, unmade: bool) -> Performed {
+fn open_install(base: &Path, unmade: bool, homes: &AgentHomes) -> Performed {
     let workspace = if unmade {
         WeaverWorkspace::unmade(base)
     } else {
@@ -416,7 +419,7 @@ fn open_install(base: &Path, unmade: bool) -> Performed {
     let screen = workspace.map_err(CliError::from).and_then(|workspace| {
         // What would not open is already on screen, beside what did.
         let (projects, _) = install::registered(&workspace);
-        install::open(&workspace, projects)
+        install::open(&workspace, projects, homes)
     });
     match screen {
         Ok(screen) => Performed::Install(screen),
@@ -478,12 +481,14 @@ pub fn load_project(directory: &Path, lookup: &Lookup) -> Result<View, CliError>
     let above = consulted.map(|resolved| resolved.workspace);
     // Read as a snapshot reads each project, with `above`'s templates, the
     // ones `mind add` will find, and no records: it does not link the
-    // project, so it says nothing of what was installed there.
-    let read = view::Project::read(&project, above.as_ref());
+    // project, so it says nothing of what was installed there, and doctor,
+    // as `mind doctor` examines it, nothing of the servers installed.
+    let (read, examined) =
+        view::Project::read_examined(&project, above.as_ref(), &lookup.machine());
     Ok(View::Workspace(Box::new(Workspace {
         name: project.name().to_owned(),
         // `.`, because the commands run from the project itself.
-        members: vec![held(String::from("."), &read)],
+        members: vec![held(String::from("."), &read, &examined)],
         root: read.path,
         unlinked: Vec::new(),
         roots: Vec::new(),
@@ -513,13 +518,15 @@ pub fn load_project(directory: &Path, lookup: &Lookup) -> Result<View, CliError>
 /// there are none, which no snapshot holds, being a scan of the disk.
 fn workspace_view(resolved: &Resolved, lookup: &Lookup, roots: &[PathBuf]) -> Workspace {
     let workspace = &resolved.workspace;
-    let snapshot = Snapshot::of(resolved, lookup.home.as_deref());
+    let snapshot = Snapshot::of(resolved, lookup.home.as_deref(), &lookup.machine());
     let mut members = vec![own(&snapshot)];
+    // What doctor found of each, in the order `projects` lists them.
     members.extend(
         snapshot
             .projects
             .iter()
-            .map(|project| member(project, workspace, lookup)),
+            .zip(&snapshot.doctor)
+            .map(|(project, examined)| member(project, examined, workspace, lookup)),
     );
     // Spelled from the workspace root, the default, where the TUI runs its
     // lines, and in the order `mindweaver scan --suggest` lists them, which core
@@ -593,6 +600,7 @@ fn own(snapshot: &Snapshot) -> Member {
             edit_tracked: false,
             targets: None,
             unreached: Vec::new(),
+            found: Vec::new(),
             warnings: messages(&library.failures),
             directories: directories(&library.directories),
             templates: choices(&library.templates),
@@ -608,7 +616,12 @@ fn own(snapshot: &Snapshot) -> Member {
 /// .`. So its templates are the screen's too, the ones the add form's line
 /// will find. Which workspace `mind` consults is the lookup's, which no
 /// snapshot holds, so it is asked here.
-fn member(project: &view::Project, screen: &WeaverWorkspace, lookup: &Lookup) -> Member {
+fn member(
+    project: &view::Project,
+    examined: &Examined,
+    screen: &WeaverWorkspace,
+    lookup: &Lookup,
+) -> Member {
     let entry = project.entry.clone().unwrap_or_default();
     if let Some(stale) = &project.stale {
         return Member {
@@ -629,12 +642,13 @@ fn member(project: &view::Project, screen: &WeaverWorkspace, lookup: &Lookup) ->
     );
     Member {
         elsewhere,
-        ..held(entry, project)
+        ..held(entry, project, examined)
     }
 }
 
-/// What one project holds, as a snapshot read it, under `entry`.
-fn held(entry: String, project: &view::Project) -> Member {
+/// What one project holds, as a snapshot read it, under `entry`, and what
+/// doctor found of it.
+fn held(entry: String, project: &view::Project, examined: &Examined) -> Member {
     let name = project.name.clone().unwrap_or_else(|| entry.clone());
     // What `status` warns of, said in its words: the folders no install
     // uses first, then the agents that read none of the rest, then each rule
@@ -651,6 +665,15 @@ fn held(entry: String, project: &view::Project) -> Member {
             .map(|unreached| unread(&name, unreached, false)),
     );
     unreached.extend(project.missed.iter().map(|missed| unseen(&name, missed)));
+    // What doctor could not read to tell, beside what the read could not,
+    // as `mindweaver doctor` says it on stderr: a check left unmade is no
+    // clean bill. A line once, a folder neither could list being one.
+    let mut warnings = messages(&project.failures);
+    for line in messages(&examined.failures) {
+        if !warnings.contains(&line) {
+            warnings.push(line);
+        }
+    }
     let settings = project.settings.as_ref();
     Member {
         entry,
@@ -659,7 +682,7 @@ fn held(entry: String, project: &view::Project) -> Member {
         own: false,
         elsewhere: false,
         holdings: Ok(Holdings {
-            items: items(&project.artifacts),
+            items: items_and_entries(&project.artifacts, &project.entries),
             agents: project.agents.clone(),
             named: settings
                 .map(|settings| settings.agents.clone())
@@ -677,7 +700,12 @@ fn held(entry: String, project: &view::Project) -> Member {
                     .map(|targets| targets.folders.clone())
             }),
             unreached,
-            warnings: messages(&project.failures),
+            found: examined
+                .findings
+                .iter()
+                .map(|finding| format!("{}; fix: {}", finding.message, finding.fix))
+                .collect(),
+            warnings,
             directories: directories(&project.directories),
             templates: choices(&project.templates),
         }),
@@ -708,6 +736,30 @@ fn items(artifacts: &[Held]) -> Vec<Item> {
             agents: held.agents.clone(),
         })
         .collect()
+}
+
+/// A project's artifacts as rows, and after them each MCP server's entry
+/// somebody keeps in one of its agents' config files, as `status` lists
+/// it (D-23): a row of its own, foreign, with the agent whose file holds
+/// it. One Mindweaver installed is its installation's row already, whose
+/// badges say which agents it reaches.
+fn items_and_entries(artifacts: &[Held], entries: &[EntryStatus]) -> Vec<Item> {
+    let mut rows = items(artifacts);
+    rows.extend(
+        entries
+            .iter()
+            .filter(|entry| entry.state == State::Foreign)
+            .map(|entry| Item {
+                kind: Kind::Mcp,
+                name: entry.name.to_string(),
+                summary: String::new(),
+                issues: Vec::new(),
+                broken: None,
+                state: Some(entry.state),
+                agents: vec![entry.agent],
+            }),
+    );
+    rows
 }
 
 /// What each of `said` says, one line each.

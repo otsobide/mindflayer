@@ -400,6 +400,17 @@ struct Project {
     unreached: Vec<Unreached>,
     missed: Vec<Missed>,
     artifacts: Vec<Held>,
+    entries: Vec<Entry>,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+struct Entry {
+    agent: String,
+    file: String,
+    name: String,
+    state: String,
+    origin: Option<String>,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -487,6 +498,7 @@ fn status_as_json_holds_the_same_entries_as_the_table() {
     assert_eq!(collapse.stale, None);
     assert_eq!(collapse.unreached, []);
     assert_eq!(collapse.missed, []);
+    assert_eq!(collapse.entries, []);
     let kinds: Vec<&str> = collapse
         .artifacts
         .iter()
@@ -496,6 +508,81 @@ fn status_as_json_holds_the_same_entries_as_the_table() {
     let legacy = &report.projects[1];
     assert_eq!(legacy.marker.as_deref(), Some("mind.toml"));
     assert!(legacy.agents.is_empty());
+}
+
+#[test]
+fn status_lists_each_server_an_agents_config_holds_that_nothing_installed_as_foreign() {
+    let (_dir, projects) = workspace_with_everything();
+    let collapse = projects.join("collapse");
+    fs::write(
+        collapse.join(".mcp.json"),
+        "{\"mcpServers\": {\"theirs\": {\"type\": \"http\", \"url\": \"https://example.com/mcp\"}}}\n",
+    )
+    .unwrap();
+
+    let outcome = weaver(&projects, &["status", "-p", "collapse", "--json"]).unwrap();
+
+    let (report, warnings): (Report, _) = enveloped(&outcome);
+    assert!(warnings.is_empty());
+    assert_eq!(
+        report.projects[0].entries,
+        [Entry {
+            agent: String::from("claude"),
+            file: String::from(".mcp.json"),
+            name: String::from("theirs"),
+            state: String::from("foreign"),
+            origin: None,
+        }]
+    );
+    // And the text lists it as it lists a foreign copy, the kind column
+    // telling it from the skills.
+    let text = weaver(&projects, &["status", "-p", "collapse"]).unwrap();
+    assert_eq!(
+        text.stdout,
+        "\
+skill  commit-style  current   claude,codex,opencode  workspace
+skill  deploy        missing   codex,opencode         load:../team
+skill  notes         foreign   claude,opencode
+skill  review        authored  -
+mcp    theirs        foreign   claude
+"
+    );
+    assert_eq!(text.ok, outcome.ok);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_config_file_linked_from_elsewhere_that_nothing_was_installed_into_leaves_status_as_it_was() {
+    let dir = TempDir::new().unwrap();
+    let projects = dir.path().join("Projects");
+    let app = projects.join("app");
+    fs::create_dir_all(&app).unwrap();
+    new_project(&app);
+    weaver(&projects, &["init"]).unwrap();
+    weaver(&projects, &["link", "app"]).unwrap();
+    let report = || {
+        [
+            weaver(&projects, &["status"]).unwrap(),
+            mind(&app, &["status"]).unwrap(),
+        ]
+    };
+    let before = report();
+
+    // As a dotfiles setup links them, which the agents follow and
+    // Mindweaver, writing nothing there, never reads through.
+    let dotfiles = dir.path().join("dotfiles");
+    fs::create_dir_all(dotfiles.join("codex")).unwrap();
+    fs::write(
+        dotfiles.join("mcp.json"),
+        "{\"mcpServers\": {\"theirs\": {\"type\": \"http\", \"url\": \"https://example.com/mcp\"}}}\n",
+    )
+    .unwrap();
+    std::os::unix::fs::symlink(dotfiles.join("mcp.json"), app.join(".mcp.json")).unwrap();
+    std::os::unix::fs::symlink(dotfiles.join("codex"), app.join(".codex")).unwrap();
+
+    let after = report();
+    assert_eq!(after, before);
+    assert!(after.iter().all(|outcome| outcome.ok), "{after:?}");
 }
 
 #[test]

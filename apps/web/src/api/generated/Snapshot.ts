@@ -2,6 +2,7 @@
 import type { Agent } from "./Agent";
 import type { Boxes } from "./Boxes";
 import type { Entry } from "./Entry";
+import type { Examined } from "./Examined";
 import type { Health } from "./Health";
 import type { Kind } from "./Kind";
 import type { KnownHere } from "./KnownHere";
@@ -90,6 +91,14 @@ offers: Array<Offered>,
  * order `projects` lists them: what each of its boxes shows.
  */
 boxes: Array<Boxes>, 
+/**
+ * What doctor finds of each entry in the registry, in the order
+ * `projects` lists them: what keeps its agents from what it gives
+ * them, as `mindweaver doctor` says it ([`crate::doctor`]), with the
+ * agent homes and the names of the variables set the front end told
+ * the snapshot ([`Machine`]).
+ */
+doctor: Array<Examined>, 
 /**
  * Every workspace this machine knows ([`crate::known`]), this one
  * among them, each with whether this one loads it, and could.

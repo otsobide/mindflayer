@@ -31,6 +31,7 @@ use crate::code::Said;
 use crate::create;
 use crate::kind::Kind;
 use crate::lifecycle;
+use crate::mcp::Given;
 use crate::template;
 use crate::workspace::{MindProject, WeaverWorkspace};
 
@@ -70,13 +71,19 @@ impl Judged {
 /// The template found as `add` finds it ([`template::find`]), then every
 /// check `add` makes before it writes, and then whether something is where
 /// it would go already, which `add` leaves alone and refuses.
+///
+/// For an MCP server, `server` is how it is started or reached, as `add mcp`
+/// is told by its options, which it is judged from as `add` writes from
+/// them; none, and it is judged from the template or from nothing, as the
+/// line would be. A front end's grammar has refused both already, as the
+/// command's does.
 pub fn added(
     workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     kind: Kind,
-    name: &str,
-    description: &str,
+    (name, description): (&str, &str),
     template: Option<&str>,
+    server: Option<&Given>,
 ) -> Judged {
     let template = match template
         .map(|template| template::find(workspace, project, kind, template))
@@ -85,9 +92,11 @@ pub fn added(
         Ok(template) => template,
         Err(error) => return Judged::refused(error.code(), &error),
     };
-    let start = template
-        .as_ref()
-        .map_or(create::Start::Scratch, create::Start::Template);
+    let start = match (&template, server) {
+        (Some(template), _) => create::Start::Template(template),
+        (None, Some(given)) => create::Start::Server(given),
+        (None, None) => create::Start::Scratch,
+    };
     let scaffold = match create::plan(project, kind, name, description, start) {
         Ok(scaffold) => scaffold,
         Err(error) => return Judged::refused(error.code(), &error),
@@ -154,6 +163,30 @@ pub fn edited(
             .map(|artifact| artifact.validate())
             .unwrap_or_default(),
         refused,
+    }
+}
+
+/// What `edit` would make of the MCP server `reference` names in
+/// `project` told `given`, how it is started or reached, rather than its
+/// contents; `workspace` is the one consulted, as for
+/// [`lifecycle::retransport`].
+///
+/// Its definition rewritten from `given` as the edit rewrites it, then
+/// judged as those contents would be ([`edited`]): every rule the edit
+/// holds them to, and what `validate` would say of it once written.
+pub fn retransported(
+    workspace: Option<&WeaverWorkspace>,
+    project: &MindProject,
+    reference: &Reference,
+    given: &Given,
+) -> Judged {
+    let target = match lifecycle::find_to_change(workspace, project, reference) {
+        Ok(target) => target,
+        Err(error) => return Judged::refused(error.code(), &error),
+    };
+    match lifecycle::retransported(&target, given) {
+        Ok(text) => edited(workspace, project, reference, &text),
+        Err(error) => Judged::refused(error.code(), &error),
     }
 }
 

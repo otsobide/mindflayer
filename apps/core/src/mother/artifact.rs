@@ -2,7 +2,7 @@
 //! rule's markdown and an MCP server's definition.
 
 use crate::agent::Agent;
-use crate::mcp::{Address, Given, Program, Repeated};
+use crate::mcp::{Address, Given, Program, Repeated, Unsayable};
 use crate::mother::random;
 use crate::mother::value::VariableNameMother;
 use crate::value::{InputName, VariableName};
@@ -1215,6 +1215,58 @@ impl McpMother {
                     ..address
                 }),
                 repeated("headers", "Authorization"),
+            ),
+        ]
+    }
+
+    /// What a request could send of a server naming something beside a
+    /// value with an `=` in the name, which no command line gives, each
+    /// beside why and what is found of it: a setting's variable, a
+    /// header's name, a secret header's and a part of the address's.
+    pub fn given_unsayable() -> Vec<(&'static str, Given, Unsayable)> {
+        let Given::Program(program) = Self::given_program() else {
+            unreachable!("a program is given as one");
+        };
+        let Given::Address(address) = Self::given_address(false) else {
+            unreachable!("an address is given as one");
+        };
+        let key = format!("{}={}", random::word(), random::word());
+        let unsayable = |option| Unsayable {
+            option,
+            key: key.clone(),
+        };
+        vec![
+            (
+                "a setting whose variable holds `=`",
+                Given::Program(Program {
+                    env: vec![(key.clone(), String::from("1"))],
+                    ..program
+                }),
+                unsayable("--env"),
+            ),
+            (
+                "a header whose name holds `=`",
+                Given::Address(Address {
+                    headers: vec![(key.clone(), String::from("x"))],
+                    ..address.clone()
+                }),
+                unsayable("--header"),
+            ),
+            (
+                "a secret header whose name holds `=`",
+                Given::Address(Address {
+                    secret_headers: vec![(key.clone(), VariableNameMother::random())],
+                    ..address.clone()
+                }),
+                unsayable("--secret-header"),
+            ),
+            (
+                "a part of the address whose name holds `=`",
+                Given::Address(Address {
+                    url_vars: vec![(InputName::from(key.as_str()), VariableNameMother::random())],
+                    ..address
+                }),
+                unsayable("--url-var"),
             ),
         ]
     }

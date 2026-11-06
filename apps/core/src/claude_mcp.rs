@@ -55,8 +55,9 @@ use crate::agent::Agent;
 use crate::artifact::{self, issue_list, ValidationIssue};
 use crate::code::codes;
 use crate::config_entry::{self, ConfigFile, Edit, EntryError, FileError, Format, Value, Written};
-use crate::mcp::{self, Inexpressible, McpDefinition, Transport, TransportType};
-use crate::value::{ArtifactName, InputName, VariableName};
+use crate::hash;
+use crate::mcp::{self, Inexpressible, McpDefinition, Runs, Transport, TransportType};
+use crate::value::{ArtifactName, ContentHash, InputName, VariableName};
 
 /// Where Claude reads a project's servers, from its root.
 pub const FILE: &str = ".mcp.json";
@@ -89,6 +90,20 @@ impl Entry {
     /// fingerprint is the digest of, for the ledger to keep (#93).
     pub fn canonical(&self) -> String {
         self.value.canonical()
+    }
+
+    /// The entry's fingerprint, [`hash::fingerprint`] of its
+    /// [canonical form](Self::canonical): what the ledger keeps of it once
+    /// it is written, and what one an agent's file holds is told by.
+    pub fn fingerprint(&self) -> ContentHash {
+        hash::fingerprint(&self.canonical())
+    }
+
+    /// What the agent runs or reaches, read off the entry as it is written,
+    /// its `command` and `args`, or its `url`: what an install says it gives the agent before it writes
+    /// anything, never spelled again from the definition.
+    pub fn runs(&self) -> Runs {
+        Runs::of(&self.value).expect("an entry is written with a program or an address")
     }
 }
 
@@ -269,6 +284,22 @@ pub fn remove(root: &Path, name: &str, created: bool) -> Result<Written, ClaudeM
     }
     file.edit(&key, &Edit::Remove)
         .map_err(|error| loose(&file, error))
+}
+
+/// Every server the project's [`FILE`] at `root` holds, by its key, in the
+/// order the file holds them: none when there is no file, or its
+/// [`SERVERS`] is no object of them, which Claude loads none from.
+///
+/// Read as [`render`] reads the file to write into it, strictly and up to
+/// [`MAX_BYTES`], so a file it would refuse to write into is refused here
+/// too, with the same code: what an entry stands as, and what the
+/// installed view lists, is read from the file an install would meet.
+pub fn servers(root: &Path) -> Result<Vec<(String, Value)>, ClaudeMcpError> {
+    let file = config(root)?;
+    match file.get(&[SERVERS]).map_err(|error| loose(&file, error))? {
+        Some(Value::Object(servers)) => Ok(servers),
+        _ => Ok(Vec::new()),
+    }
 }
 
 /// What is said of an entry written all the same.

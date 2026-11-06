@@ -13,6 +13,7 @@ use crate::artifact::{Artifact, ArtifactError};
 use crate::code::codes;
 use crate::hash;
 use crate::install;
+use crate::install::ConfigUnread;
 use crate::kind::{Kind, Layout};
 use crate::ledger::{Ledger, LedgerError};
 use crate::paths;
@@ -755,6 +756,18 @@ pub enum DiscoveryFailure {
         #[source]
         source: io::Error,
     },
+    /// An agent's config file an MCP server's entry was recorded in, read
+    /// to say how each entry in it stands (D-23), that could not be read,
+    /// as its renderer says: every entry recorded in it then reads as
+    /// missing. Never one read only for what nothing records, which holds
+    /// nothing Mindweaver wrote.
+    /// Boxed, since a renderer's refusal is large beside every other failure
+    /// here, and this one is rare.
+    #[error("{unread}")]
+    Config {
+        path: PathBuf,
+        unread: Box<ConfigUnread>,
+    },
 }
 
 codes!(DiscoveryFailure {
@@ -765,6 +778,7 @@ codes!(DiscoveryFailure {
 } carried {
     Self::Artifact(error) => error,
     Self::Ledger(error) => error,
+    Self::Config { unread, .. } => unread,
 });
 
 impl DiscoveryFailure {
@@ -774,7 +788,8 @@ impl DiscoveryFailure {
         match self {
             DiscoveryFailure::Directory { path, .. }
             | DiscoveryFailure::UnusableName { path }
-            | DiscoveryFailure::Uncompared { path, .. } => path,
+            | DiscoveryFailure::Uncompared { path, .. }
+            | DiscoveryFailure::Config { path, .. } => path,
             DiscoveryFailure::Artifact(error) => error.path(),
             DiscoveryFailure::Ledger(error) => error.path(),
             DiscoveryFailure::Diverged { paths, .. } => &paths[0],
@@ -790,7 +805,8 @@ impl DiscoveryFailure {
             | DiscoveryFailure::UnusableName { .. }
             | DiscoveryFailure::Artifact(_)
             | DiscoveryFailure::Ledger(_)
-            | DiscoveryFailure::Uncompared { .. } => true,
+            | DiscoveryFailure::Uncompared { .. }
+            | DiscoveryFailure::Config { .. } => true,
             DiscoveryFailure::Diverged { .. } => false,
         }
     }

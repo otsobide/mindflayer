@@ -25,6 +25,8 @@ const NO_HOMES: AgentHomes = AgentHomes {
     codex_home: None,
     opencode_config_dir: None,
     agents_dir: None,
+    claude_dir_in_home: None,
+    opencode_dir_in_home: None,
 };
 
 /// A folder `route` below `root`, made.

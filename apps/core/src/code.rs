@@ -58,11 +58,12 @@ use crate::codex_mcp::{self, CodexMcpError};
 use crate::config_entry::{EntryError, FileError};
 use crate::contents::ContentsError;
 use crate::create::CreateError;
+use crate::doctor::{DoctorFailure, Symptom};
 use crate::everywhere::EverywhereError;
 use crate::exclude::{self, ExcludeError};
 use crate::frontmatter::FrontMatterError;
 use crate::gather::{self, GatherError, Leftover, ScrubFailure};
-use crate::install::{rules, Clash, InstallError, LoadFailure, PlanError, Refused};
+use crate::install::{rules, Clash, ConfigUnread, InstallError, LoadFailure, PlanError, Refused};
 use crate::kind::UnknownKind;
 use crate::ledger::LedgerError;
 use crate::lifecycle::LifecycleError;
@@ -215,6 +216,8 @@ pub const ALL: &[(&str, &[&str])] = &[
     ("config_entry::file::FileError", FileError::CODES),
     ("contents::ContentsError", ContentsError::CODES),
     ("create::CreateError", CreateError::CODES),
+    ("doctor::DoctorFailure", DoctorFailure::CODES),
+    ("doctor::Symptom", Symptom::CODES),
     ("everywhere::EverywhereError", EverywhereError::CODES),
     ("exclude::ExcludeError", ExcludeError::CODES),
     ("exclude::Malformed", exclude::Malformed::CODES),
@@ -225,6 +228,7 @@ pub const ALL: &[(&str, &[&str])] = &[
     ("gather::ScrubFailure", ScrubFailure::CODES),
     ("port::GitError", GitError::CODES),
     ("install::InstallError", InstallError::CODES),
+    ("install::entries::ConfigUnread", ConfigUnread::CODES),
     ("install::LoadFailure", LoadFailure::CODES),
     ("install::plan::Clash", Clash::CODES),
     ("install::plan::PlanError", PlanError::CODES),

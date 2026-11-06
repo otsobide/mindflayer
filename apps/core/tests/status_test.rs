@@ -97,6 +97,7 @@ fn record(ledger: &Ledger, project: &str, name: &str, origin: &str, paths: &[&st
                         content_hash: None,
                     })
                     .collect(),
+                entries: Vec::new(),
             },
         )
         .unwrap();

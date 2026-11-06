@@ -80,8 +80,6 @@
 //! holds the workspace's lock, as one calling [`ConfigFile`] does.
 
 use std::collections::BTreeMap;
-use std::fs;
-use std::io::{self, Read as _};
 use std::path::{Path, PathBuf};
 
 use thiserror::Error;
@@ -90,9 +88,10 @@ use crate::agent::{Agent, AgentHomes};
 use crate::artifact::{self, issue_list, ValidationIssue};
 use crate::code::codes;
 use crate::config_entry::{self, ConfigFile, Edit, EntryError, FileError, Format, Value, Written};
+use crate::hash;
 use crate::install;
-use crate::mcp::{self, Inexpressible, McpDefinition, Transport, TransportType};
-use crate::value::{ArtifactName, InputName, VariableName};
+use crate::mcp::{self, Inexpressible, McpDefinition, Runs, Transport, TransportType};
+use crate::value::{ArtifactName, ContentHash, InputName, VariableName};
 
 /// Where Codex reads a project's servers, from its root.
 pub const FILE: &str = ".codex/config.toml";
@@ -133,6 +132,20 @@ impl Entry {
     /// as tables: the same server however it is laid out.
     pub fn canonical(&self) -> String {
         self.value.canonical()
+    }
+
+    /// The entry's fingerprint, [`hash::fingerprint`] of its
+    /// [canonical form](Self::canonical): what the ledger keeps of it once
+    /// it is written, and what one an agent's file holds is told by.
+    pub fn fingerprint(&self) -> ContentHash {
+        hash::fingerprint(&self.canonical())
+    }
+
+    /// What the agent runs or reaches, read off the entry as it is written,
+    /// its `command` and `args`, or its `url`: what an install says it gives the agent before it writes
+    /// anything, never spelled again from the definition.
+    pub fn runs(&self) -> Runs {
+        Runs::of(&self.value).expect("an entry is written with a program or an address")
     }
 }
 
@@ -297,6 +310,18 @@ pub struct Rendered {
     pub warnings: Vec<Warning>,
 }
 
+/// What [`render`] would write, and say, with nothing written: for an
+/// install to say what Codex would be given before it writes anything.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Planned {
+    /// The project's [`FILE`].
+    pub file: PathBuf,
+    pub entry: Entry,
+    /// What would be said of the project beside its entry, as
+    /// [`Rendered::warnings`] says it.
+    pub warnings: Vec<Warning>,
+}
+
 /// Write `definition`'s entry into the [`FILE`] at `root`, a project's
 /// root, in place of one of the same name or after the servers already
 /// there, and make the file, and `.codex`, when it is not there yet.
@@ -313,6 +338,47 @@ pub fn render(
     definition: &McpDefinition,
     homes: &AgentHomes,
 ) -> Result<Rendered, CodexMcpError> {
+    let (file, entry, warnings) = prepared(root, definition, homes)?;
+    let key = [SERVERS, entry.name.as_str()];
+    let edit = match file.get(&key)? {
+        None => Edit::Insert(entry.value.clone()),
+        Some(_) => Edit::Replace(entry.value.clone()),
+    };
+    let written = file.edit(&key, &edit)?;
+    Ok(Rendered {
+        file: file.path(),
+        written,
+        entry,
+        warnings,
+    })
+}
+
+/// What [`render`] would write into the [`FILE`] at `root`, and say, read
+/// and refused as [`render`] reads and refuses it, the user's config
+/// included, with nothing written: one place deciding both, so what an
+/// install says Codex will be given is what it then writes.
+pub fn planned(
+    root: &Path,
+    definition: &McpDefinition,
+    homes: &AgentHomes,
+) -> Result<Planned, CodexMcpError> {
+    let (file, entry, warnings) = prepared(root, definition, homes)?;
+    file.get(&[SERVERS, entry.name.as_str()])?;
+    Ok(Planned {
+        file: file.path(),
+        entry,
+        warnings,
+    })
+}
+
+/// The file [`render`] writes into, the entry it writes there and what it
+/// says beside it, each refusal asked in the order [`render`] asks it:
+/// what it and [`planned`] share.
+fn prepared(
+    root: &Path,
+    definition: &McpDefinition,
+    homes: &AgentHomes,
+) -> Result<(ConfigFile, Entry, Vec<Warning>), CodexMcpError> {
     let entry = entry(definition)?;
     let file = config(root)?;
     if let Some((file, home, reader)) = install::in_agent_home(homes, &[file.path()]) {
@@ -332,11 +398,6 @@ pub fn render(
         Some(user) => user.trusts(root)?,
         None => false,
     };
-    let edit = match file.get(&key)? {
-        None => Edit::Insert(entry.value.clone()),
-        Some(_) => Edit::Replace(entry.value.clone()),
-    };
-    let written = file.edit(&key, &edit)?;
     let mut warnings = Vec::new();
     if !trusted {
         warnings.push(Warning::Untrusted {
@@ -346,12 +407,7 @@ pub fn render(
             config: homes.codex_home.as_ref().map(|home| home.join(USER_FILE)),
         });
     }
-    Ok(Rendered {
-        file: file.path(),
-        written,
-        entry,
-        warnings,
-    })
+    Ok((file, entry, warnings))
 }
 
 /// Take the entry keyed `name` out of the [`FILE`] at `root`, every other
@@ -383,6 +439,21 @@ pub fn remove(root: &Path, name: &str, created: bool) -> Result<Written, CodexMc
     Ok(file.edit(&key, &Edit::Remove)?)
 }
 
+/// Every server the project's [`FILE`] at `root` holds, by its key, in the
+/// order the file holds them: none when there is no file, or its
+/// [`SERVERS`] is no table of them.
+///
+/// Read as [`render`] reads the file to write into it, up to
+/// [`MAX_BYTES`], so a file it would refuse to write into is refused here
+/// too, with the same code. The user's own config is not read: what the
+/// project's file holds is what an entry stands by.
+pub fn servers(root: &Path) -> Result<Vec<(String, Value)>, CodexMcpError> {
+    match config(root)?.get(&[SERVERS])? {
+        Some(Value::Object(servers)) => Ok(servers),
+        _ => Ok(Vec::new()),
+    }
+}
+
 /// Whether `text` holds the entry keyed `name` and nothing else, or not
 /// even that: what taking the entry out of it leaves is blank.
 ///
@@ -407,76 +478,72 @@ fn config(root: &Path) -> Result<ConfigFile, CodexMcpError> {
 }
 
 /// The user's [`USER_FILE`] in the Codex home, as text: only read, never
-/// written.
-struct UserConfig {
-    path: PathBuf,
+/// written. What a render asks whether a name collides and a project is
+/// trusted, and what doctor asks the same of (`crate::doctor`): one reading
+/// of Codex's config, never a second.
+pub(crate) struct UserConfig {
+    pub(crate) path: PathBuf,
     text: String,
+}
+
+/// How the user's config marks a project for Codex, which reads the
+/// project's [`FILE`] only in one it trusts, and its `AGENTS.md` in any it
+/// does not mark `untrusted` (docs/agents.md, docs-only).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Trust {
+    /// `trust_level = "trusted"` under its root, as handed or resolved.
+    Trusted,
+    /// `trust_level = "untrusted"`, and trusted under neither spelling:
+    /// Codex reads neither its `AGENTS.md` nor its [`FILE`].
+    Untrusted,
+    /// Neither: Codex reads its `AGENTS.md`, not its [`FILE`], and asks.
+    Unmarked,
 }
 
 impl UserConfig {
     /// The user's config in the Codex home `homes` gives, read through a
-    /// link and up to [`MAX_BYTES`]; `None` when no home is given, or it
-    /// holds no such file.
+    /// link and up to [`MAX_BYTES`] ([`config_entry::read_through`]);
+    /// `None` when no home is given, or it holds no such file.
     ///
-    /// Through a link, where a project's [`FILE`] is refused one: it is
-    /// read and never written, and a user's config kept in a repository of
-    /// their settings is most often linked into the home. Refused when it
-    /// does not read as TOML, as Codex refuses it: whether it names a
-    /// server cannot be told of a file that does not parse.
-    fn read(homes: &AgentHomes) -> Result<Option<Self>, CodexMcpError> {
+    /// Refused when it does not read as TOML, as Codex refuses it: whether
+    /// it names a server cannot be told of a file that does not parse.
+    pub(crate) fn read(homes: &AgentHomes) -> Result<Option<Self>, CodexMcpError> {
         let Some(home) = &homes.codex_home else {
             return Ok(None);
         };
         let path = home.join(USER_FILE);
-        let failed = |source| FileError::Read {
-            path: path.clone(),
-            source,
-        };
-        let file = match fs::File::open(&path) {
-            Ok(file) => file,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
-            Err(source) => return Err(failed(source).into()),
-        };
-        let mut bytes = Vec::new();
-        // One byte past the cap is enough to know it is past.
-        file.take(MAX_BYTES + 1)
-            .read_to_end(&mut bytes)
-            .map_err(failed)?;
-        if bytes.len() as u64 > MAX_BYTES {
-            return Err(FileError::TooLarge {
-                path,
-                cap: MAX_BYTES,
-            }
-            .into());
-        }
-        let Ok(text) = String::from_utf8(bytes) else {
-            return Err(FileError::NotText { path }.into());
-        };
-        Ok(Some(UserConfig { path, text }))
+        Ok(config_entry::read_through(&path, MAX_BYTES)?.map(|text| UserConfig { path, text }))
     }
 
-    /// Whether the user's config marks the project at `root` trusted,
-    /// under its root as it is handed or as its links resolve to: the
-    /// folder a program starts in is reported to it with its links
-    /// resolved, and a project is often reached through one.
+    /// Whether the user's config marks the project at `root` trusted.
     fn trusts(&self, root: &Path) -> Result<bool, CodexMcpError> {
+        Ok(self.trust(root)? == Trust::Trusted)
+    }
+
+    /// How the user's config marks the project at `root`, under its root as
+    /// it is handed or as its links resolve to: the folder a program starts
+    /// in is reported to it with its links resolved, and a project is often
+    /// reached through one. Trusted under either is trusted.
+    pub(crate) fn trust(&self, root: &Path) -> Result<Trust, CodexMcpError> {
         let mut roots = vec![root.to_path_buf()];
         roots.extend(install::resolved(root).filter(|resolved| resolved != root));
+        let mut trust = Trust::Unmarked;
         for root in &roots {
             // A path no TOML key can spell is none a project is marked by.
             let Some(key) = root.to_str() else {
                 continue;
             };
-            let level = self.get(&["projects", key, "trust_level"])?;
-            if level == Some(Value::from("trusted")) {
-                return Ok(true);
+            match self.get(&["projects", key, "trust_level"])? {
+                Some(level) if level == Value::from("trusted") => return Ok(Trust::Trusted),
+                Some(level) if level == Value::from("untrusted") => trust = Trust::Untrusted,
+                _ => {}
             }
         }
-        Ok(false)
+        Ok(trust)
     }
 
     /// What the user's config holds at `key`.
-    fn get(&self, key: &[&str]) -> Result<Option<Value>, CodexMcpError> {
+    pub(crate) fn get(&self, key: &[&str]) -> Result<Option<Value>, CodexMcpError> {
         config_entry::get(Format::Toml, &self.text, key).map_err(|source| {
             FileError::Entry {
                 path: self.path.clone(),
@@ -564,7 +631,9 @@ pub enum Warning {
     /// same, since trusting a project is the user's to do, and Codex asks
     /// them. `config` is the user's config looked in, none when no Codex
     /// home was given.
-    #[error("`{name}` is written into {file}, which Codex reads only in a project it trusts, and {}", unmarked(.project, .config.as_deref()))]
+    // Said alike of an entry written and of one a preview says would be,
+    // which nothing is written for yet.
+    #[error("Codex reads `{name}` from {file} only in a project it trusts, and {}", unmarked(.project, .config.as_deref()))]
     Untrusted {
         name: String,
         file: PathBuf,
@@ -579,8 +648,9 @@ codes!(Warning {
     Self::Dropped { shape, .. } => shape,
 });
 
-/// Where nothing says `project` is trusted, for [`Warning::Untrusted`].
-fn unmarked(project: &Path, config: Option<&Path>) -> String {
+/// Where nothing says `project` is trusted, for [`Warning::Untrusted`],
+/// and for doctor's word on the same (`crate::doctor`).
+pub(crate) fn unmarked(project: &Path, config: Option<&Path>) -> String {
     match config {
         Some(config) => format!(
             "{} does not mark {} `trusted`",

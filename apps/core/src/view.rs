@@ -33,25 +33,28 @@ use std::slice;
 
 use serde::{Serialize, Serializer};
 
-use crate::agent::Agent;
-use crate::artifact::ValidationIssue;
+use crate::agent::{Agent, Starts};
+use crate::artifact::{Artifact, ValidationIssue};
 use crate::catalog::{Catalog, DiscoveryFailure};
 use crate::code::Said;
+use crate::doctor::{Examined, Machine};
 use crate::install::{self, LoadFailure, Offer, Place};
 use crate::kind::Kind;
 use crate::known::{self, KnownWorkspace};
 use crate::ledger::{Entry, Gathered, InstallRecord, Ledger, LedgerError, Source};
 use crate::lifecycle;
+use crate::mcp::{self, McpDefinition, Running};
 use crate::paths;
 use crate::relink;
 use crate::resolve::{self, Inputs, Intent, Reason, ResolveError, Resolved};
 use crate::settings::{ProjectId, Settings, Share};
-use crate::status::{ArtifactStatus, Missed, ProjectStatus, State, Unreached};
+use crate::status::{ArtifactStatus, EntryStatus, Missed, ProjectStatus, State, Unreached};
 use crate::template::{self, Template};
 use crate::value::{ArtifactName, Origin, Redacted};
 use crate::workspace::{
     same_directory, MarkerFile, Member, MindProject, WeaverWorkspace, WorkspaceError,
 };
+use crate::{claude_mcp, codex_mcp, opencode_mcp};
 
 /// The version of what a snapshot holds, which it carries as `format`.
 ///
@@ -112,6 +115,12 @@ pub struct Snapshot {
     /// How each entry in the registry stands with every offer, in the
     /// order `projects` lists them: what each of its boxes shows.
     pub boxes: Vec<Boxes>,
+    /// What doctor finds of each entry in the registry, in the order
+    /// `projects` lists them: what keeps its agents from what it gives
+    /// them, as `mindweaver doctor` says it ([`crate::doctor`]), with the
+    /// agent homes and the names of the variables set the front end told
+    /// the snapshot ([`Machine`]).
+    pub doctor: Vec<Examined>,
     /// Every workspace this machine knows ([`crate::known`]), this one
     /// among them, each with whether this one loads it, and could.
     pub known: Vec<KnownHere>,
@@ -219,6 +228,104 @@ pub struct Library {
     /// What could not be read in it and is no artifact's: a folder that
     /// cannot be listed, its templates.
     pub failures: Vec<Said>,
+    /// Each of its own MCP servers whose definition reads, in the order
+    /// of `artifacts`, as each agent would be given it: what a page of
+    /// servers shows beside each one's row of `artifacts`.
+    pub servers: Vec<LibraryServer>,
+}
+
+/// One of the workspace's own MCP servers, as `add mcp` would be told to
+/// write it and as each agent would be given it.
+///
+/// Worked out here, from each agent's renderer, rather than by a front end
+/// from the definition: what an agent runs is what its own entry spells
+/// ([`mcp::Runs`]), an input reaching Claude as `${VAR}` and OpenCode as
+/// `{env:VAR}`, and what it cannot be given is core's report of it
+/// ([`McpDefinition::expressibility`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct LibraryServer {
+    pub name: ArtifactName,
+    /// How it is started or reached, as `add mcp`'s options would say it
+    /// ([`mcp::Given::of`]), for a form changing it to start from: none
+    /// when the definition holds what no option says, which is changed as
+    /// text.
+    pub given: Option<mcp::Given>,
+    /// How each agent would be given it, in report order.
+    pub agents: Vec<GivenTo>,
+}
+
+/// How one agent would be given an MCP server: what it cannot be given of
+/// it, what its entry would run or reach, and what it asks before it
+/// starts one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct GivenTo {
+    pub agent: Agent,
+    /// Why it would be given none of it, each by its code and in its
+    /// words: what it cannot be given at all, as `show` says it, or else
+    /// why its renderer writes it no entry, an input read from no
+    /// variable. Empty, and it is given an entry.
+    pub refused: Vec<Said>,
+    /// What its entry would be written without, as `show` says it.
+    pub dropped: Vec<Said>,
+    /// What its entry would run or reach, as the entry spells it; none
+    /// when it is refused.
+    pub runs: Option<Running>,
+    /// What it asks before it starts a server a project gives it.
+    pub starts: Starts,
+}
+
+impl LibraryServer {
+    /// `definition`, as each agent would be given it.
+    fn of(definition: &McpDefinition) -> LibraryServer {
+        let agents = definition
+            .expressibility()
+            .into_iter()
+            .map(|reported| {
+                // Matched on the agent with no wildcard, so an agent added
+                // says how its entry is made before it compiles. OpenCode's
+                // in the shape Mindweaver writes (D-12), which runs what the
+                // other does.
+                let entry = match reported.agent {
+                    Agent::Claude => claude_mcp::entry(definition)
+                        .map(|entry| entry.runs())
+                        .map_err(|error| Said::of(error.code(), &error)),
+                    Agent::Codex => codex_mcp::entry(definition)
+                        .map(|entry| entry.runs())
+                        .map_err(|error| Said::of(error.code(), &error)),
+                    Agent::OpenCode => opencode_mcp::entry(definition, opencode_mcp::Shape::V2)
+                        .map(|entry| entry.runs())
+                        .map_err(|error| Said::of(error.code(), &error)),
+                };
+                let mut refused = reported.refused;
+                let runs = match entry {
+                    Ok(runs) if refused.is_empty() => Some(runs.shown()),
+                    Ok(_) => None,
+                    Err(why) => {
+                        if refused.is_empty() {
+                            refused.push(why);
+                        }
+                        None
+                    }
+                };
+                GivenTo {
+                    agent: reported.agent,
+                    refused,
+                    dropped: reported.dropped,
+                    runs,
+                    starts: reported.agent.starts_a_server(),
+                }
+            })
+            .collect();
+        LibraryServer {
+            name: definition.name.clone(),
+            given: mcp::Given::of(definition),
+            agents,
+        }
+    }
 }
 
 /// A project holding a copy of one of the workspace's own: one whose install
@@ -290,6 +397,10 @@ pub struct Project {
     /// Everything it holds, authored, received or somebody's, by kind and
     /// then name, the rules its `AGENTS.md` block holds among them (D-23).
     pub artifacts: Vec<Held>,
+    /// Each entry of an MCP server its agents' config files hold, and each
+    /// one the ledger records writing, as `status` lists them: by agent,
+    /// then name, a foreign one among them (D-23).
+    pub entries: Vec<EntryStatus>,
     /// How many of them are of each kind, and stand in each state.
     pub tally: Tally,
     /// What `mind add --template` can start from in it.
@@ -297,7 +408,9 @@ pub struct Project {
     /// Each kind it installs only where some of its agents do not read, as
     /// `status` says it.
     pub unreached: Vec<Unreached>,
-    /// Each rule it received that some of its agents read nowhere.
+    /// Each rule it received that some of its agents read nowhere, and
+    /// each MCP server it received that some of them are given no entry
+    /// of, as `status` says them.
     pub missed: Vec<Missed>,
     /// Each folder its settings name in `targets` that no install uses.
     pub misplaced: Vec<Said>,
@@ -907,7 +1020,7 @@ impl Listing {
             library: Some(Library::of(workspace, kinds)),
             projects: workspace
                 .members()
-                .into_iter()
+                .iter()
                 .map(|member| Project::of_member(member, workspace, kinds))
                 .collect(),
         }
@@ -935,18 +1048,25 @@ impl Snapshot {
     /// A read: the default workspace is the one in home as it is, or as it
     /// would be, never made; a workspace named or activated that is not one
     /// is refused, as every command refuses it.
-    pub fn read(inputs: &Inputs<'_>) -> Result<Option<Snapshot>, ResolveError> {
+    ///
+    /// `machine` is what doctor is told of the agent homes and the
+    /// variables set, as the front end decided them ([`Machine`]).
+    pub fn read(inputs: &Inputs<'_>, machine: &Machine) -> Result<Option<Snapshot>, ResolveError> {
         let inputs = Inputs {
             intent: Intent::Read,
             ..*inputs
         };
-        Ok(resolve::resolve(&inputs)?.map(|resolved| Snapshot::of(&resolved, inputs.home)))
+        Ok(
+            resolve::resolve(&inputs)?
+                .map(|resolved| Snapshot::of(&resolved, inputs.home, machine)),
+        )
     }
 
     /// Everything `resolved` holds, with the workspaces the default one in
-    /// `home` knows: for a front end that resolved the workspace itself, to
-    /// scan it too ([`crate::scan`]), which no snapshot does.
-    pub fn of(resolved: &Resolved, home: Option<&Path>) -> Snapshot {
+    /// `home` knows and what doctor finds told `machine`: for a front end
+    /// that resolved the workspace itself, to scan it too
+    /// ([`crate::scan`]), which no snapshot does.
+    pub fn of(resolved: &Resolved, home: Option<&Path>, machine: &Machine) -> Snapshot {
         let workspace = &resolved.workspace;
         let mut warnings: Vec<Said> = Vec::new();
 
@@ -959,10 +1079,15 @@ impl Snapshot {
             })
             .collect();
         let (offers, boxes) = boxes(workspace, &members);
-        let projects: Vec<Project> = members
-            .into_iter()
-            .map(|member| Project::of_member(member, workspace, &Kind::ALL))
-            .collect();
+        let mut projects: Vec<Project> = Vec::new();
+        let mut doctor: Vec<Examined> = Vec::new();
+        for member in &members {
+            let project = Project::of_member(member, workspace, &Kind::ALL);
+            // Told what the project's agents miss, read for it already.
+            let told = (project.unreached.as_slice(), project.missed.as_slice());
+            doctor.push(Examined::of_member(member, workspace, machine, Some(told)));
+            projects.push(project);
+        }
         warnings.extend(
             relink::duplicates(&ids)
                 .iter()
@@ -1034,6 +1159,7 @@ impl Snapshot {
             sources,
             offers,
             boxes,
+            doctor,
             known,
             history,
             warnings,
@@ -1077,6 +1203,12 @@ impl Library {
         let catalog = Catalog::discover_kinds(slice::from_ref(&own), &own_kinds);
         let (artifacts, mut failures) = holdings(&own, &catalog, None);
         let templates = templates(Some(workspace), &own, kinds, &mut failures);
+        let servers = catalog
+            .artifacts()
+            .iter()
+            .filter_map(Artifact::definition)
+            .map(LibraryServer::of)
+            .collect();
         Library {
             origin: install::WORKSPACE_ORIGIN,
             directories: directories(&own, kinds),
@@ -1084,6 +1216,7 @@ impl Library {
             artifacts,
             templates,
             failures,
+            servers,
         }
     }
 }
@@ -1095,6 +1228,22 @@ impl Project {
     /// one above it, if any, as `mind` would consult it.
     pub fn read(project: &MindProject, workspace: Option<&WeaverWorkspace>) -> Project {
         Project::read_kinds(project, workspace, &Kind::ALL)
+    }
+
+    /// [`read`](Self::read), with what doctor finds of it told `machine`,
+    /// as a snapshot holds both of every project it lists: for a front end
+    /// showing a project no workspace links, which takes both in one read
+    /// from core rather than a report beside the view, and what `status`
+    /// says its agents miss read once for the two.
+    pub fn read_examined(
+        project: &MindProject,
+        workspace: Option<&WeaverWorkspace>,
+        machine: &Machine,
+    ) -> (Project, Examined) {
+        let read = Project::read(project, workspace);
+        let told = (read.unreached.as_slice(), read.missed.as_slice());
+        let examined = Examined::of(project, read.entry.clone(), workspace, machine, Some(told));
+        (read, examined)
     }
 
     /// [`read`](Self::read), for `kinds` alone.
@@ -1112,11 +1261,11 @@ impl Project {
     /// One entry of `workspace`'s registry, named as that entry spells it
     /// rather than as the first entry pointing at the same directory does,
     /// read for `kinds`.
-    fn of_member(member: Member, workspace: &WeaverWorkspace, kinds: &[Kind]) -> Project {
+    fn of_member(member: &Member, workspace: &WeaverWorkspace, kinds: &[Kind]) -> Project {
         let entry = paths::as_route(&member.entry);
-        match member.project {
-            Ok(project) => Project::opened(Some(entry), &project, Some(workspace), kinds),
-            Err(error) => Project::stale(entry, member.root, &error, kinds),
+        match &member.project {
+            Ok(project) => Project::opened(Some(entry), project, Some(workspace), kinds),
+            Err(error) => Project::stale(entry, member.root.clone(), error, kinds),
         }
     }
 
@@ -1154,6 +1303,7 @@ impl Project {
             directories: directories(project, kinds),
             tally: Tally::of_held(&artifacts, kinds),
             artifacts,
+            entries: status.entries,
             templates,
             unreached: status.unreached,
             missed: status.missed,
@@ -1185,6 +1335,7 @@ impl Project {
             health: Health::Stale,
             directories: Vec::new(),
             artifacts: Vec::new(),
+            entries: Vec::new(),
             tally: Tally::of([], kinds),
             templates: Vec::new(),
             unreached: Vec::new(),

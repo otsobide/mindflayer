@@ -103,6 +103,7 @@
       },
       "kind": "skill",
       "name": "deploy-docs",
+      "server": null,
       "template": "full",
       "type": "add"
     }

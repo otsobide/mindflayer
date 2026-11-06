@@ -357,3 +357,38 @@ fn create(path: &Path, contents: &[u8]) -> Result<(), FileError> {
     }
     Ok(())
 }
+
+/// A file somebody keeps for every project, an agent's own config in its
+/// home, read as text up to `cap` bytes and never written: `None` when it is
+/// not there.
+///
+/// Through a link, where a project's [`ConfigFile`] is refused one: it is
+/// only read, and a user's config kept in a repository of their settings is
+/// most often linked into the home. One function for every such file, so
+/// Codex's `config.toml` and OpenCode's global config are read alike, to
+/// the same bound, refused alike when they are not text.
+pub(crate) fn read_through(path: &Path, cap: u64) -> Result<Option<String>, FileError> {
+    let failed = |source| FileError::Read {
+        path: path.to_path_buf(),
+        source,
+    };
+    let file = match fs::File::open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(source) => return Err(failed(source)),
+    };
+    let mut bytes = Vec::new();
+    // One byte past the cap is enough to know it is past.
+    file.take(cap + 1).read_to_end(&mut bytes).map_err(failed)?;
+    if bytes.len() as u64 > cap {
+        return Err(FileError::TooLarge {
+            path: path.to_path_buf(),
+            cap,
+        });
+    }
+    String::from_utf8(bytes)
+        .map(Some)
+        .map_err(|_| FileError::NotText {
+            path: path.to_path_buf(),
+        })
+}

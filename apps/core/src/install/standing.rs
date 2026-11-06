@@ -34,7 +34,9 @@ use crate::workspace::{MindProject, WeaverWorkspace};
 ///
 /// The five states between `Absent` and `Foreign` are an installation's, one
 /// the ledger records: told apart by the hash of what was written, and by
-/// what the place it came from offers now. When more than one is true,
+/// what the place it came from offers now. An MCP server's entry in an
+/// agent's config file stands in the same words, told by its key and its
+/// fingerprint ([`super::entries`]). When more than one is true,
 /// edited is said first, then orphaned, missing and outdated: an edit is what
 /// a change must not undo, an offer gone leaves nothing to put back or bring
 /// up to date, and a copy put back is put back as the offer holds it now.
@@ -404,29 +406,6 @@ pub(crate) fn rule_standing(
             }
         })
     })
-}
-
-/// Each target of `record`, an MCP server's in `project`, as it is found:
-/// missing, every one.
-///
-/// What an install of one writes is an entry in each agent's config file
-/// (D-10), which no release writes yet, so a record of one is a row no
-/// build of this format wrote, and this one has no entry it can read back
-/// to hold it to. Missing rather than edited, which would refuse what is
-/// asked of it as somebody's work: an update would write it again, and is
-/// refused as an install of one is, saying why.
-pub(crate) fn mcp_copies(project: &MindProject, record: &InstallRecord) -> Vec<Looked> {
-    record
-        .targets
-        .iter()
-        .map(|target| missing(project, target))
-        .collect()
-}
-
-/// How an MCP server's installation stands from how its copies were
-/// `looked` at ([`mcp_copies`]), given whether it is `offered` still.
-pub(crate) fn mcp_standing(looked: &[Looked], offered: bool) -> Standing {
-    standing(looked, offered, |_| true)
 }
 
 /// How an installation stands from how its copies are `looked` at, whether

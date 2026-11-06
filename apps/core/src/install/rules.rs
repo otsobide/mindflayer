@@ -781,13 +781,14 @@ impl Wanted {
                 .and_then(|record| record.content_hash.clone())
                 .or_else(|| Some(hash::bytes(&self.bytes))),
             targets,
+            entries: Vec::new(),
         }
     }
 }
 
 /// Where links in the rule `offer` offers, at `path`, may lead: the
 /// workspace that keeps it, as for a skill's copy.
-fn within(workspace: &WeaverWorkspace, offer: &Offer, path: &Path) -> PathBuf {
+pub(super) fn within(workspace: &WeaverWorkspace, offer: &Offer, path: &Path) -> PathBuf {
     match offer {
         Offer::Loaded { entry, .. } => paths::normalize(&workspace.root().join(entry)),
         Offer::Workspace { .. } => workspace.root().to_path_buf(),
@@ -799,7 +800,7 @@ fn within(workspace: &WeaverWorkspace, offer: &Offer, path: &Path) -> PathBuf {
 /// leads out of `within`, where it is offered from: what it leads to would
 /// go into every agent's instructions in the project, and a credential is
 /// how such a file ends up there, as a skill's copy refuses one.
-fn inside(path: &Path, within: &Path) -> Result<(), InstallError> {
+pub(super) fn inside(path: &Path, within: &Path) -> Result<(), InstallError> {
     let (Ok(real), Ok(root)) = (fs::canonicalize(path), fs::canonicalize(within)) else {
         // Nothing to follow: reading it says what is wrong.
         return Ok(());
@@ -1287,6 +1288,7 @@ fn render_held(
                 origin: Some(rule.origin.clone()),
                 content_hash,
                 targets,
+                entries: Vec::new(),
             }
         })
         .collect();
@@ -1683,6 +1685,7 @@ fn copy_in_held(
                     content_hash: Some(held.clone()),
                 })
                 .collect(),
+            entries: Vec::new(),
         },
     )?;
     let detail = format!("{name} into {}", project.name());

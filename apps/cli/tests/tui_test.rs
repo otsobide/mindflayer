@@ -639,6 +639,7 @@ fn adding_in_the_tui_is_mind_add() {
             name: String::from("deploy"),
             description: String::from("Ship the service"),
             template: None,
+            server: None,
         })
     );
     assert!(dir.path().join("alpha/skills/deploy/SKILL.md").is_file());
@@ -1378,6 +1379,7 @@ fn the_install_screen_opens_inside_the_tui_and_applies_from_there() {
                 kind: Kind::Skill,
                 name: String::from("deploy"),
                 from: Some(origin.clone()),
+                yes: false,
             }]
         })
     );
@@ -1515,6 +1517,7 @@ fn a_rule_ticked_on_the_install_screen_inside_the_tui_is_installed_from_there() 
                 kind: Kind::Rule,
                 name: String::from("git/commits"),
                 from: Some(String::from("workspace")),
+                yes: false,
             }]
         })
     );
@@ -1795,12 +1798,13 @@ fn the_lines_the_install_screen_ran_run_again_on_a_copy_leave_the_same_ledger_an
         KeyCode::Char(' '),
         KeyCode::Tab,
         KeyCode::Char(' '),
-        // tanukeys: git/commits and deploy ticked, lint unticked.
+        // tanukeys: git/commits and deploy ticked, lint unticked, back
+        // past the MCP servers to the skills.
         KeyCode::Left,
         KeyCode::Down,
         KeyCode::Right,
         KeyCode::Char(' '),
-        KeyCode::Tab,
+        KeyCode::BackTab,
         KeyCode::Char(' '),
         KeyCode::Down,
         KeyCode::Char(' '),
@@ -1895,6 +1899,7 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
             name: String::from("deploy"),
             description: awkward.clone(),
             template: None,
+            server: None,
         },
         Task::Show {
             holder: Holder::Project(String::from("alpha")),
@@ -1918,6 +1923,7 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
             name: String::from("git/no-force-push"),
             description: String::from("Never"),
             template: Some(String::from("policy")),
+            server: None,
         },
         Task::Edit {
             holder: Holder::Project(String::from("-odd")),
@@ -1943,6 +1949,7 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
             name: String::from("commit-style"),
             description: String::from("Shared"),
             template: Some(String::from("full")),
+            server: None,
         },
         Task::Edit {
             holder: Holder::Workspace,
@@ -1986,6 +1993,7 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
             name: String::from("deploy"),
             description: awkward.clone(),
             template: Some(String::from("-weird")),
+            server: None,
         },
         Task::Settings {
             holder: Holder::Project(String::from("alpha")),
@@ -2042,12 +2050,14 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
             kind: Kind::Skill,
             name: String::from("deploy"),
             from: Some(String::from("-weird")),
+            yes: false,
         },
         Task::Install {
             projects: vec![String::from("../collapse")],
             kind: Kind::Rule,
             name: String::from("git/no-force-push"),
             from: None,
+            yes: false,
         },
         Task::Uninstall {
             projects: vec![String::from("-odd"), String::from("./alpha")],
@@ -2118,9 +2128,10 @@ fn the_agents_and_share_toggles_parse_back_into_what_they_were() {
 fn the_install_and_uninstall_tasks_parse_back_into_what_they_were() {
     let install = Task::Install {
         projects: vec![String::from("alpha"), String::from("-odd")],
-        kind: Kind::Skill,
+        kind: Kind::Mcp,
         name: String::from("deploy"),
         from: Some(String::from("https://example.com/acme/skills#main")),
+        yes: true,
     };
     let uninstall = Task::Uninstall {
         projects: vec![String::from("../collapse")],
@@ -2132,7 +2143,7 @@ fn the_install_and_uninstall_tasks_parse_back_into_what_they_were() {
     assert_eq!(
         install.describe(),
         "mindweaver install -p alpha -p ./-odd --from 'https://example.com/acme/skills#main' \
-         skill:deploy"
+         --yes mcp:deploy"
     );
     assert_eq!(
         uninstall.describe(),
@@ -2147,13 +2158,14 @@ fn the_install_and_uninstall_tasks_parse_back_into_what_they_were() {
         name,
         from,
         force,
+        yes,
     }) = WeaverCli::try_parse_from(&line).unwrap().command
     else {
         panic!("{line:?}");
     };
     assert_eq!(projects, ["alpha", "./-odd"]);
-    assert!(!all_projects && !force);
-    assert_eq!(name.as_deref(), Some("skill:deploy"));
+    assert!(!all_projects && !force && yes);
+    assert_eq!(name.as_deref(), Some("mcp:deploy"));
     assert_eq!(
         from.as_deref(),
         Some("https://example.com/acme/skills#main")
@@ -2188,6 +2200,7 @@ fn an_install_task_installs_into_every_project_it_names_and_an_uninstall_takes_i
             kind: Kind::Skill,
             name: String::from("deploy"),
             from: None,
+            yes: false,
         },
     );
     for project in &projects {
@@ -3641,6 +3654,89 @@ fn a_project_given_a_rule_some_of_its_agents_read_nowhere_is_marked_and_its_pane
 }
 
 #[test]
+fn a_project_doctor_finds_something_in_is_marked_with_how_much_and_its_pane_says_what() {
+    let dir = workspace_with_own();
+    let stage = dir.path().join("alpha/.mind/tmp/4242-00112233445566ff");
+    fs::create_dir_all(&stage).unwrap();
+
+    let app = tui_in(dir.path());
+
+    let holdings = app.member().unwrap().holdings.as_ref().unwrap();
+    assert_eq!(holdings.found.len(), 1, "{:?}", holdings.found);
+    assert!(
+        holdings.found[0].starts_with(&format!("{}: ", stage.display())),
+        "{:?}",
+        holdings.found
+    );
+    assert!(
+        holdings.found[0].contains("; fix: "),
+        "{:?}",
+        holdings.found
+    );
+    let drawn = tui_drawn(&app);
+    assert!(drawn.contains("✚ 1"), "{drawn}");
+    assert!(drawn.contains("Found by doctor"), "{drawn}");
+}
+
+#[test]
+fn what_doctor_could_not_read_to_tell_is_said_beside_what_could_not_be_read() {
+    let dir = workspace_with_own();
+    let codex = dir.path().join("home/.codex");
+    fs::create_dir_all(&codex).unwrap();
+    let config = codex.join("config.toml");
+    fs::write(&config, "[projects\n").unwrap();
+    let lookup = Lookup {
+        agents: AgentHomes {
+            codex_home: Some(codex),
+            ..AgentHomes::default()
+        },
+        ..Lookup::default()
+    };
+
+    let view = tui::load(dir.path(), &lookup).unwrap();
+    let app = App::new(dir.path().to_path_buf(), view).with_lookup(lookup);
+
+    let member = app.member().unwrap();
+    let holdings = member.holdings.as_ref().unwrap();
+    let said: Vec<&String> = holdings
+        .warnings
+        .iter()
+        .filter(|line| line.starts_with(&format!("{}: ", config.display())))
+        .collect();
+    assert_eq!(said.len(), 1, "{:?}", holdings.warnings);
+    assert!(
+        member.problems() > 0,
+        "a check left unmade is no clean bill"
+    );
+    assert!(tui_drawn(&app).contains("Could not be read"));
+}
+
+#[test]
+fn a_project_no_workspace_links_is_marked_for_what_doctor_finds_in_it_too() {
+    let home = TempDir::new().unwrap();
+    let elsewhere = TempDir::new().unwrap();
+    let project = elsewhere.path().join("collapse");
+    fs::create_dir(&project).unwrap();
+    new_project(&project);
+    let stage = project.join(".mind/tmp/4242-00112233445566ff");
+    fs::create_dir_all(&stage).unwrap();
+
+    let View::Workspace(workspace) =
+        tui::load_project(&project, &Lookup::at_home(Some(home.path()))).unwrap()
+    else {
+        panic!("no screen for {}", project.display());
+    };
+
+    let holdings = workspace.members[0].holdings.as_ref().unwrap();
+    assert_eq!(holdings.found.len(), 1, "{:?}", holdings.found);
+    assert!(
+        holdings.found[0].starts_with(&format!("{}: ", stage.display())),
+        "{:?}",
+        holdings.found
+    );
+}
+
+#[test]
 fn a_strip_wraps_by_how_wide_its_words_are_drawn() {
     let dir = workspace_with_own();
     let alpha = dir.path().join("alpha");
@@ -3660,7 +3756,9 @@ fn a_strip_wraps_by_how_wide_its_words_are_drawn() {
             .iter()
             .map(|cell| cell.symbol())
             .collect();
-        assert_eq!(drawn.matches('技').count(), 16, "{width}: {drawn}");
+        // Once in the strip of what its agents do not see, and twice in
+        // doctor's, by the folder's path and among the folders.
+        assert_eq!(drawn.matches('技').count(), 48, "{width}: {drawn}");
         assert!(drawn.contains("until"), "{width}: {drawn}");
         assert!(drawn.contains("pointed"), "{width}: {drawn}");
     }
@@ -3971,4 +4069,45 @@ fn a_line_that_reads_standard_input_is_not_run_from_the_screen() {
     let done = tui::execute(&words(&said), dir.path(), &Lookup::default(), &Watch::new());
     assert!(done.ok, "{done:?}");
     assert_eq!(fs::read_to_string(&manifest).unwrap(), rewritten);
+}
+
+/// A project's rows show the MCP servers it received, each with a badge
+/// in each agent's place it reaches, and each somebody keeps in an agent's
+/// config file as foreign, as `status` lists them.
+#[test]
+fn a_projects_rows_show_its_mcp_servers_installed_and_somebodys() {
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+    let collapse = dir.path().join("collapse");
+    fs::create_dir(&collapse).unwrap();
+    new_project(&collapse);
+    weaver(dir.path(), &["link", "collapse"]).unwrap();
+    let folder = own_directory_for(dir.path(), Kind::Mcp);
+    fs::create_dir_all(&folder).unwrap();
+    fs::write(
+        folder.join("github.toml"),
+        mindweaver_core::mother::McpMother::plain_program("github"),
+    )
+    .unwrap();
+    weaver(dir.path(), &["install", "-p", "collapse", "github"]).unwrap();
+    let claude = fs::read_to_string(collapse.join(".mcp.json")).unwrap();
+    fs::write(
+        collapse.join(".mcp.json"),
+        claude.replacen(
+            "\"mcpServers\": {",
+            "\"mcpServers\": {\n    \"theirs\": {\"type\": \"http\", \"url\": \"https://example.com/mcp\"},",
+            1,
+        ),
+    )
+    .unwrap();
+    let app = tui_in(dir.path());
+
+    let drawn = tui_drawn(&app);
+
+    for row in [
+        "mcp   github  current  CC CX OC",
+        "mcp   theirs  foreign  CC",
+    ] {
+        assert!(drawn.contains(row), "{row}\n{drawn}");
+    }
 }

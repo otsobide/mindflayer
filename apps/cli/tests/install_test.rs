@@ -945,7 +945,7 @@ fn opening_the_screen_scrubs_nothing_and_applying_scrubs_first_and_says_so_witho
     token_in_the_shelf(&workspace);
     let (projects, _) = install_screen::registered(&workspace);
 
-    let mut screen = install_screen::open(&workspace, projects).unwrap();
+    let mut screen = install_screen::open(&workspace, projects, &AgentHomes::default()).unwrap();
 
     assert_eq!(tainted(&workspace), 1, "opening the screen is a read");
     press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
@@ -1006,7 +1006,7 @@ fn a_mark_on_a_source_the_scrub_makes_one_with_another_installs_from_the_one_kep
     let (dir, workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
     gathered_twice(&workspace);
     let (projects, _) = install_screen::registered(&workspace);
-    let mut screen = install_screen::open(&workspace, projects).unwrap();
+    let mut screen = install_screen::open(&workspace, projects, &AgentHomes::default()).unwrap();
     // Twice, as the file has it until a write scrubs it: a read takes the
     // token out of what it shows, not the row out of the file.
     assert_eq!(screen.targets[0].rows.len(), 2, "{}", rendered(&screen));
@@ -1050,7 +1050,7 @@ fn a_mark_on_what_only_the_source_the_scrub_drops_had_is_said_and_left_undone() 
         )
         .unwrap();
     let (projects, _) = install_screen::registered(&workspace);
-    let mut screen = install_screen::open(&workspace, projects).unwrap();
+    let mut screen = install_screen::open(&workspace, projects, &AgentHomes::default()).unwrap();
 
     mark_from(&mut screen, "lint", "older");
     let outcome = install_screen::apply(&workspace, &screen, &Lookup::default());
@@ -1193,13 +1193,15 @@ fn with_a_rule(projects: &[&str]) -> (TempDir, WeaverWorkspace, Ledger) {
 }
 
 #[test]
-fn tab_shows_the_rules_in_the_column_the_skills_were_in_and_back() {
+fn tab_shows_the_rules_then_the_mcp_servers_in_the_column_the_skills_were_in_and_back() {
     let (_dir, workspace, ledger) = with_a_rule(&["collapse"]);
     let mut screen = screen_for(&workspace, &ledger);
 
     let skills = rendered(&screen);
     press(&mut screen, &[KeyCode::Tab]);
     let rules = rendered(&screen);
+    press(&mut screen, &[KeyCode::Tab]);
+    let servers = rendered(&screen);
     press(&mut screen, &[KeyCode::Tab]);
 
     assert!(skills.contains("Skills in collapse"), "{skills}");
@@ -1213,10 +1215,12 @@ fn tab_shows_the_rules_in_the_column_the_skills_were_in_and_back() {
         "{rules}"
     );
     assert!(!rules.contains("deploy"), "{rules}");
-    assert!(rules.contains("tab skills"), "{rules}");
+    assert!(rules.contains("tab MCP servers"), "{rules}");
+    assert!(servers.contains("MCP servers in collapse"), "{servers}");
+    assert!(servers.contains("tab skills"), "{servers}");
     assert_eq!(screen.kind, Kind::Skill, "round again past the last");
     press(&mut screen, &[KeyCode::BackTab]);
-    assert_eq!(screen.kind, Kind::Rule, "shift+tab goes the other way");
+    assert_eq!(screen.kind, Kind::Mcp, "shift+tab goes the other way");
 }
 
 #[test]
@@ -1627,7 +1631,7 @@ fn turned_round_tab_shows_the_rules_and_each_project_for_one() {
     assert!(drawn.contains("> git/commits"), "{drawn}");
     assert!(!drawn.contains("deploy"), "{drawn}");
     assert!(drawn.contains("Projects for rule git/commits"), "{drawn}");
-    assert!(drawn.contains("tab skills"), "{drawn}");
+    assert!(drawn.contains("tab MCP servers"), "{drawn}");
     press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
     assert_eq!(screen.counts(), (1, 0));
     assert!(rendered(&screen).contains("[x] collapse  + install"));
@@ -1649,4 +1653,169 @@ fn turned_round_with_nothing_offered_says_where_it_comes_from() {
         Some("no rules to install: none of the workspace's own, and none loaded")
     );
     assert!(rendered(&screen).contains("`mindweaver add rule` first"));
+}
+
+/// A workspace linking `collapse`, its library holding the server `github`,
+/// loading `team`, a workspace beside it whose library holds `linear`.
+fn with_servers() -> (TempDir, WeaverWorkspace, Ledger) {
+    let dir = TempDir::new().unwrap();
+    let hub = dir.path().join("hub");
+    let team = dir.path().join("team");
+    for (root, name, text) in [
+        (
+            &hub,
+            "github",
+            mindweaver_core::mother::McpMother::plain_program("github"),
+        ),
+        (
+            &team,
+            "linear",
+            mindweaver_core::mother::McpMother::address_for_codex("linear"),
+        ),
+    ] {
+        fs::create_dir(root).unwrap();
+        weaver(root, &["init"]).unwrap();
+        let folder = own_directory_for(root, Kind::Mcp);
+        fs::create_dir_all(&folder).unwrap();
+        fs::write(folder.join(format!("{name}.toml")), text).unwrap();
+    }
+    new_project(&hub.join("collapse"));
+    weaver(&hub, &["link", "collapse"]).unwrap();
+    weaver(&hub, &["load", "../team"]).unwrap();
+    let workspace = WeaverWorkspace::locate(&hub).unwrap().unwrap();
+    let ledger = workspace.ledger().unwrap();
+    (dir, workspace, ledger)
+}
+
+/// A server from a loaded workspace ticked on the screen is shown, each
+/// agent's line, before the screen applies, and only then is its line
+/// given `--yes`; one of the library's own goes in as a skill does.
+#[test]
+fn a_server_ticked_on_the_screen_shows_what_each_agent_runs_before_its_line_says_yes() {
+    let (dir, workspace, ledger) = with_servers();
+    let collapse = dir.path().join("hub/collapse");
+    let mut screen = screen_for(&workspace, &ledger);
+
+    press(&mut screen, &[KeyCode::Tab, KeyCode::Tab, KeyCode::Right]);
+    let servers = rendered(&screen);
+    press(
+        &mut screen,
+        &[
+            KeyCode::Char(' '),
+            KeyCode::Down,
+            KeyCode::Char(' '),
+            KeyCode::Char('a'),
+        ],
+    );
+    let asked = rendered(&screen);
+
+    assert_eq!(screen.kind, Kind::Mcp);
+    assert!(servers.contains("MCP servers in collapse"), "{servers}");
+    assert!(servers.contains("[ ] github"), "{servers}");
+    assert!(servers.contains("[ ] linear"), "{servers}");
+    assert!(screen.confirming);
+    assert!(asked.contains("Install 2, remove 0?"), "{asked}");
+    assert!(
+        asked.contains("mcp linear into collapse, from load:../team:"),
+        "{asked}"
+    );
+    for agent in ["claude", "codex", "opencode"] {
+        assert!(
+            asked.contains(&format!("  {agent} reaches: https://example.com/mcp")),
+            "{asked}"
+        );
+    }
+    // The library's own is no question: none of its lines is shown.
+    assert!(!asked.contains("mcp github into"), "{asked}");
+    assert_eq!(press(&mut screen, &[KeyCode::Char('y')]), Step::Apply);
+    let lines: Vec<String> = screen
+        .task()
+        .commands()
+        .iter()
+        .map(|words| words.join(" "))
+        .collect();
+    assert_eq!(
+        lines,
+        [
+            "mindweaver install -p collapse --from workspace mcp:github",
+            "mindweaver install -p collapse --from load:../team --yes mcp:linear",
+        ]
+    );
+
+    let outcome = install_screen::apply(&workspace, &screen, &Lookup::default());
+
+    assert!(
+        outcome.stdout.contains(
+            "$ mindweaver install -p collapse --from load:../team --yes mcp:linear\n\
+             installed mcp linear into collapse, from load:../team\n  \
+             claude reaches: https://example.com/mcp\n"
+        ),
+        "{}",
+        outcome.stdout
+    );
+    let held = fs::read_to_string(collapse.join(".mcp.json")).unwrap();
+    assert!(held.contains("github") && held.contains("linear"), "{held}");
+}
+
+/// The install screen drawn into a terminal `width` columns wide and
+/// `height` rows high, a row a line.
+fn drawn_at(screen: &Screen, width: u16, height: u16) -> String {
+    let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+    terminal.draw(|frame| ui::draw(screen, frame)).unwrap();
+    terminal
+        .backend()
+        .buffer()
+        .content()
+        .chunks(usize::from(width))
+        .map(|line| line.iter().map(|cell| cell.symbol()).collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// A confirmation taller than the terminal scrolls, its question and keys
+/// kept in place, and its yes waits until every row of what each agent
+/// would run has been on the screen: a `--yes` given to what nobody was
+/// shown is no yes.
+#[test]
+fn a_confirmation_taller_than_the_screen_scrolls_and_waits_for_every_row_before_its_yes() {
+    let (_dir, workspace, ledger) = with_servers();
+    let mut screen = screen_for(&workspace, &ledger);
+    press(
+        &mut screen,
+        &[
+            KeyCode::Tab,
+            KeyCode::Tab,
+            KeyCode::Right,
+            KeyCode::Down,
+            KeyCode::Char(' '),
+            KeyCode::Char('a'),
+        ],
+    );
+
+    let first = drawn_at(&screen, 80, 14);
+
+    assert!(first.contains("Install 1, remove 0?"), "{first}");
+    assert!(first.contains("more rows below"), "{first}");
+    assert!(first.contains("j  down"), "{first}");
+    assert!(!first.contains("y  yes"), "{first}");
+    assert_eq!(press(&mut screen, &[KeyCode::Char('y')]), Step::Stay);
+    assert!(screen.confirming);
+    let mut shown = first;
+    for _ in 0..40 {
+        if screen.unseen.get() == 0 {
+            break;
+        }
+        press(&mut screen, &[KeyCode::Char('j')]);
+        shown.push_str(&drawn_at(&screen, 80, 14));
+    }
+    assert_eq!(screen.unseen.get(), 0, "{shown}");
+    for agent in ["claude", "codex", "opencode"] {
+        assert!(
+            shown.contains(&format!("{agent} reaches: https://example.com/mcp")),
+            "{shown}"
+        );
+    }
+    let last = drawn_at(&screen, 80, 14);
+    assert!(last.contains("y  yes"), "{last}");
+    assert_eq!(press(&mut screen, &[KeyCode::Char('y')]), Step::Apply);
 }

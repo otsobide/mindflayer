@@ -4,6 +4,7 @@
 //! Core builds and orders the report ([`Status`]); this only lays it out, as
 //! a table naming no more than its rows need to be told apart.
 
+use mindweaver_core::status::{ArtifactStatus, ProjectStatus, State};
 use mindweaver_core::{
     Agent, Kind, MarkerFile, MindProject, Missed, Status, StatusFailure, Unreached, WeaverWorkspace,
 };
@@ -300,8 +301,25 @@ fn older(status: &Status) -> Vec<Warning> {
         .collect()
 }
 
-/// One line per artifact, and one per entry that would not open; none at
-/// all when there is neither.
+/// Whether `artifact` is an MCP server's installation whose entries the
+/// table lists a row each ([`ProjectStatus::entries`]), in its place: one
+/// an agent, so that Claude's entry edited beside Codex's current says
+/// which, as one row for the installation could not. Never the project's
+/// own server of the name, a definition it authors, which no entry stands
+/// for.
+fn entered(project: &ProjectStatus, artifact: &ArtifactStatus) -> bool {
+    artifact.kind == Kind::Mcp
+        && artifact.state != State::Authored
+        && project
+            .entries
+            .iter()
+            .any(|entry| entry.state != State::Foreign && entry.name == artifact.name)
+}
+
+/// One line per artifact, one per MCP server's entry in an agent's config
+/// file in place of its installation's ([`entered`]), somebody's among
+/// them as a foreign copy is listed (D-23), and one per entry that would
+/// not open; none at all when there is none of them.
 ///
 /// The project column only when the rows come from more than one project,
 /// or one of them is stale, whose row is nothing but its name; the kind
@@ -312,7 +330,9 @@ fn rows(status: &Status, across: bool) -> Option<String> {
     let listed = status
         .projects
         .iter()
-        .filter(|project| project.stale.is_some() || !project.artifacts.is_empty())
+        .filter(|project| {
+            project.stale.is_some() || !project.artifacts.is_empty() || !project.entries.is_empty()
+        })
         .count();
     if listed == 0 {
         return None;
@@ -325,7 +345,13 @@ fn rows(status: &Status, across: bool) -> Option<String> {
     let kinds: Vec<Kind> = status
         .projects
         .iter()
-        .flat_map(|project| project.artifacts.iter().map(|artifact| artifact.kind))
+        .flat_map(|project| {
+            project
+                .artifacts
+                .iter()
+                .map(|artifact| artifact.kind)
+                .chain(project.entries.iter().map(|_| Kind::Mcp))
+        })
         .collect();
     let kinded = kinds.iter().any(|kind| Some(kind) != kinds.first());
 
@@ -355,6 +381,9 @@ fn rows(status: &Status, across: bool) -> Option<String> {
             continue;
         }
         for artifact in &project.artifacts {
+            if entered(project, artifact) {
+                continue;
+            }
             let mut row = Vec::new();
             if named {
                 row.push(label.clone());
@@ -366,6 +395,23 @@ fn rows(status: &Status, across: bool) -> Option<String> {
             row.push(artifact.state.slug().to_owned());
             row.push(agents(&artifact.agents));
             row.push(printable(artifact.origin.as_deref().unwrap_or("")));
+            rows.push(row);
+        }
+        // After the artifacts, in the order core lists them, by agent and
+        // then name, each with where it came from: none for somebody's,
+        // since nothing installed it.
+        for entry in &project.entries {
+            let mut row = Vec::new();
+            if named {
+                row.push(label.clone());
+            }
+            if kinded {
+                row.push(Kind::Mcp.slug().to_owned());
+            }
+            row.push(printable(&entry.name));
+            row.push(entry.state.slug().to_owned());
+            row.push(agents(&[entry.agent]));
+            row.push(printable(entry.origin.as_deref().unwrap_or("")));
             rows.push(row);
         }
     }

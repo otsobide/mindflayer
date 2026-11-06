@@ -781,6 +781,7 @@ fn installation_of(name: &str, targets: &[(Option<&str>, &str)]) -> InstallRecor
                 content_hash: None,
             })
             .collect(),
+        entries: Vec::new(),
     }
 }
 
@@ -846,6 +847,7 @@ fn rule_of(name: &str, targets: &[(Option<&str>, &str, &str)]) -> InstallRecord 
                 content_hash: Some(recorded(hash)),
             })
             .collect(),
+        entries: Vec::new(),
     }
 }
 

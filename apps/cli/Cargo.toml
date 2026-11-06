@@ -63,7 +63,10 @@ tokio = { version = "1", features = ["rt", "signal", "sync"], optional = true }
 webbrowser = { version = "1", optional = true }
 clap = { version = "4", features = ["derive"] }
 thiserror = "2"
-ratatui = "0.30.2"
+# How many rows a paragraph wraps into (`Paragraph::line_count`): what the
+# install screen's confirmation is made tall enough for, so that nothing it
+# asks a yes to is cut off unsaid.
+ratatui = { version = "0.30.2", features = ["unstable-rendered-line-info"] }
 # What a reading command's `--json` prints: core's types derive Serialize, and
 # the envelope around them is laid out here, as a table is. The versions the
 # server already builds.

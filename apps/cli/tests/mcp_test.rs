@@ -1,13 +1,14 @@
 //! MCP servers at the command line: added from how an agent starts or
 //! reaches one, listed beside skills and rules, shown, validated, renamed
-//! and removed as every kind is, and what no release does with one yet
-//! refused, saying what to do instead.
+//! and removed as every kind is, installed by a name qualified as one,
+//! and what no release does with one yet refused, saying what to do
+//! instead.
 
 mod common;
 
 use common::mother::ServerOptionsMother;
 use common::*;
-use mindweaver_core::mcp::{Address, Given};
+use mindweaver_core::mcp::{Address, Given, McpDefinition};
 use mindweaver_core::mother::{McpMother, ProjectMother, SettingsMother, UrlMother};
 use mindweaver_core::{Agent, Share};
 
@@ -909,14 +910,83 @@ fn contents_given_whole_that_name_a_server_otherwise_are_refused() {
 }
 
 #[test]
-fn adding_a_server_told_nothing_of_its_transport_and_installing_one_are_refused_with_what_to_do() {
+fn edit_writes_how_a_server_is_started_again_from_the_options_add_takes() {
+    let dir = workspace();
+    add_given(dir.path(), "github", &McpMother::given_program()).unwrap();
+    let file = own_directory_for(dir.path(), Kind::Mcp).join("github.toml");
+    let given = McpMother::given_address(false);
+    let mut line = vec!["edit", "mcp:github"];
+    let options = ServerOptionsMother::words(&given);
+    line.extend(options.iter().map(String::as_str));
+
+    let edited = weaver(dir.path(), &line).unwrap();
+    let again = weaver(dir.path(), &line).unwrap();
+
+    assert_eq!(edited.stdout, "edited mcp github: ok\n");
+    assert_eq!(again.stdout, "left mcp github unchanged: ok\n");
+    let definition = McpDefinition::parse(&fs::read_to_string(&file).unwrap()).unwrap();
+    assert_eq!(definition.description, GITHUB);
+    let Given::Address(mut read) = given else {
+        unreachable!("an address is given as one");
+    };
+    read.headers.sort();
+    assert_eq!(Given::of(&definition), Some(Given::Address(read)));
+    let validated = weaver(dir.path(), &["validate", "mcp:github"]).unwrap();
+    assert!(validated.ok, "{}", validated.stdout);
+}
+
+#[test]
+fn edit_refuses_a_transport_beside_an_editor_or_contents_and_for_a_skill() {
+    let dir = library();
+    for options in [
+        &["--editor", "true", "--command", "npx"][..],
+        &[
+            "--contents",
+            "draft.toml",
+            "--url",
+            "https://example.com/mcp",
+        ][..],
+    ] {
+        for lead in [&["mind"][..], &["mind", "weaver"][..]] {
+            let mut words = lead.to_vec();
+            words.extend(["edit", "mcp:github"]);
+            words.extend(options);
+            let error = Cli::try_parse_from(&words).err().map(|error| error.kind());
+            assert_eq!(
+                error,
+                Some(clap::error::ErrorKind::ArgumentConflict),
+                "{words:?}"
+            );
+        }
+    }
+
+    let failure = weaver(dir.path(), &["edit", "skill:deploy", "--command", "npx"]).unwrap_err();
+
+    assert_eq!(failure.error.code(), "edit_transport_not_mcp");
+}
+
+#[test]
+fn a_front_end_with_no_terminal_runs_an_edit_told_a_servers_transport() {
+    let line: Vec<String> = ["mindweaver", "edit", "mcp:github", "--command", "npx"]
+        .map(String::from)
+        .to_vec();
+    let editor: Vec<String> = ["mindweaver", "edit", "mcp:github"]
+        .map(String::from)
+        .to_vec();
+
+    assert_eq!(mindweaver_cli::task::refused(&line), None);
+    assert_eq!(
+        mindweaver_cli::task::refused(&editor),
+        Some(mindweaver_cli::task::Refusal::Editor)
+    );
+}
+
+#[test]
+fn adding_a_server_told_nothing_of_its_transport_is_refused_with_what_to_do() {
     let dir = library();
     let folder = own_directory_for(dir.path(), Kind::Mcp);
-    new_project(&dir.path().join("app"));
-    weaver(dir.path(), &["link", "app"]).unwrap();
 
     let added = weaver(dir.path(), &["add", "mcp", "linear", "Linear's issues"]).unwrap_err();
-    let installed = weaver(dir.path(), &["install", "-p", "app", "mcp:github"]).unwrap_err();
 
     assert_eq!(added.error.code(), "add_mcp_unscaffolded");
     assert_eq!(
@@ -928,14 +998,105 @@ fn adding_a_server_told_nothing_of_its_transport_and_installing_one_are_refused_
             folder.display()
         )
     );
-    assert_eq!(installed.error.code(), "not_installable");
+}
+
+/// A server is found by its bare name wherever a skill is, as much as by
+/// a name qualified as one.
+#[test]
+fn a_server_is_installed_by_its_bare_name_as_by_one_qualified() {
+    let dir = library();
+    for project in ["app", "web"] {
+        new_project(&dir.path().join(project));
+        weaver(dir.path(), &["link", project]).unwrap();
+    }
+
+    let bare = weaver(dir.path(), &["install", "-p", "app", "github"]).unwrap();
+    let qualified = weaver(dir.path(), &["install", "-p", "web", "mcp:github"]).unwrap();
+
+    for (outcome, project) in [(bare, "app"), (qualified, "web")] {
+        assert!(
+            outcome.stdout.starts_with(&format!(
+                "installed mcp github into {project}, from workspace\n"
+            )),
+            "{}",
+            outcome.stdout
+        );
+        assert!(
+            fs::read_to_string(dir.path().join(project).join(".mcp.json"))
+                .unwrap()
+                .contains("github")
+        );
+    }
+}
+
+/// A project a `mind.toml` marks names no agent to give a server: a bare
+/// name nothing offers is answered as nothing offered, as before servers
+/// could be installed, and only a server's name with why none can go
+/// there.
+#[test]
+fn a_bare_name_nothing_offers_is_not_offered_where_no_server_could_go_either() {
+    let dir = library();
+    older_project(&dir.path().join("legacy"));
+    weaver(dir.path(), &["link", "legacy"]).unwrap();
+
+    let typo = weaver(dir.path(), &["install", "-p", "legacy", "deplyo"]).unwrap_err();
+    let server = weaver(dir.path(), &["install", "-p", "legacy", "github"]).unwrap_err();
+
+    assert_eq!(typo.error.code(), "not_offered", "{}", typo.error);
+    assert_eq!(server.error.code(), "no_target", "{}", server.error);
     assert_eq!(
-        installed.error.to_string(),
-        "MCP servers cannot be installed into a project yet"
+        server.error.to_string(),
+        "legacy names no agent in its settings that MCP servers are installed for, so none \
+         can be installed into it"
     );
-    // Typed bare, the name is asked of the kinds an install writes alone.
-    let bare = weaver(dir.path(), &["install", "-p", "app", "github"]).unwrap_err();
-    assert_eq!(bare.error.code(), "not_offered");
+}
+
+/// A server a project received is entries in its agents' config files,
+/// never a definition the project keeps (D-23): `rename`, `edit` and
+/// `remove` aimed at one are refused, saying what changes it instead.
+#[test]
+fn a_change_aimed_at_a_server_the_project_received_is_refused_with_what_to_do_instead() {
+    let dir = library();
+    let app = dir.path().join("app");
+    new_project(&app);
+    weaver(dir.path(), &["link", "app"]).unwrap();
+    weaver(dir.path(), &["install", "-p", "app", "mcp:github"]).unwrap();
+    let before = fs::read_to_string(app.join(".mcp.json")).unwrap();
+
+    for line in [
+        &["rename", "mcp:github", "octocat"][..],
+        &["remove", "mcp:github", "--yes"],
+        &["edit", "mcp:github"],
+    ] {
+        let refused = mind(&app, line).unwrap_err();
+
+        assert_eq!(refused.error.code(), "change_received_mcp", "{line:?}");
+        // The name bare, the one form an uninstall needs while the project
+        // received nothing else of it.
+        assert_eq!(
+            refused.error.to_string(),
+            "`mcp:github` is an MCP server app received, an entry in its agents' config files \
+             written from the definition it was installed from rather than kept in it, so it is \
+             not changed from here: uninstall it as `github`, or change its definition in the \
+             library it came from and update",
+            "{line:?}"
+        );
+    }
+    assert_eq!(fs::read_to_string(app.join(".mcp.json")).unwrap(), before);
+    // Typed bare, the name is found received as well.
+    let bare = mind(&app, &["rename", "github", "octocat"]).unwrap_err();
+    assert_eq!(bare.error.code(), "change_received_mcp");
+    // A skill of the name received too, the bare name would be refused as
+    // two, so the hint names the server qualified.
+    weaver(dir.path(), &["add", "skill", "github", "Work with GitHub"]).unwrap();
+    weaver(dir.path(), &["install", "-p", "app", "skill:github"]).unwrap();
+    let both = mind(&app, &["rename", "mcp:github", "octocat"]).unwrap_err();
+    assert!(both
+        .error
+        .to_string()
+        .contains("uninstall it as `mcp:github`"));
+    let uninstalled = mind(&app, &["uninstall", "mcp:github"]).unwrap();
+    assert_eq!(uninstalled.stdout, "removed mcp github from app\n");
 }
 
 #[test]
@@ -991,7 +1152,7 @@ fn a_project_mind_init_makes_lists_nothing_of_an_unrelated_mcp_folder() {
 }
 
 #[test]
-fn the_targets_of_servers_are_spoken_of_as_settings_since_none_is_installed() {
+fn the_targets_of_servers_are_each_agents_config_file_and_never_a_folder() {
     let dir = TempDir::new().unwrap();
     new_project(dir.path());
     let name = dir.path().file_name().unwrap().to_str().unwrap().to_owned();
@@ -1002,14 +1163,476 @@ fn the_targets_of_servers_are_spoken_of_as_settings_since_none_is_installed() {
     assert!(reset.ok, "{:?}", reset.stderr);
     assert_eq!(
         reset.stdout,
-        format!(
-            "nothing to change: {name} names no folder for its MCP servers already, and none \
-             is installed into a project yet\n"
-        )
+        format!("nothing to change: {name} installs MCP servers where its agents read already\n")
     );
     assert_eq!(
         set.error.to_string(),
         ".x: cannot be where a project's MCP servers are installed, because MCP servers are \
          not installed into a project as folders yet"
+    );
+}
+
+/// A library linking `app`, a project naming every agent, whose server
+/// `github` is `text`'s definition, and a Codex home of its own marking
+/// `app` trusted: never the user's.
+fn installing(text: &str) -> (TempDir, TempDir, String) {
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+    let folder = own_directory_for(dir.path(), Kind::Mcp);
+    fs::create_dir_all(&folder).unwrap();
+    fs::write(folder.join("github.toml"), text).unwrap();
+    let app = dir.path().join("app");
+    new_project(&app);
+    weaver(dir.path(), &["link", "app"]).unwrap();
+    let codex = TempDir::new().unwrap();
+    // A TOML basic string, which a JSON one of a path is.
+    let key = serde_json::to_string(&app.display().to_string()).unwrap();
+    fs::write(
+        codex.path().join("config.toml"),
+        format!("[projects.{key}]\ntrust_level = \"trusted\"\n"),
+    )
+    .unwrap();
+    let home = format!("--codex-home={}", codex.path().display());
+    (dir, codex, home)
+}
+
+/// Every warning `outcome` says, with the code beside each.
+fn warned(outcome: &Outcome) -> Vec<(Option<&'static str>, String)> {
+    outcome
+        .stderr
+        .iter()
+        .map(|warning| (warning.code, warning.text.clone()))
+        .collect()
+}
+
+#[test]
+fn an_install_says_what_each_agent_runs_then_what_to_set_and_what_each_agent_asks() {
+    let (dir, _codex, home) = installing(&McpMother::program_for_codex("github"));
+
+    let installed = weaver(dir.path(), &["install", "-p", "app", "github", &home]).unwrap();
+
+    assert_eq!(
+        installed.stdout,
+        "installed mcp github into app, from workspace\n  \
+         claude runs: npx -y @example/server --workspace .\n  \
+         codex runs: npx -y @example/server --workspace .\n  \
+         opencode runs: npx -y @example/server --workspace .\n  \
+         set EXAMPLE_API_KEY (a secret) where the agents run: each reads it there, and no file \
+         holds it\n  \
+         claude asks to approve it before it starts it in a session, though a run with `-p` \
+         starts it unasked\n  \
+         opencode starts it without asking\n"
+    );
+    // Claude's entry has no key for the folder it starts in, which is said.
+    assert_eq!(
+        warned(&installed),
+        [(
+            Some("cwd_unsupported"),
+            String::from(
+                "warning: `github`: the transport's `cwd` is left out, since a program is \
+                 started there in no folder it is told"
+            )
+        )]
+    );
+    assert!(!installed.ok);
+}
+
+#[test]
+fn an_agent_not_reached_is_said_by_its_refusal_and_codex_untrusted_as_the_warning_it_is() {
+    let (dir, _codex, _home) = installing(&McpMother::create("github", GITHUB, "http"));
+    let app = dir.path().join("app");
+
+    let installed = weaver(dir.path(), &["install", "-p", "app", "mcp:github"]).unwrap();
+
+    assert_eq!(
+        installed.stdout,
+        "installed mcp github into app, from workspace\n  \
+         claude reaches: https://${EXAMPLE_TENANT}.example.com/mcp\n  \
+         opencode reaches: https://{env:EXAMPLE_TENANT}.example.com/mcp\n  \
+         set EXAMPLE_TENANT and EXAMPLE_TOKEN (a secret) where the agents run: each reads them \
+         there, and no file holds them\n  \
+         claude asks to approve it before it starts it in a session, though a run with `-p` \
+         starts it unasked\n  \
+         opencode starts it without asking\n"
+    );
+    assert_eq!(
+        warned(&installed),
+        [(
+            Some("codex_mcp_input_in_text"),
+            String::from(
+                "warning: `github` cannot be given to Codex: input `tenant` is written in \
+                 `transport.url`, where Codex reads no environment variable into it, so its \
+                 entry could be given it there only as its value"
+            )
+        )]
+    );
+    assert!(!app.join(".codex").exists());
+
+    // Given to Codex with no Codex home to say it trusts the project: its
+    // entry is written, and said as what Codex will not read.
+    let (dir, _codex, _home) = installing(&McpMother::plain_address("github"));
+    let app = dir.path().join("app");
+    let untrusted = weaver(dir.path(), &["install", "-p", "app", "github"]).unwrap();
+    assert!(untrusted
+        .stdout
+        .contains("  codex reaches: https://example.com/mcp\n"));
+    assert_eq!(
+        warned(&untrusted),
+        [(
+            Some("codex_mcp_untrusted"),
+            format!(
+                "warning: Codex reads `github` from {} only in a project it trusts, and no \
+                 Codex home was given to say whether it trusts {}",
+                app.join(".codex/config.toml").display(),
+                app.display()
+            )
+        )]
+    );
+}
+
+/// What a loaded workspace offers is somebody else's to have written: its
+/// server is said, each agent's line, and written only with `--yes`.
+#[test]
+fn a_loaded_workspaces_server_is_a_dry_run_that_writes_nothing_until_yes() {
+    let (dir, _codex, home) = installing(&McpMother::plain_program("ours"));
+    let team = TempDir::new().unwrap();
+    weaver(team.path(), &["init"]).unwrap();
+    let folder = own_directory_for(team.path(), Kind::Mcp);
+    fs::create_dir_all(&folder).unwrap();
+    fs::write(
+        folder.join("linear.toml"),
+        McpMother::address_for_codex("linear"),
+    )
+    .unwrap();
+    weaver(dir.path(), &["load", &team.path().display().to_string()]).unwrap();
+    let app = dir.path().join("app");
+    let ledger = WeaverWorkspace::locate(dir.path())
+        .unwrap()
+        .unwrap()
+        .ledger_path();
+    assert!(!ledger.exists(), "nothing has been recorded yet");
+
+    let dry = weaver(dir.path(), &["install", "-p", "app", "linear", &home]).unwrap();
+
+    let origin = format!(
+        "load:{}",
+        mindweaver_core::paths::relative_to(team.path(), dir.path())
+            .and_then(|route| mindweaver_core::paths::to_config_string(&route))
+            .unwrap()
+    );
+    assert_eq!(
+        dry.stdout,
+        format!(
+            "would install mcp linear into app, from {origin}\n  \
+             claude reaches: https://example.com/mcp\n  \
+             codex reaches: https://example.com/mcp\n  \
+             opencode reaches: https://example.com/mcp\n\
+             nothing installed: it comes from elsewhere than this workspace's library, so add \
+             --yes to go ahead\n"
+        )
+    );
+    assert!(dry.ok && dry.stderr.is_empty(), "{:?}", dry.stderr);
+    for file in [".mcp.json", ".codex", "opencode.json"] {
+        assert!(!app.join(file).exists(), "{file}");
+    }
+    // Nor anything recorded, the ledger not even made.
+    assert!(!ledger.exists(), "{}", ledger.display());
+    let status = weaver(dir.path(), &["status", "-p", "app"]).unwrap();
+    assert!(!status.stdout.contains("linear"), "{}", status.stdout);
+
+    let yes = weaver(
+        dir.path(),
+        &["install", "-p", "app", "linear", "--yes", &home],
+    )
+    .unwrap();
+
+    assert!(
+        yes.stdout
+            .starts_with(&format!("installed mcp linear into app, from {origin}\n")),
+        "{}",
+        yes.stdout
+    );
+    assert!(yes
+        .stdout
+        .contains("  set EXAMPLE_TOKEN (a secret) where the agents run"));
+    assert!(fs::read_to_string(app.join(".mcp.json"))
+        .unwrap()
+        .contains("linear"));
+
+    // Asked again, what the install would come to: nothing, while each
+    // agent holds what it was given, and an update once the team changes
+    // it, which waits for a yes as the install did.
+    let current = weaver(dir.path(), &["install", "-p", "app", "linear", &home]).unwrap();
+    fs::write(
+        folder.join("linear.toml"),
+        McpMother::address_for_codex("linear").replace("example.com", "example.org"),
+    )
+    .unwrap();
+    let changed = weaver(dir.path(), &["install", "-p", "app", "linear", &home]).unwrap();
+
+    let reaches = |host: &str| {
+        ["claude", "codex", "opencode"]
+            .map(|agent| format!("  {agent} reaches: https://{host}/mcp\n"))
+            .concat()
+    };
+    assert_eq!(
+        current.stdout,
+        format!(
+            "mcp linear in app was already current\n{}",
+            reaches("example.com")
+        )
+    );
+    assert_eq!(
+        changed.stdout,
+        format!(
+            "would update mcp linear in app, from {origin}\n{}\
+             nothing installed: it comes from elsewhere than this workspace's library, so add \
+             --yes to go ahead\n",
+            reaches("example.org")
+        )
+    );
+    // And an update says what each agent would be given of it before it
+    // writes it, in its dry run.
+    let update = weaver(dir.path(), &["update", "-p", "app", &home]).unwrap();
+    assert_eq!(
+        update.stdout,
+        format!(
+            "would update mcp linear in app, from {origin}\n{}\
+             nothing changed: add --yes to go ahead\n",
+            reaches("example.org")
+        )
+    );
+    assert!(fs::read_to_string(app.join(".mcp.json"))
+        .unwrap()
+        .contains("example.com"));
+}
+
+#[test]
+fn an_update_says_what_each_agent_runs_now_and_an_uninstall_takes_every_entry_out() {
+    let (dir, _codex, home) = installing(&McpMother::plain_program("github"));
+    weaver(dir.path(), &["install", "-p", "app", "github", &home]).unwrap();
+    let folder = own_directory_for(dir.path(), Kind::Mcp);
+    fs::write(
+        folder.join("github.toml"),
+        McpMother::plain_program("github").replacen("\"--workspace\", \".\"", "\"--verbose\"", 1),
+    )
+    .unwrap();
+
+    let dry = weaver(dir.path(), &["update", "-p", "app", &home]).unwrap();
+    let updated = weaver(dir.path(), &["update", "-p", "app", "--yes", &home]).unwrap();
+    let removed = weaver(dir.path(), &["uninstall", "-p", "app", "github"]).unwrap();
+
+    // What each agent would run said before anything is written, and the
+    // same warning, as the update that writes it says them.
+    assert_eq!(
+        dry.stdout,
+        "would update mcp github in app, from workspace\n  \
+         claude runs: npx -y @example/server --verbose\n  \
+         codex runs: npx -y @example/server --verbose\n  \
+         opencode runs: npx -y @example/server --verbose\n\
+         nothing changed: add --yes to go ahead\n"
+    );
+    assert_eq!(warned(&dry), warned(&updated));
+    assert_eq!(dry.ok, updated.ok);
+    assert_eq!(
+        updated.stdout,
+        "updated mcp github in app, from workspace\n  \
+         claude runs: npx -y @example/server --verbose\n  \
+         codex runs: npx -y @example/server --verbose\n  \
+         opencode runs: npx -y @example/server --verbose\n  \
+         claude asks to approve it before it starts it in a session, though a run with `-p` \
+         starts it unasked\n  \
+         opencode starts it without asking\n"
+    );
+    // Said of the project, as an update says every warning.
+    assert_eq!(
+        warned(&updated),
+        [(
+            Some("cwd_unsupported"),
+            String::from(
+                "warning: app: `github`: the transport's `cwd` is left out, since a program is \
+                 started there in no folder it is told"
+            )
+        )]
+    );
+    assert_eq!(removed.stdout, "removed mcp github from app\n");
+    let app = dir.path().join("app");
+    for file in [".mcp.json", ".codex/config.toml", "opencode.json"] {
+        assert!(!app.join(file).exists(), "{file}");
+    }
+}
+
+/// Into several projects, each project's lines in the order asked, each
+/// warning said of its project, and one asked about without a yes once.
+#[test]
+fn a_server_goes_into_several_projects_each_said_as_one_install_says_it() {
+    let (dir, _codex, _home) = installing(&McpMother::create("github", GITHUB, "http"));
+    new_project(&dir.path().join("web"));
+    weaver(dir.path(), &["link", "web"]).unwrap();
+
+    let installed = weaver(dir.path(), &["install", "-p", "app", "-p", "web", "github"]).unwrap();
+
+    let lines = |project: &str| {
+        format!(
+            "installed mcp github into {project}, from workspace\n  \
+             claude reaches: https://${{EXAMPLE_TENANT}}.example.com/mcp\n  \
+             opencode reaches: https://{{env:EXAMPLE_TENANT}}.example.com/mcp\n  \
+             set EXAMPLE_TENANT and EXAMPLE_TOKEN (a secret) where the agents run: each reads \
+             them there, and no file holds them\n  \
+             claude asks to approve it before it starts it in a session, though a run with \
+             `-p` starts it unasked\n  \
+             opencode starts it without asking\n"
+        )
+    };
+    assert_eq!(
+        installed.stdout,
+        format!("{}{}", lines("app"), lines("web"))
+    );
+    let codes: Vec<(Option<&str>, bool)> = warned(&installed)
+        .iter()
+        .zip(["app", "web"])
+        .map(|((code, text), project)| {
+            (
+                *code,
+                text.starts_with(&format!(
+                    "warning: {project}: `github` cannot be given to Codex"
+                )),
+            )
+        })
+        .collect();
+    assert_eq!(
+        codes,
+        [
+            (Some("codex_mcp_input_in_text"), true),
+            (Some("codex_mcp_input_in_text"), true)
+        ]
+    );
+    assert_eq!(installed.stderr.len(), 2);
+}
+
+/// Status lists a server's entries an agent each, how each stands and
+/// where it came from, beside somebody's the agents' files hold, in the
+/// text as in the JSON.
+#[test]
+fn status_lists_each_entry_of_a_server_an_agent_each_somebodys_among_them() {
+    let (dir, _codex, home) = installing(&McpMother::plain_program("github"));
+    let app = dir.path().join("app");
+    weaver(dir.path(), &["install", "-p", "app", "github", &home]).unwrap();
+    // Codex's entry changed by hand, and a server of somebody's beside ours.
+    let codex = fs::read_to_string(app.join(".codex/config.toml")).unwrap();
+    fs::write(
+        app.join(".codex/config.toml"),
+        codex.replacen("\"--workspace\"", "\"--verbose\"", 1),
+    )
+    .unwrap();
+    let claude = fs::read_to_string(app.join(".mcp.json")).unwrap();
+    fs::write(
+        app.join(".mcp.json"),
+        claude.replacen(
+            "\"mcpServers\": {",
+            "\"mcpServers\": {\n    \"theirs\": {\"type\": \"http\", \"url\": \"https://example.com/mcp\"},",
+            1,
+        ),
+    )
+    .unwrap();
+
+    let text = weaver(dir.path(), &["status", "-p", "app"]).unwrap();
+    let json = weaver(dir.path(), &["status", "-p", "app", "--json"]).unwrap();
+    let here = mind(&app, &["status"]).unwrap();
+
+    assert_eq!(
+        text.stdout,
+        "\
+github  current  claude    workspace
+theirs  foreign  claude
+github  edited   codex     workspace
+github  current  opencode  workspace
+"
+    );
+    assert!(text.ok, "{:?}", text.stderr);
+    assert_eq!(here.stdout, text.stdout);
+    let data: serde_json::Value = serde_json::from_str(&json.stdout).unwrap();
+    let entries: Vec<(&str, &str, &str)> = data["data"]["projects"][0]["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| {
+            (
+                entry["agent"].as_str().unwrap(),
+                entry["name"].as_str().unwrap(),
+                entry["state"].as_str().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        entries,
+        [
+            ("claude", "github", "current"),
+            ("claude", "theirs", "foreign"),
+            ("codex", "github", "edited"),
+            ("opencode", "github", "current"),
+        ]
+    );
+    // The installation's own row, as every installed artifact has, says it
+    // as a whole.
+    assert_eq!(
+        data["data"]["projects"][0]["artifacts"][0]["state"],
+        "edited"
+    );
+}
+
+/// A project's own server, a definition it keeps, is a row of its own
+/// beside the entries of one of the name it received, as the JSON lists
+/// both.
+#[test]
+fn status_keeps_a_projects_own_server_beside_the_entries_of_one_it_received() {
+    let dir = library();
+    let app = dir.path().join("app");
+    ProjectMother::with_mcp(&app, &Agent::ALL, Share::Shared);
+    weaver(dir.path(), &["link", "app"]).unwrap();
+    mind(&app, &["add", "mcp", "github", GITHUB, "--command", "npx"]).unwrap();
+    weaver(dir.path(), &["install", "-p", "app", "mcp:github"]).unwrap();
+
+    let text = weaver(dir.path(), &["status", "-p", "app"]).unwrap();
+
+    assert_eq!(
+        text.stdout,
+        "\
+github  authored  -
+github  current   claude    workspace
+github  current   opencode  workspace
+"
+    );
+}
+
+/// A server an agent of the project is given no entry of is said of it,
+/// as a rule some of its agents read nowhere is, in `missed`.
+#[test]
+fn status_says_which_agents_a_server_the_project_received_does_not_reach() {
+    let (dir, _codex, home) = installing(&McpMother::create("github", GITHUB, "http"));
+    weaver(dir.path(), &["install", "-p", "app", "github", &home]).unwrap();
+
+    let text = weaver(dir.path(), &["status", "-p", "app"]).unwrap();
+    let json = weaver(dir.path(), &["status", "-p", "app", "--json"]).unwrap();
+
+    assert_eq!(
+        text.stdout,
+        "\
+github  current  claude    workspace
+github  current  opencode  workspace
+"
+    );
+    assert_eq!(
+        warned(&text),
+        [(
+            None,
+            String::from("warning: codex does not read mcp `github` in app")
+        )]
+    );
+    assert!(!text.ok);
+    let data: serde_json::Value = serde_json::from_str(&json.stdout).unwrap();
+    assert_eq!(
+        data["data"]["projects"][0]["missed"],
+        serde_json::json!([{"kind": "mcp", "name": "github", "agents": ["codex"]}])
     );
 }

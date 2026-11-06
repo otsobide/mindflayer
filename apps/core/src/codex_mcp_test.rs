@@ -450,3 +450,23 @@ fn the_keys_an_entry_is_written_with_are_the_ones_its_extras_are_held_to() {
         assert!(order.windows(2).all(|pair| pair[0] < pair[1]), "{order:?}");
     }
 }
+
+#[test]
+fn what_codex_runs_is_read_off_its_entry_as_it_is_given_it() {
+    let program = entry_of(&McpMother::program_for_codex(&McpMother::name()));
+    let address = entry_of(&McpMother::address_for_codex(&McpMother::name()));
+    let bare = entry_of(&McpMother::plain_program(&McpMother::name()).replacen(
+        "args = [\"-y\", \"@example/server\", \"--workspace\", \".\"]\n",
+        "",
+        1,
+    ));
+
+    assert_eq!(
+        program.runs().to_string(),
+        "npx -y @example/server --workspace ."
+    );
+    assert_eq!(address.runs().to_string(), "https://example.com/mcp");
+    // No `args` written when there are none, and none read.
+    assert!(!keys_of(&bare).contains(&"args"), "{:?}", keys_of(&bare));
+    assert_eq!(bare.runs().to_string(), "npx");
+}

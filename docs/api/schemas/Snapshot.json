@@ -25,6 +25,13 @@
         "$ref": "#/$defs/Boxes"
       }
     },
+    "doctor": {
+      "description": "What doctor finds of each entry in the registry, in the order\n`projects` lists them: what keeps its agents from what it gives\nthem, as `mindweaver doctor` says it ([`crate::doctor`]), with the\nagent homes and the names of the variables set the front end told\nthe snapshot ([`Machine`]).",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Examined"
+      }
+    },
     "format": {
       "description": "[`FORMAT`].",
       "type": "integer",
@@ -137,6 +144,7 @@
     "sources",
     "offers",
     "boxes",
+    "doctor",
     "known",
     "history",
     "warnings"
@@ -249,6 +257,318 @@
         "target",
         "outcome",
         "detail"
+      ]
+    },
+    "EntryStatus": {
+      "description": "One entry of an MCP server in one of a project's agents' config files,\nand how it stands there: what the installed view lists of what it\nreceived as entries rather than copies (D-23).\n\nOne an agent rather than one a server, as an installation's entries are\nrecorded: what Claude's `.mcp.json` holds of a server can be edited\nwhile Codex's is not, and a foreign one is somebody's in one file alone.",
+      "type": "object",
+      "properties": {
+        "agent": {
+          "description": "The agent whose config file it is in.",
+          "$ref": "#/$defs/Agent"
+        },
+        "file": {
+          "description": "That file, as a route from the project, with `/` whatever the\nplatform: the one the ledger recorded writing it into, or for a\nforeign one the one the agent reads now (`Agent::mcp_file`).",
+          "type": "string"
+        },
+        "name": {
+          "description": "The server's name, the key it is under.",
+          "type": "string"
+        },
+        "origin": {
+          "description": "Where what was installed came from, as `--from` takes it; none for a\nforeign entry.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "description": "How it stands, as an artifact's state says it: never `authored`,\nwhich no entry is, and `foreign` for one nothing records.",
+          "$ref": "#/$defs/State"
+        }
+      },
+      "required": [
+        "agent",
+        "file",
+        "name",
+        "state",
+        "origin"
+      ]
+    },
+    "Examined": {
+      "description": "One project doctor examined, and what it found.",
+      "type": "object",
+      "properties": {
+        "entry": {
+          "description": "The workspace's entry for it, as the marker spells it; none for a\nproject no workspace links.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "failures": {
+          "description": "What could not be read to tell, by its code: why its entry opens no\nproject, or a file a check needed.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Said"
+          }
+        },
+        "findings": {
+          "description": "What keeps one of its agents from what it is given, in the order\nthe checks are made.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Finding"
+          }
+        },
+        "name": {
+          "description": "What its marker calls it; none for an entry that opens no project.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "Where it is.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "entry",
+        "name",
+        "path",
+        "findings",
+        "failures"
+      ]
+    },
+    "Finding": {
+      "description": "One thing doctor found, as a report says it: what it is, by its code,\nthe agents it keeps something from, the path it is about and what fixes\nit.",
+      "type": "object",
+      "properties": {
+        "agents": {
+          "description": "The agents it keeps something from, in report order: never empty\nbut for what keeps nothing from an agent yet, a leftover of an\ninstall.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Agent"
+          }
+        },
+        "code": {
+          "description": "The [`Symptom`]'s code, unique across core.",
+          "type": "string"
+        },
+        "fix": {
+          "description": "What to do about it.",
+          "type": "string"
+        },
+        "message": {
+          "description": "What is wrong, naming that path.",
+          "type": "string"
+        },
+        "path": {
+          "description": "The file or folder it is about, absolute: the one the fix acts on.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "agents",
+        "path",
+        "message",
+        "fix"
+      ]
+    },
+    "Given": {
+      "description": "How an agent starts an MCP server, or reaches one: a program or an\naddress, never both.\n\nIn JSON, what a front end sends a command line's options as, and what\nthe snapshot says a definition is told as: tagged by `type` inside the\nobject, `{\"type\": \"program\", \"command\": \"npx\", ...}`, as a task is, each\npair as an array of its two words. A field it does not have is refused,\nas a task's is: it is a write, and one misspelled would be dropped.\nEvery secret is the name of the variable it is read from, and no field\nholds a secret's value, there being none for it to hold.",
+      "oneOf": [
+        {
+          "description": "A program an agent starts, `--command`.",
+          "type": "object",
+          "properties": {
+            "arg_env": {
+              "description": "Each argument read from a variable, after those written as they are\n(`--arg-env VAR`). No secret: a program's arguments are what a\nprocess list shows, and Codex reads no secret into one.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "args": {
+              "description": "What it is started with, in order (`--arg`), before every argument\nread from a variable.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "command": {
+              "description": "The program, as the agent finds it (`--command`).",
+              "type": "string"
+            },
+            "env": {
+              "description": "What its environment is given, each value as written (`--env\nK=V`), before every secret.",
+              "type": "array",
+              "items": {
+                "type": "array",
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "secret_env": {
+              "description": "Each variable passed on to its environment under its own name, a\nsecret (`--secret-env VAR`): the shape every agent can give one,\nCodex's `env_vars` among them.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "program"
+            }
+          },
+          "required": [
+            "type",
+            "command",
+            "args",
+            "env",
+            "secret_env",
+            "arg_env"
+          ]
+        },
+        {
+          "description": "A server at an address, `--url`.",
+          "type": "object",
+          "properties": {
+            "bearer": {
+              "description": "The variable `Authorization: Bearer` is followed by, a secret\n(`--bearer-env VAR`): what Codex reads one into\n(`bearer_token_env_var`).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "events": {
+              "description": "Whether it is reached over server-sent events rather than streamable\nHTTP (`--sse`).",
+              "type": "boolean"
+            },
+            "headers": {
+              "description": "What every request carries, each value as written (`--header K=V`),\nbefore every secret.",
+              "type": "array",
+              "items": {
+                "type": "array",
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "secret_headers": {
+              "description": "Each header whose whole value is read from a variable, a secret\n(`--secret-header H=VAR`): what Codex reads one into\n(`env_http_headers`).",
+              "type": "array",
+              "items": {
+                "type": "array",
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "address"
+            },
+            "url": {
+              "description": "Where the server is, as typed (`--url`): checked for a credential\nbefore anything is written, since the file would keep one, and\nnever kept or said whole once one is found.",
+              "type": "string"
+            },
+            "url_vars": {
+              "description": "Each part of the address read from a variable, by the name the\naddress writes between braces where it goes (`--url-var NAME=VAR`).\nNo secret: an address is what a log or a proxy shows, and Codex\nreads no secret into one.",
+              "type": "array",
+              "items": {
+                "type": "array",
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            }
+          },
+          "required": [
+            "type",
+            "url",
+            "events",
+            "headers",
+            "secret_headers",
+            "bearer",
+            "url_vars"
+          ]
+        }
+      ]
+    },
+    "GivenTo": {
+      "description": "How one agent would be given an MCP server: what it cannot be given of\nit, what its entry would run or reach, and what it asks before it\nstarts one.",
+      "type": "object",
+      "properties": {
+        "agent": {
+          "$ref": "#/$defs/Agent"
+        },
+        "dropped": {
+          "description": "What its entry would be written without, as `show` says it.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Said"
+          }
+        },
+        "refused": {
+          "description": "Why it would be given none of it, each by its code and in its\nwords: what it cannot be given at all, as `show` says it, or else\nwhy its renderer writes it no entry, an input read from no\nvariable. Empty, and it is given an entry.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Said"
+          }
+        },
+        "runs": {
+          "description": "What its entry would run or reach, as the entry spells it; none\nwhen it is refused.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Running"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "starts": {
+          "description": "What it asks before it starts a server a project gives it.",
+          "$ref": "#/$defs/Starts"
+        }
+      },
+      "required": [
+        "agent",
+        "refused",
+        "dropped",
+        "runs",
+        "starts"
       ]
     },
     "Health": {
@@ -526,6 +846,13 @@
           "description": "What `--from` takes for each of its own, and what an install of one\nrecords as its origin: so a front end names it in a command line by\ncore's word rather than by one of its own that core could spell\ndifferently.",
           "type": "string"
         },
+        "servers": {
+          "description": "Each of its own MCP servers whose definition reads, in the order\nof `artifacts`, as each agent would be given it: what a page of\nservers shows beside each one's row of `artifacts`.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LibraryServer"
+          }
+        },
         "templates": {
           "description": "What `mindweaver add --template` can start from.",
           "type": "array",
@@ -540,7 +867,8 @@
         "artifacts",
         "holders",
         "templates",
-        "failures"
+        "failures",
+        "servers"
       ]
     },
     "LibraryHolder": {
@@ -563,6 +891,38 @@
         "kind",
         "name",
         "entry"
+      ]
+    },
+    "LibraryServer": {
+      "description": "One of the workspace's own MCP servers, as `add mcp` would be told to\nwrite it and as each agent would be given it.\n\nWorked out here, from each agent's renderer, rather than by a front end\nfrom the definition: what an agent runs is what its own entry spells\n([`mcp::Runs`]), an input reaching Claude as `${VAR}` and OpenCode as\n`{env:VAR}`, and what it cannot be given is core's report of it\n([`McpDefinition::expressibility`]).",
+      "type": "object",
+      "properties": {
+        "agents": {
+          "description": "How each agent would be given it, in report order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/GivenTo"
+          }
+        },
+        "given": {
+          "description": "How it is started or reached, as `add mcp`'s options would say it\n([`mcp::Given::of`]), for a form changing it to start from: none\nwhen the definition holds what no option says, which is changed as\ntext.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Given"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "given",
+        "agents"
       ]
     },
     "LoadedWorkspace": {
@@ -716,6 +1076,13 @@
             "$ref": "#/$defs/Directory"
           }
         },
+        "entries": {
+          "description": "Each entry of an MCP server its agents' config files hold, and each\none the ledger records writing, as `status` lists them: by agent,\nthen name, a foreign one among them (D-23).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EntryStatus"
+          }
+        },
         "entry": {
           "description": "The entry as the marker spells it, which `-p` and `unlink` take; none\nfor a project no workspace links.",
           "type": [
@@ -768,7 +1135,7 @@
           }
         },
         "missed": {
-          "description": "Each rule it received that some of its agents read nowhere.",
+          "description": "Each rule it received that some of its agents read nowhere, and\neach MCP server it received that some of them are given no entry\nof, as `status` says them.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/Missed"
@@ -839,6 +1206,7 @@
         "health",
         "directories",
         "artifacts",
+        "entries",
         "tally",
         "templates",
         "unreached",
@@ -892,6 +1260,24 @@
         "activated",
         "above",
         "home"
+      ]
+    },
+    "Running": {
+      "description": "What an agent runs or reaches, as a front end shows it: whether it is\nan address rather than a program, and the line, as [`Runs`] displays\nit, each word a shell would split quoted.\n\nThe line as core writes it rather than the words for a front end to\njoin, which would be the shell's quoting spelled again in TypeScript,\nand could show a line no shell reads as the program it is.",
+      "type": "object",
+      "properties": {
+        "line": {
+          "description": "The program as a shell line that runs it, or the address.",
+          "type": "string"
+        },
+        "reaches": {
+          "description": "Whether it reaches an address, which it then is, rather than\nstarting a program.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "reaches",
+        "line"
       ]
     },
     "Said": {
@@ -1067,6 +1453,26 @@
       "type": "string",
       "enum": [
         "git"
+      ]
+    },
+    "Starts": {
+      "description": "What an agent asks before it starts an MCP server its project's config\nfile gives it ([`Agent::starts_a_server`]).\n\nBy its name in snake_case in JSON, `\"once_approved\"`: a word of core's\na front end says in words of its own, as it says a state, and no word a\ncommand line takes, so derived.",
+      "oneOf": [
+        {
+          "description": "Once somebody approves the project's servers when it asks; a run\nwith no one to ask starts them all the same.",
+          "type": "string",
+          "const": "once_approved"
+        },
+        {
+          "description": "Only in a project its user's config marks trusted.",
+          "type": "string",
+          "const": "in_a_trusted_project"
+        },
+        {
+          "description": "With nothing asked.",
+          "type": "string",
+          "const": "unasked"
+        }
       ]
     },
     "State": {

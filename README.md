@@ -101,7 +101,8 @@ from its row, after which Mindweaver manages it like anything it installed.
 The workspace's own skills, rules and MCP servers, each with the projects
 holding a copy and how every copy stands. An MCP server is a definition
 `mindweaver add mcp` writes into the library ([MCP servers](#mcp-servers)),
-which Mindweaver lists and checks but does not install into a project yet.
+installed into a project as an entry in each of its agents' own config
+files.
 
 ![The library's skills, each with the projects that hold a copy and its state there](docs/images/library.png)
 
@@ -136,6 +137,26 @@ copy changed by hand stays as it is, with nothing offering it any more,
 until a forced uninstall from Updates takes it out.
 
 ![Removing a skill of the library's own: the dry run says which project's copy goes and which edited copy stays, before anything is removed](docs/images/remove.png)
+
+### The MCP page
+
+The library's MCP servers have a page of their own. For each agent a
+project names, it says whether the agent can be given a server, the command
+it would run or the address it would reach, spelled as its own config file
+would spell it, and what it asks before it starts one; for each project
+holding a server, what `mindweaver doctor` finds there, such as a Codex
+project nothing trusts or a variable that is not set where the agents run.
+
+![The MCP page: GitHub's server as Claude, Codex and OpenCode would run it, what each asks first, and what doctor finds in the project holding it](docs/images/mcp.png)
+
+Its form adds a server, or changes how one is started or reached: a
+program, its arguments and settings, or an address and its headers. A
+secret is only ever the name of the environment variable an agent reads it
+from, which is all Mindweaver stores: no field in a secret's place takes
+its value. A setting or a header is written into the library as you type
+it, as `--env` and `--header` write one, so no secret goes there. Core
+judges what you type as `mindweaver add mcp` or `mindweaver edit`
+would, and the line is shown before it runs.
 
 ### Loaded workspaces
 
@@ -172,15 +193,17 @@ repositories, and what happened lately: gathers, installs, relinks.
 
 ### Assign
 
-Every skill and rule there is to install, from the library, the workspaces
-it loads and the shelf, against every project. A box is ticked where the
+Every skill, rule and MCP server there is to install, from the library,
+the workspaces it loads and the shelf, against every project. A box is ticked where the
 project holds that one, and says how it stands there. Tick and untick
 boxes, by offer or turned round by project, filtered by kind, origin, agent
 or name, from the mouse or the arrow keys: below, the plan says what they
 amount to, the `mindweaver install` and `mindweaver uninstall` lines it will run,
 and what it holds back and why, such as a copy somebody wrote or changed by
 hand, or one name asked of a project from two places. **Apply** runs the
-lines, shown first.
+lines, shown first. An MCP server from a loaded workspace or the shelf is
+somebody else's command for every agent to run: the plan shows what each
+would run, and its line installs it only once you tick that you read them.
 
 ![The matrix: the library's and the shelf's skills and rules against six projects, a box ticked and another unticked, and the two lines that will run](docs/images/assign.png)
 
@@ -300,9 +323,42 @@ the environment variable an agent reads it from (`--secret-env`,
 `--secret-header` or `--bearer-env`), never as its value: `--env` and
 `--header` write what they are given as it is, and refuse only a value that
 looks like a token. `mindweaver show mcp:github` says how each agent will be
-given it; installing one into a project comes next. [What an MCP server
+given it. Installing it gives it to each agent the project names, an entry in
+that agent's own config file, and says what each will run, then what to set
+before one starts it, and that Codex reads it only once you trust the
+project:
+
+```
+$ mindweaver install -p collapse github
+installed mcp github into collapse, from workspace
+  claude runs: npx -y @modelcontextprotocol/server-github
+  codex runs: npx -y @modelcontextprotocol/server-github
+  opencode runs: npx -y @modelcontextprotocol/server-github
+  set GITHUB_PERSONAL_ACCESS_TOKEN (a secret) where the agents run: each reads it there, and no file holds it
+  claude asks to approve it before it starts it in a session, though a run with `-p` starts it unasked
+  opencode starts it without asking
+warning: Codex reads `github` from /home/you/Projects/collapse/.codex/config.toml only in a project it trusts, and /home/you/.codex/config.toml does not mark /home/you/Projects/collapse `trusted`
+```
+
+A server from a workspace yours loads, or from the shelf, is a command
+somebody else wrote: without `--yes`, installing it says what each agent
+would run and writes nothing. The panel's [MCP page](#the-mcp-page) adds
+and changes servers from a form, and Assign asks for that yes once it has
+shown you the lines. [What an MCP server
 looks like](docs/reference.md#what-an-mcp-server-looks-like) has every
 option, and the rest.
+
+## When an agent says nothing
+
+Some things keep an agent from what a project gives it without a word from
+the agent: a Codex project you never trusted, an `AGENTS.override.md` hiding
+`AGENTS.md`, a `CLAUDE.local.md` that stops Claude reading it, a skill of the
+same name in `~/.claude/skills` or `~/.agents/skills` holding something
+else, an MCP server whose variable is not set. `mindweaver doctor` looks for
+them in every project, or `mind doctor` in the one you are in, and names the
+file each is about and what fixes it. It reads files and changes nothing,
+and exits non-zero when it finds something, so it fits in CI;
+[the reference](docs/reference.md#what-no-agent-says) lists every check.
 
 ## Learn more
 

@@ -300,7 +300,7 @@ fn an_entry_written_again_in_another_layout_is_still_the_one_mindweaver_wrote() 
     let key = ["mcp_servers", name.as_str()];
 
     let held = file.get(&key).unwrap().unwrap();
-    assert_eq!(held.fingerprint(), rendered.entry.value.fingerprint());
+    assert_eq!(held.fingerprint(), rendered.entry.fingerprint());
 
     // As `codex mcp add` or a person might write it again: inline, its keys
     // in another order, an integer written as a float.
@@ -312,7 +312,7 @@ fn an_entry_written_again_in_another_layout_is_still_the_one_mindweaver_wrote() 
     write(root.path(), &again);
     let held = file.get(&key).unwrap().unwrap();
     assert_eq!(held.canonical(), rendered.entry.canonical());
-    assert_eq!(held.fingerprint(), rendered.entry.value.fingerprint());
+    assert_eq!(held.fingerprint(), rendered.entry.fingerprint());
 
     // So rendering it again leaves their layout as it is.
     let rendered = render(root.path(), &McpMother::program_for_codex(&name));
@@ -322,7 +322,7 @@ fn an_entry_written_again_in_another_layout_is_still_the_one_mindweaver_wrote() 
     // And a value changed is another entry.
     write(root.path(), &again.replacen("\"info\"", "\"debug\"", 1));
     let held = file.get(&key).unwrap().unwrap();
-    assert_ne!(held.fingerprint(), rendered.entry.value.fingerprint());
+    assert_ne!(held.fingerprint(), rendered.entry.fingerprint());
 }
 
 #[test]
@@ -657,8 +657,7 @@ fn a_project_codex_is_not_told_it_trusts_is_written_and_said_to_be_read_only_onc
     let file = root.path().join(FILE);
     let said = |rest: String| {
         format!(
-            "`{name}` is written into {}, which Codex reads only in a project it trusts, and \
-             {rest}",
+            "Codex reads `{name}` from {} only in a project it trusts, and {rest}",
             file.display()
         )
     };
@@ -784,4 +783,34 @@ fn a_symlink_on_the_way_is_refused_and_what_it_points_at_left_alone() {
         fs::read_to_string(elsewhere.path().join("config.toml")).unwrap(),
         TEAMS
     );
+}
+
+#[test]
+fn what_a_render_would_write_and_say_is_planned_and_refused_as_it_is_with_nothing_written() {
+    let name = McpMother::name();
+    let definition = parsed(&McpMother::address_for_codex(&name));
+    let root = TempDir::new().unwrap();
+    let (_trusting, trusted) = codex_home(Some(&trusting(root.path(), "trusted")));
+    let (_colliding, colliding) = codex_home(Some(&users(&name)));
+
+    let unsaid = codex_mcp::planned(root.path(), &definition, &trusted).unwrap();
+    let untrusted = codex_mcp::planned(root.path(), &definition, &AgentHomes::default()).unwrap();
+    let refused = codex_mcp::planned(root.path(), &definition, &colliding).unwrap_err();
+
+    assert_eq!(unsaid.file, root.path().join(FILE));
+    assert!(unsaid.warnings.is_empty(), "{:?}", unsaid.warnings);
+    assert_eq!(
+        untrusted
+            .warnings
+            .iter()
+            .map(codex_mcp::Warning::code)
+            .collect::<Vec<_>>(),
+        ["codex_mcp_untrusted"]
+    );
+    assert_eq!(refused.code(), "codex_mcp_collision");
+    assert!(names(root.path()).is_empty());
+    // What it plans is what the render then writes, and says.
+    let rendered = codex_mcp::render(root.path(), &definition, &AgentHomes::default()).unwrap();
+    assert_eq!(rendered.entry, untrusted.entry);
+    assert_eq!(rendered.warnings, untrusted.warnings);
 }

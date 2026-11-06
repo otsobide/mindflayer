@@ -330,3 +330,18 @@ fn a_document_holds_only_a_server_when_nothing_else_is_written_beside_it() {
     assert!(!holds_only(&Value::object([(SERVERS, Value::Null)]), "a"));
     assert!(!holds_only(&Value::Array(Vec::new()), "a"));
 }
+
+#[test]
+fn what_claude_runs_is_read_off_its_entry_each_input_as_the_reference_it_is_given() {
+    let program = entry_of(&McpMother::stdio(&McpMother::name()));
+    let address = entry_of(&McpMother::http(&McpMother::name()));
+
+    assert_eq!(
+        program.runs().to_string(),
+        "npx -y @example/server --workspace ${EXAMPLE_WORKSPACE}"
+    );
+    assert_eq!(
+        address.runs().to_string(),
+        "https://${EXAMPLE_TENANT}.example.com/mcp"
+    );
+}

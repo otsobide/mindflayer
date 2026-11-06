@@ -320,12 +320,20 @@ fn footer(screen: &Screen, frame: &mut Frame, area: Rect) {
     );
 }
 
-/// The question asked before anything is written or deleted.
+/// The question asked before anything is written or deleted, and, for each
+/// MCP server marked that comes from elsewhere than the library, what each
+/// agent would run of it ([`Screen::previews`]): saying yes is what its
+/// line's `--yes` says, so it is shown before, never after.
+///
+/// As wide as its longest line, up to the screen, and as tall as every row
+/// its lines wrap into, the border included: a command cut short is no
+/// command shown. What does not fit the screen scrolls, the question and
+/// the keys kept in place, and the rows left below are told to the screen
+/// ([`Screen::unseen`]), whose yes waits until there are none.
 fn confirm(screen: &Screen, frame: &mut Frame, area: Rect) {
     let (install, remove) = screen.counts();
-    let box_ = centred(area, 60, 7);
-    frame.render_widget(Clear, box_);
-    let text = vec![
+    let previews = screen.previews();
+    let head = vec![
         Line::from(format!("Install {install}, remove {remove}?")),
         Line::from(""),
         Line::from(Span::styled(
@@ -333,15 +341,95 @@ fn confirm(screen: &Screen, frame: &mut Frame, area: Rect) {
             Style::default().fg(Color::Red),
         )),
         Line::from(""),
-        Line::from(Span::styled(
-            "y  yes        n  no",
-            Style::default().add_modifier(Modifier::BOLD),
-        )),
     ];
+    let mut body = Vec::new();
+    if !previews.is_empty() {
+        body.push(Line::from(Span::styled(
+            "from elsewhere than the library, each agent would run:",
+            Style::default().fg(Color::Yellow),
+        )));
+        body.extend(previews.into_iter().map(Line::from));
+        body.push(Line::from(""));
+    }
+    let widest = head.iter().chain(&body).map(Line::width).max().unwrap_or(0);
+    let width = u16::try_from(widest + 2)
+        .unwrap_or(u16::MAX)
+        .max(60)
+        .min(area.width);
+    let inner = width.saturating_sub(2);
+    let rows = |lines: &[Line]| {
+        Paragraph::new(lines.to_vec())
+            .wrap(Wrap { trim: false })
+            .line_count(inner)
+    };
+    let (head_rows, body_rows) = (rows(&head), rows(&body));
+    let whole = head_rows + body_rows + 1 + 2;
+    let fits = whole <= usize::from(area.height);
+    // Without room for all of it, what is scrolled gets what the border,
+    // the question, the keys and the two rows under it saying how much is
+    // left below leave of the screen.
+    let room = if fits {
+        body_rows
+    } else {
+        usize::from(area.height).saturating_sub(2 + head_rows + 2 + 1)
+    };
+    let below = body_rows.saturating_sub(room);
+    let scroll = screen.scroll.min(below);
+    let unseen = below - scroll;
+    screen.unseen.set(unseen);
+
+    let height = u16::try_from(whole).unwrap_or(u16::MAX);
+    let box_ = centred(area, width, height);
+    frame.render_widget(Clear, box_);
     let block = Block::bordered()
         .border_type(BorderType::Thick)
         .title(" Apply ");
-    frame.render_widget(Paragraph::new(text).block(block), box_);
+    let inside = block.inner(box_);
+    frame.render_widget(block, box_);
+    let length = |rows: usize| Constraint::Length(u16::try_from(rows).unwrap_or(u16::MAX));
+    let mut parts = vec![length(head_rows), length(room)];
+    if !fits {
+        parts.push(length(2));
+    }
+    parts.push(length(1));
+    let parts = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(parts)
+        .split(inside);
+    let wrapped = |lines: Vec<Line<'static>>| Paragraph::new(lines).wrap(Wrap { trim: false });
+    frame.render_widget(wrapped(head), parts[0]);
+    frame.render_widget(
+        wrapped(body).scroll((u16::try_from(scroll).unwrap_or(u16::MAX), 0)),
+        parts[1],
+    );
+    if !fits {
+        let left = if unseen > 0 {
+            format!(
+                "{unseen} more rows below: j or down shows them, and y waits until they are shown"
+            )
+        } else {
+            String::from("all of it shown: k or up goes back")
+        };
+        frame.render_widget(
+            wrapped(vec![Line::from(Span::styled(
+                left,
+                Style::default().fg(Color::Yellow),
+            ))]),
+            parts[2],
+        );
+    }
+    let keys = if unseen > 0 {
+        "j  down        n  no"
+    } else {
+        "y  yes        n  no"
+    };
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            keys,
+            Style::default().add_modifier(Modifier::BOLD),
+        ))),
+        parts[parts.len() - 1],
+    );
 }
 
 fn title(kind: Kind, target: &Target) -> String {

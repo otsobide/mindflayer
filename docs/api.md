@@ -174,8 +174,9 @@ misspelled name is said rather than read as nothing.
 `workspace` (above), `projects`, `library`, `loaded`, the workspaces it
 loads, and `known`, those this machine knows, `shelf` and `sources`,
 `offers`, everything there is to install and where it comes from,
-`boxes`, how each project holds each of those, `history`, what the ledger
-logged lately, `summary`, what it counts, `warnings`, what could not be
+`boxes`, how each project holds each of those, `doctor`, what keeps each
+project's agents from what it gives them, as `mindweaver doctor` says it,
+`history`, what the ledger logged lately, `summary`, what it counts, `warnings`, what could not be
 read, and `format`, the version of what it holds; `kinds`, `states`,
 `box_states`, `healths` and `agents` are the order each is listed in. The
 routes below cut parts of it, or read what it does not hold.
@@ -209,8 +210,11 @@ and its `health`, one word for the whole project: `ok`, `attention`,
 
 ### The library
 
-`GET /library` is the workspace's own skills and rules, and which projects
-hold a copy of each:
+`GET /library` is the workspace's own skills, rules and MCP servers, and
+which projects hold a copy of each; under `servers`, each MCP server as
+each agent would be given it, what it would run or reach and what it asks
+before it starts one, and `given`, how it is started as `add mcp`'s
+options say it:
 
 ```console
 $ curl -s -H "Authorization: Bearer $token" "$api/library" | jq .artifacts
@@ -425,6 +429,7 @@ $ curl -s -H "Authorization: Bearer $token" -H 'Content-Type: application/json' 
     -d '{"selection": [{"project": "api", "reference": "skill:review", "origin": "workspace", "wanted": true}]}' \
     "$api/plan" | jq .
 {
+  "asks": [],
   "conflicts": [],
   "locked": [],
   "tasks": [
@@ -435,11 +440,21 @@ $ curl -s -H "Authorization: Bearer $token" -H 'Content-Type: application/json' 
       "projects": [
         "api"
       ],
-      "type": "install"
+      "type": "install",
+      "yes": false
     }
   ]
 }
 ```
+
+An MCP server from a workspace this one loads, or from the shelf, is
+somebody else's command for every agent to run, so its install waits for a
+yes: its task carries `"yes": false`, and its line says what each agent
+would run and installs nothing. `asks` holds each such task by its place
+in `tasks`, what it would give each agent of each project, `lines` as
+`mindweaver install` says them, and `confirmed`, the same task with `"yes":
+true`, to send in its place once those lines have been read. A yes sent
+with any other install is refused (`install_yes_unasked`).
 
 `POST /validate` judges an artifact a command is about to write, as that
 command would refuse it and as `validate` would say of it once written,
@@ -465,6 +480,20 @@ parser as the ones you type, so the API changes nothing the command line
 cannot. `POST /tasks/preview` answers the lines a task is, with nothing
 run, and `POST /tasks` runs them. Each line names the workspace with `-W`,
 as you could type it in the workspace's folder.
+
+An MCP server is added by an `add` task of the kind `mcp` whose `server`
+says how an agent starts it or reaches it, `{"type": "program", "command":
+..., "args": [...], "env": [[key, value]], "secret_env": [...], "arg_env":
+[...]}` or `{"type": "address", "url": ..., "events": false, "headers":
+[...], "secret_headers": [[header, variable]], "bearer": ..., "url_vars":
+[[name, variable]]}`, each secret the name of the variable it is read
+from; an `edit_server` task, `{"type": "edit_server", "holder": ...,
+"name": ..., "server": ...}`, writes how one is started again. Each is the
+line `add mcp` or `edit` takes with those options, and a `validate` draft of
+either is judged as that line would judge it. The first word of a pair, a
+setting's variable, a header's name or a part of the address's, holds no
+`=`, where the line's option ends it: a task naming one is refused before a
+line is built, as its draft is (`add_mcp_key_unsayable`).
 
 ### Linking a project
 
@@ -515,7 +544,8 @@ ran, however the command went, and `outcome.ok` says that.
 
 An `install` task names the projects, the kind and the name, and `from`,
 the place it is offered from as `--from` takes it, or `null` for wherever
-the name is offered:
+the name is offered, and `yes` only for an MCP server's confirmation, as
+`/plan` hands it:
 
 ```console
 $ curl -s -H "Authorization: Bearer $token" -H 'Content-Type: application/json' \

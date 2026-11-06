@@ -158,7 +158,7 @@ pub enum Command {
 
         /// Start from a template instead: `full`, or one of yours in
         /// `.mind/templates` or the workspace's `.mindweaver/templates`.
-        #[arg(long, value_name = "NAME")]
+        #[arg(long, value_name = "NAME", conflicts_with = "ServerOptions")]
         template: Option<String>,
 
         // Boxed, being most of what a line can say: every other command
@@ -251,6 +251,18 @@ pub enum Command {
         json: bool,
     },
 
+    /// Find what keeps this project's agents from what it gives them,
+    /// which no agent says: a Codex project nothing trusts, an
+    /// AGENTS.override.md, a CLAUDE.local.md, a skill at user scope, an
+    /// MCP server's variable that is not set. Reads files alone, and fixes
+    /// nothing.
+    Doctor {
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Register this project with the weaver workspace above it.
     Link,
 
@@ -274,11 +286,12 @@ pub enum Command {
         workspaces: Vec<PathBuf>,
     },
 
-    /// Put a skill or a rule into this project: one of the workspace's own,
-    /// a loaded workspace's, or one from its shelf.
+    /// Put a skill, a rule or an MCP server into this project: one of the
+    /// workspace's own, a loaded workspace's, or one from its shelf.
     Install {
-        /// Its name: a skill's, or a rule's route like `git/commits`;
-        /// `skill:<name>` or `rule:<route>` when one name is both.
+        /// Its name: a skill's, a server's, or a rule's route like
+        /// `git/commits`; `skill:<name>`, `rule:<route>` or `mcp:<name>`
+        /// when one name is two kinds.
         name: String,
 
         /// Where it comes from, when two places offer that name: `workspace`,
@@ -290,11 +303,18 @@ pub enum Command {
         /// otherwise left alone.
         #[arg(long)]
         force: bool,
+
+        /// Install an MCP server that comes from elsewhere than the
+        /// workspace's own library. Without this nothing is written, and
+        /// the command says what each agent would run.
+        #[arg(short, long)]
+        yes: bool,
     },
 
-    /// Take a skill or a rule Mindweaver installed back out of this project.
+    /// Take a skill, a rule or an MCP server Mindweaver installed back out
+    /// of this project.
     Uninstall {
-        /// Its name, or `kind:name` when one name is both.
+        /// Its name, or `kind:name` when one name is two kinds.
         #[arg(required_unless_present = "orphaned")]
         name: Option<String>,
 
@@ -539,7 +559,7 @@ pub enum WeaverCommand {
 
         /// Start from a template instead: `full`, or one in
         /// `.mindweaver/templates` or the project's `.mind/templates`.
-        #[arg(long, value_name = "NAME")]
+        #[arg(long, value_name = "NAME", conflicts_with = "ServerOptions")]
         template: Option<String>,
 
         // Boxed, being most of what a line can say: every other command
@@ -675,6 +695,22 @@ pub enum WeaverCommand {
         json: bool,
     },
 
+    /// Find what keeps each managed project's agents from what it gives
+    /// them, which no agent says: a Codex project nothing trusts, an
+    /// AGENTS.override.md, a CLAUDE.local.md, a skill at user scope, an
+    /// MCP server's variable that is not set. Reads files alone, and fixes
+    /// nothing.
+    Doctor {
+        /// Only this project.
+        #[arg(short, long, value_name = "PROJECT")]
+        project: Option<String>,
+
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Register one or more mind projects with this workspace.
     Link {
         /// Each project's directory, the one holding `.mind`.
@@ -772,8 +808,8 @@ pub enum WeaverCommand {
     #[command(subcommand)]
     Gather(GatherCommand),
 
-    /// Put skills and rules into the projects this workspace manages: the
-    /// workspace's own, a loaded workspace's, or its shelf's.
+    /// Put skills, rules and MCP servers into the projects this workspace
+    /// manages: the workspace's own, a loaded workspace's, or its shelf's.
     ///
     /// On its own it opens a screen for all of them at once. Given a name and
     /// projects, it installs that one into each, without the screen.
@@ -786,9 +822,9 @@ pub enum WeaverCommand {
         #[arg(long, conflicts_with = "projects")]
         all_projects: bool,
 
-        /// Its name: a skill's, or a rule's route like `git/commits`;
-        /// `skill:<name>` or `rule:<route>` when one name is both [default:
-        /// open the screen].
+        /// Its name: a skill's, a server's, or a rule's route like
+        /// `git/commits`; `skill:<name>`, `rule:<route>` or `mcp:<name>`
+        /// when one name is two kinds [default: open the screen].
         name: Option<String>,
 
         /// Where it comes from, when two places offer that name: `workspace`,
@@ -800,9 +836,16 @@ pub enum WeaverCommand {
         /// otherwise left alone.
         #[arg(long, requires = "name")]
         force: bool,
+
+        /// Install an MCP server that comes from elsewhere than the
+        /// workspace's own library. Without this nothing is written, and
+        /// the command says what each agent would run.
+        #[arg(short, long, requires = "name")]
+        yes: bool,
     },
 
-    /// Take a skill or a rule Mindweaver installed back out of projects.
+    /// Take a skill, a rule or an MCP server Mindweaver installed back out
+    /// of projects.
     Uninstall {
         /// A project to take it out of, by name or path; once for each.
         #[arg(short = 'p', long = "project", value_name = "PROJECT")]
@@ -812,7 +855,7 @@ pub enum WeaverCommand {
         #[arg(long, conflicts_with = "projects")]
         all_projects: bool,
 
-        /// Its name, or `kind:name` when one name is both.
+        /// Its name, or `kind:name` when one name is two kinds.
         #[arg(required_unless_present = "orphaned")]
         name: Option<String>,
 
@@ -1058,15 +1101,17 @@ pub struct UiOptions {
     pub log: bool,
 }
 
-/// How `edit` changes an artifact, at either level: in an editor, or by
-/// replacing what it holds with contents given whole.
+/// How `edit` changes an artifact, at either level: in an editor, by
+/// replacing what it holds with contents given whole, or, for an MCP
+/// server, by writing how it is started or reached again from the options
+/// `add mcp` takes.
 ///
 /// One struct for both binaries' `edit`, so the two cannot come to take
 /// them differently, as [`ShareMode`] is for `share`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Args)]
 pub struct Editing {
     /// The editor to open it in [default: $VISUAL, then $EDITOR, then vi].
-    #[arg(long, value_name = "COMMAND")]
+    #[arg(long, value_name = "COMMAND", conflicts_with = "ServerOptions")]
     pub editor: Option<String>,
 
     /// Replace what it holds (a skill's SKILL.md, or a rule's file) with
@@ -1075,7 +1120,11 @@ pub struct Editing {
     //
     // A path rather than the text itself, which a command line holds badly
     // and a process listing shows to every user.
-    #[arg(long, value_name = "FILE", conflicts_with = "editor")]
+    #[arg(
+        long,
+        value_name = "FILE",
+        conflicts_with_all = ["editor", "ServerOptions"]
+    )]
     pub contents: Option<PathBuf>,
 
     /// With --contents: replace it only while it holds what it held when
@@ -1083,6 +1132,17 @@ pub struct Editing {
     /// since is not written over.
     #[arg(long, value_name = "SHA256", requires = "contents")]
     pub if_unchanged: Option<String>,
+
+    /// For an MCP server, how an agent starts it or reaches it, given
+    /// again as `add mcp` is given it, instead of opening an editor: what
+    /// its definition says of its transport and its inputs is written
+    /// again from these, and everything else it holds is kept.
+    //
+    // Boxed, as `add`'s are, being most of what a line can say. The
+    // options of `add mcp` rather than a file of TOML, so a front end with
+    // a form sends what the form asks and never writes the format itself.
+    #[command(flatten)]
+    pub server: Box<ServerOptions>,
 }
 
 /// Where `edit --contents` takes what the artifact is to hold.
@@ -1120,16 +1180,19 @@ impl Editing {
 /// gives one, is refused here, as grammar; whatever the definition then
 /// holds is core's to judge ([`mindweaver_core::create::create_server`]).
 ///
-/// Each option of one transport conflicts with the other's, and with
-/// `--template`, as well as requiring its own: clap passes over what an
-/// option requires when that conflicts with something given, so `--header`
-/// with `--command`, or `--arg` with `--template`, would otherwise be
-/// taken, and dropped.
+/// Each option of one transport conflicts with the other's as well as
+/// requiring its own: clap passes over what an option requires when that
+/// conflicts with something given, so `--header` with `--command` would
+/// otherwise be taken, and dropped. What says how a server is started
+/// otherwise conflicts with every option here at once, by the group clap
+/// gives the struct, `ServerOptions`: `add`'s `--template`, and `edit`'s
+/// editor and contents, so `--arg` with `--template` is refused rather
+/// than dropped, and one struct serves both commands.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Args)]
 #[command(next_help_heading = "MCP server")]
 pub struct ServerOptions {
     /// The program an agent starts the server with.
-    #[arg(long, value_name = "COMMAND", conflicts_with = "template")]
+    #[arg(long, value_name = "COMMAND")]
     pub command: Option<String>,
 
     /// An argument the program is started with; again for each, in order.
@@ -1141,7 +1204,7 @@ pub struct ServerOptions {
         value_name = "ARG",
         allow_hyphen_values = true,
         requires = "command",
-        conflicts_with_all = ["url", "template"]
+        conflicts_with = "url"
     )]
     pub args: Vec<String>,
 
@@ -1152,7 +1215,7 @@ pub struct ServerOptions {
         value_name = "KEY=VALUE",
         value_parser = Pair,
         requires = "command",
-        conflicts_with_all = ["url", "template"]
+        conflicts_with = "url"
     )]
     pub env: Vec<(String, String)>,
 
@@ -1163,7 +1226,7 @@ pub struct ServerOptions {
         long = "secret-env",
         value_name = "VAR",
         requires = "command",
-        conflicts_with_all = ["url", "template"]
+        conflicts_with = "url"
     )]
     pub secret_env: Vec<String>,
 
@@ -1174,16 +1237,16 @@ pub struct ServerOptions {
         long = "arg-env",
         value_name = "VAR",
         requires = "command",
-        conflicts_with_all = ["url", "template"]
+        conflicts_with = "url"
     )]
     pub arg_env: Vec<String>,
 
     /// The address an agent reaches the server at, over streamable HTTP.
-    #[arg(long, value_name = "URL", conflicts_with_all = ["command", "template"])]
+    #[arg(long, value_name = "URL", conflicts_with = "command")]
     pub url: Option<String>,
 
     /// Reach the address over server-sent events instead.
-    #[arg(long, requires = "url", conflicts_with_all = ["command", "template"])]
+    #[arg(long, requires = "url", conflicts_with = "command")]
     pub sse: bool,
 
     /// A header every request carries, its value written as it is.
@@ -1192,7 +1255,7 @@ pub struct ServerOptions {
         value_name = "NAME=VALUE",
         value_parser = Pair,
         requires = "url",
-        conflicts_with_all = ["command", "template"]
+        conflicts_with = "command"
     )]
     pub headers: Vec<(String, String)>,
 
@@ -1203,7 +1266,7 @@ pub struct ServerOptions {
         value_name = "NAME=VAR",
         value_parser = Pair,
         requires = "url",
-        conflicts_with_all = ["command", "template"]
+        conflicts_with = "command"
     )]
     pub secret_headers: Vec<(String, String)>,
 
@@ -1213,7 +1276,7 @@ pub struct ServerOptions {
         long = "bearer-env",
         value_name = "VAR",
         requires = "url",
-        conflicts_with_all = ["command", "template"]
+        conflicts_with = "command"
     )]
     pub bearer_env: Option<String>,
 
@@ -1224,7 +1287,7 @@ pub struct ServerOptions {
         value_name = "NAME=VAR",
         value_parser = Pair,
         requires = "url",
-        conflicts_with_all = ["command", "template"]
+        conflicts_with = "command"
     )]
     pub url_vars: Vec<(String, String)>,
 }

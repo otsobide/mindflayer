@@ -35,6 +35,7 @@
         "foreign"
       ],
       "boxes": [],
+      "doctor": [],
       "format": 1,
       "healths": [
         "ok",
@@ -129,6 +130,7 @@
         "failures": [],
         "holders": [],
         "origin": "workspace",
+        "servers": [],
         "templates": [
           {
             "kind": "skill",

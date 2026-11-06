@@ -10,15 +10,21 @@ use std::path::{Path, PathBuf};
 use std::slice;
 
 use mindweaver_core::assign;
-use mindweaver_core::install::{self, Edits};
+use mindweaver_core::create::Start;
+use mindweaver_core::doctor::Machine;
+use mindweaver_core::install::{self, Confirmed, Edits};
 use mindweaver_core::known;
 use mindweaver_core::ledger::{Action, InstallRecord, Outcome, Target};
+use mindweaver_core::lifecycle;
+use mindweaver_core::mcp::{Address, Given, Program};
+use mindweaver_core::mother::{McpMother, VariableNameMother};
 use mindweaver_core::reapply::{self, Change};
 use mindweaver_core::resolve::{Inputs, Intent, Reason};
+use mindweaver_core::value::VariableName;
 use mindweaver_core::view::{Health, Held, Listing, LoadedWorkspace, Project, Snapshot};
 use mindweaver_core::{
     create, hash, Agent, AgentHomes, Directories, Kind, MindProject, Reference, Share, SourceKind,
-    State, WeaverWorkspace, MIND_DIR, SETTINGS_JSON_FILE, WEAVER_DIR,
+    Starts, State, WeaverWorkspace, MIND_DIR, SETTINGS_JSON_FILE, WEAVER_DIR,
 };
 use tempfile::TempDir;
 
@@ -105,6 +111,7 @@ fn fixture() -> Fixture {
         workspace.root(),
         &AgentHomes::default(),
         Edits::Kept,
+        Confirmed::Yes,
     )
     .unwrap()
     .parts;
@@ -144,6 +151,7 @@ fn fixture() -> Fixture {
                         content_hash: None,
                     })
                     .collect(),
+                entries: Vec::new(),
             },
         )
         .unwrap();
@@ -468,7 +476,8 @@ const EXPECTED: &str = r#"{
         "origin": null
       }
     ],
-    "failures": []
+    "failures": [],
+    "servers": []
   },
   "projects": [
     {
@@ -559,6 +568,7 @@ const EXPECTED: &str = r#"{
           "unread": null
         }
       ],
+      "entries": [],
       "tally": {
         "total": 3,
         "kinds": [
@@ -634,6 +644,7 @@ const EXPECTED: &str = r#"{
       "health": "stale",
       "directories": [],
       "artifacts": [],
+      "entries": [],
       "tally": {
         "total": 0,
         "kinds": [
@@ -761,15 +772,7 @@ const EXPECTED: &str = r#"{
   "boxes": [
     {
       "entry": "api",
-      "closed": [
-        {
-          "kind": "mcp",
-          "why": {
-            "code": "not_installable",
-            "message": "MCP servers cannot be installed into a project yet"
-          }
-        }
-      ],
+      "closed": [],
       "held": [
         {
           "kind": "skill",
@@ -815,6 +818,37 @@ const EXPECTED: &str = r#"{
       "held": []
     }
   ],
+  "doctor": [
+    {
+      "entry": "api",
+      "name": "api",
+      "path": "<root>/hub/api",
+      "findings": [
+        {
+          "code": "doctor_codex_no_git_root",
+          "agents": [
+            "codex"
+          ],
+          "path": "<root>/hub/api",
+          "message": "<root>/hub/api: in no git work tree, so Codex reads its AGENTS.md only when started in that folder itself",
+          "fix": "make the project a git repository (`git init`), or start Codex in that folder"
+        }
+      ],
+      "failures": []
+    },
+    {
+      "entry": "gone",
+      "name": null,
+      "path": "<root>/hub/gone",
+      "findings": [],
+      "failures": [
+        {
+          "code": "not_a_project",
+          "message": "<root>/hub/gone: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
+        }
+      ]
+    }
+  ],
   "known": [
     {
       "name": "hub",
@@ -856,7 +890,7 @@ fn a_snapshot_serializes_every_name_in_order() {
     let api = MindProject::open(fixture.hub.join("api")).unwrap();
     let id = api.settings().unwrap().id.to_string();
 
-    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None), &Machine::default())
         .unwrap()
         .unwrap();
     let json = serde_json::to_string_pretty(&snapshot).unwrap();
@@ -893,18 +927,21 @@ fn building_a_snapshot_creates_no_path_and_never_the_home_workspace() {
     fs::create_dir_all(&home).unwrap();
     let before = tree(fixture.dir.path());
 
-    let named = Snapshot::read(&naming(&fixture.hub, Some(&home)))
+    let named = Snapshot::read(&naming(&fixture.hub, Some(&home)), &Machine::default())
         .unwrap()
         .unwrap();
     // Nothing named and nothing above: the default one, as it would be,
     // even asked by inputs that mean to write, which a read is not.
-    let defaulted = Snapshot::read(&Inputs {
-        flag: None,
-        activated: None,
-        start: &home,
-        home: Some(&home),
-        intent: Intent::Write,
-    })
+    let defaulted = Snapshot::read(
+        &Inputs {
+            flag: None,
+            activated: None,
+            start: &home,
+            home: Some(&home),
+            intent: Intent::Write,
+        },
+        &Machine::default(),
+    )
     .unwrap()
     .unwrap();
 
@@ -934,7 +971,7 @@ fn no_url_in_a_snapshot_carries_userinfo_even_from_rows_written_before_the_scrub
         .unwrap();
     let ledger = fs::read(workspace.ledger_path()).unwrap();
 
-    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None), &Machine::default())
         .unwrap()
         .unwrap();
     let json = serde_json::to_string(&snapshot).unwrap();
@@ -1050,7 +1087,7 @@ fn an_install_nothing_of_which_is_found_says_where_it_went() {
 fn a_project_with_nothing_to_do_is_ok_and_one_that_opens_none_is_stale() {
     let fixture = fixture();
 
-    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None), &Machine::default())
         .unwrap()
         .unwrap();
 
@@ -1070,7 +1107,7 @@ fn a_project_with_nothing_to_do_is_ok_and_one_that_opens_none_is_stale() {
 fn one_project_is_the_snapshots_own_by_its_entry_and_no_other_spelling() {
     let fixture = fixture();
     let snapshot = || {
-        Snapshot::read(&naming(&fixture.hub, None))
+        Snapshot::read(&naming(&fixture.hub, None), &Machine::default())
             .unwrap()
             .unwrap()
     };
@@ -1107,7 +1144,7 @@ fn a_project_an_older_marker_marks_is_said_to_migrate_and_no_other() {
     .unwrap();
     workspace.link(&MindProject::open(&json).unwrap()).unwrap();
 
-    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None), &Machine::default())
         .unwrap()
         .unwrap();
 
@@ -1186,7 +1223,7 @@ fn the_summary_counts_each_directory_once_however_many_entries_spell_it() {
     assert!(text.contains("\"gone\""), "{text}");
     fs::write(&marker, text.replacen("\"gone\"", "\"gone\", \"./api\"", 1)).unwrap();
 
-    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None), &Machine::default())
         .unwrap()
         .unwrap();
 
@@ -1207,7 +1244,7 @@ fn what_a_workspace_loads_is_listed_on_its_own_as_the_snapshot_lists_it() {
     let fixture = fixture();
     let workspace = WeaverWorkspace::open(&fixture.hub).unwrap();
 
-    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None), &Machine::default())
         .unwrap()
         .unwrap();
 
@@ -1233,7 +1270,7 @@ fn each_workspace_this_machine_knows_says_whether_this_one_loads_it_and_could() 
     }
     fs::remove_dir_all(&old).unwrap();
 
-    let snapshot = Snapshot::read(&naming(&fixture.hub, Some(&home)))
+    let snapshot = Snapshot::read(&naming(&fixture.hub, Some(&home)), &Machine::default())
         .unwrap()
         .unwrap();
 
@@ -1285,7 +1322,7 @@ fn a_workspace_loaded_by_another_spelling_is_said_to_be_loaded_by_the_first() {
     )
     .unwrap();
 
-    let snapshot = Snapshot::read(&naming(&fixture.hub, Some(&home)))
+    let snapshot = Snapshot::read(&naming(&fixture.hub, Some(&home)), &Machine::default())
         .unwrap()
         .unwrap();
 
@@ -1308,7 +1345,7 @@ fn every_origin_a_snapshot_lists_names_its_offer_to_from() {
     let workspace = WeaverWorkspace::open(&fixture.hub).unwrap();
     let ledger = workspace.ledger_for_reading().unwrap();
     let api = MindProject::open(fixture.hub.join("api")).unwrap();
-    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None), &Machine::default())
         .unwrap()
         .unwrap();
     let offered = |name: &str, origin: &str| {
@@ -1350,7 +1387,7 @@ fn a_second_spelling_of_a_load_lists_the_origin_its_offers_go_by() {
     )
     .unwrap();
 
-    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None), &Machine::default())
         .unwrap()
         .unwrap();
 
@@ -1393,7 +1430,7 @@ fn a_copy_recorded_before_origins_were_kept_is_a_copy_of_the_librarys_own() {
         .execute_batch("UPDATE installations SET origin = NULL WHERE name = 'review';")
         .unwrap();
 
-    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None), &Machine::default())
         .unwrap()
         .unwrap();
 
@@ -1432,7 +1469,7 @@ fn a_copy_recorded_before_origins_were_kept_is_nobodys_while_a_load_offers_its_n
         &[("review/SKILL.md", &skill("review", "Read it"))],
     );
 
-    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None), &Machine::default())
         .unwrap()
         .unwrap();
 
@@ -1447,7 +1484,7 @@ fn a_listing_of_every_kind_holds_what_the_snapshot_holds() {
     let workspace = WeaverWorkspace::open(&fixture.hub).unwrap();
     let api = MindProject::open(fixture.hub.join("api")).unwrap();
 
-    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None), &Machine::default())
         .unwrap()
         .unwrap();
     let listing = Listing::of_workspace(&workspace, &Kind::ALL);
@@ -1466,7 +1503,7 @@ fn a_listing_of_one_kind_holds_only_that_kind() {
     let fixture = fixture();
     let workspace = WeaverWorkspace::open(&fixture.hub).unwrap();
 
-    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None), &Machine::default())
         .unwrap()
         .unwrap();
     let rules = Listing::of_workspace(&workspace, &[Kind::Rule]);
@@ -1523,7 +1560,7 @@ fn a_listing_of_one_kind_tells_health_from_that_kind_alone() {
     .unwrap();
     let workspace = WeaverWorkspace::open(&fixture.hub).unwrap();
 
-    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None), &Machine::default())
         .unwrap()
         .unwrap();
     let skills = Listing::of_workspace(&workspace, &[Kind::Skill]);
@@ -1538,4 +1575,180 @@ fn a_listing_of_one_kind_tells_health_from_that_kind_alone() {
 /// The name of each row, in order.
 fn names(held: &[Held]) -> Vec<&str> {
     held.iter().map(|held| held.name.as_str()).collect()
+}
+
+/// A workspace whose library holds `given` as the MCP server `name`,
+/// written by `add` as a command line tells it, and nothing else.
+fn serving(name: &str, given: &Given) -> (TempDir, Snapshot) {
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
+    lifecycle::add(
+        Some(&workspace),
+        &workspace.own(),
+        Kind::Mcp,
+        name,
+        "A server",
+        Start::Server(given),
+    )
+    .unwrap();
+    let snapshot = Snapshot::read(&naming(dir.path(), None), &Machine::default())
+        .unwrap()
+        .unwrap();
+    (dir, snapshot)
+}
+
+/// What each agent is said to run is what its own entry spells, a secret
+/// read from a variable as that agent refers to one, and what each asks
+/// before it starts a server is core's word for it; the server reads back
+/// as what `add` was told, for a form to start from.
+#[test]
+fn each_of_the_librarys_servers_says_what_each_agent_runs_and_asks() {
+    let variable = VariableNameMother::random();
+    let given = Given::Program(Program {
+        command: String::from("npx"),
+        args: vec![String::from("-y"), String::from("@example/server")],
+        env: Vec::new(),
+        secret_env: Vec::new(),
+        arg_env: vec![variable.clone()],
+    });
+    let name = McpMother::name();
+
+    let (_dir, snapshot) = serving(&name, &given);
+
+    let [server] = snapshot.library.servers.as_slice() else {
+        panic!("{:?}", snapshot.library.servers);
+    };
+    assert_eq!(server.name, name);
+    assert_eq!(server.given.as_ref(), Some(&given));
+    let said: Vec<(Agent, Option<&str>, Starts, bool)> = server
+        .agents
+        .iter()
+        .map(|given| {
+            (
+                given.agent,
+                given.runs.as_ref().map(|runs| runs.line.as_str()),
+                given.starts,
+                given.refused.is_empty() && given.dropped.is_empty(),
+            )
+        })
+        .collect();
+    let claude = format!("npx -y @example/server ${{{variable}}}");
+    let opencode = format!("npx -y @example/server {{env:{variable}}}");
+    assert_eq!(
+        said,
+        vec![
+            (
+                Agent::Claude,
+                Some(claude.as_str()),
+                Starts::OnceApproved,
+                true
+            ),
+            (Agent::Codex, None, Starts::InATrustedProject, false),
+            (
+                Agent::OpenCode,
+                Some(opencode.as_str()),
+                Starts::Unasked,
+                true
+            ),
+        ]
+    );
+    // Codex has no interpolation, so an argument read from a variable is a
+    // value its renderer is not handed, and said by its code.
+    let codes: Vec<&str> = server.agents[1]
+        .refused
+        .iter()
+        .map(|said| said.code)
+        .collect();
+    assert_eq!(codes, vec!["codex_mcp_input_in_text"]);
+}
+
+/// A server reached over server-sent events is refused the agents that
+/// take none, each by the code `show` gives, and no line is said for them;
+/// an address is said to be reached, and as the entry spells it.
+#[test]
+fn a_server_an_agent_cannot_be_given_says_why_and_runs_nothing_there() {
+    let given = Given::Address(Address {
+        url: String::from("https://example.com/sse"),
+        events: true,
+        ..Address::default()
+    });
+
+    let (_dir, snapshot) = serving(&McpMother::name(), &given);
+
+    let server = &snapshot.library.servers[0];
+    let runs: Vec<Option<(bool, &str)>> = server
+        .agents
+        .iter()
+        .map(|given| {
+            given
+                .runs
+                .as_ref()
+                .map(|runs| (runs.reaches, runs.line.as_str()))
+        })
+        .collect();
+    let refused: Vec<Vec<&str>> = server
+        .agents
+        .iter()
+        .map(|given| given.refused.iter().map(|said| said.code).collect())
+        .collect();
+    assert_eq!(
+        runs,
+        vec![Some((true, "https://example.com/sse")), None, None]
+    );
+    assert_eq!(
+        refused,
+        vec![Vec::new(), vec!["sse_unsupported"], vec!["sse_unsupported"]]
+    );
+}
+
+/// What a front end reads of a server of the library's own, by name: a
+/// contract, as every name of the snapshot is.
+#[test]
+fn a_server_of_the_librarys_own_serializes_every_name_in_order() {
+    let given = Given::Program(Program {
+        command: String::from("npx"),
+        secret_env: vec![VariableName::from("GITHUB_TOKEN")],
+        ..Program::default()
+    });
+
+    let (_dir, snapshot) = serving("github", &given);
+
+    let json = serde_json::to_value(&snapshot.library.servers[0]).unwrap();
+    assert_eq!(
+        json,
+        serde_json::json!({
+            "name": "github",
+            "given": {
+                "type": "program",
+                "command": "npx",
+                "args": [],
+                "env": [],
+                "secret_env": ["GITHUB_TOKEN"],
+                "arg_env": []
+            },
+            "agents": [
+                {
+                    "agent": "claude",
+                    "refused": [],
+                    "dropped": [],
+                    "runs": {"reaches": false, "line": "npx"},
+                    "starts": "once_approved"
+                },
+                {
+                    "agent": "codex",
+                    "refused": [],
+                    "dropped": [],
+                    "runs": {"reaches": false, "line": "npx"},
+                    "starts": "in_a_trusted_project"
+                },
+                {
+                    "agent": "opencode",
+                    "refused": [],
+                    "dropped": [],
+                    "runs": {"reaches": false, "line": "npx"},
+                    "starts": "unasked"
+                }
+            ]
+        })
+    );
 }

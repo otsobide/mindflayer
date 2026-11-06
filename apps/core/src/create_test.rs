@@ -702,6 +702,13 @@ fn each_create_error_of_its_own_gives_its_own_code() {
             "add_mcp_key_repeated",
         ),
         (
+            CreateError::KeyUnsayable {
+                option: "--env",
+                key: String::from("K=V"),
+            },
+            "add_mcp_key_unsayable",
+        ),
+        (
             CreateError::UrlUserinfo {
                 url: crate::value::Redacted::new("https://example.com/mcp"),
             },

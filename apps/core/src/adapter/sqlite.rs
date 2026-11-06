@@ -15,10 +15,11 @@ use rusqlite::backup::{Backup, StepResult};
 use rusqlite::{Connection, OpenFlags, OptionalExtension, Transaction, TransactionBehavior};
 
 use crate::adapter::SystemClock;
+use crate::agent::Agent;
 use crate::kind::Kind;
 use crate::ledger::{
-    Action, Carried, Entry, Forgotten, Gathered, InstallRecord, LedgerError, Moved, Outcome,
-    Source, SourceKind, Target,
+    Action, Carried, Entry, EntryTarget, Forgotten, Gathered, InstallRecord, LedgerError, Moved,
+    Outcome, Source, SourceKind, Target,
 };
 use crate::port::{Clock, LedgerStore};
 use crate::settings::ProjectId;
@@ -30,7 +31,7 @@ use crate::value::{ArtifactName, ContentHash, Origin, Redacted, Revision};
 /// Refused if the file on disk is newer, for the same reason a marker file is:
 /// an old binary silently misreading a newer database is the failure that has
 /// no error message.
-pub const SCHEMA_VERSION: u32 = 5;
+pub const SCHEMA_VERSION: u32 = 6;
 
 /// The SQLite store, over one connection to the ledger's file, or to one in
 /// memory.
@@ -305,6 +306,11 @@ impl Sqlite {
                         .map_err(failed)?;
                 }
             }
+        }
+        if found < 6 {
+            transaction.execute_batch(SCHEMA_V6).map_err(|source| {
+                self.failed("giving installations the entries they write", source)
+            })?;
         }
 
         transaction
@@ -693,6 +699,7 @@ impl LedgerStore for Sqlite {
             )
             .map_err(failed)?;
         insert_targets(&transaction, id, &installation.targets).map_err(failed)?;
+        replace_entries(&transaction, id, &installation.entries).map_err(failed)?;
         transaction.commit().map_err(failed)
     }
 
@@ -757,6 +764,7 @@ impl LedgerStore for Sqlite {
                 )
                 .map_err(failed)?;
             insert_targets(&transaction, id, &record.targets).map_err(failed)?;
+            replace_entries(&transaction, id, &record.entries).map_err(failed)?;
         }
         for (path, created) in files {
             set_created_in(&transaction, self.now(), project, path, *created).map_err(failed)?;
@@ -813,6 +821,15 @@ impl LedgerStore for Sqlite {
             .map_err(failed)?
             .collect::<Result<Vec<_>, _>>()
             .map_err(failed)?;
+        let entries = entries_of(
+            &self.connection,
+            "installation_entries.installation_id = ?1",
+            [id],
+        )
+        .map_err(failed)?
+        .into_iter()
+        .map(|(_, entry)| entry)
+        .collect();
 
         Ok(Some(InstallRecord {
             kind,
@@ -821,6 +838,7 @@ impl LedgerStore for Sqlite {
             origin,
             content_hash,
             targets,
+            entries,
         }))
     }
 
@@ -869,7 +887,7 @@ impl LedgerStore for Sqlite {
                 |row| row.get(0),
             )
             .map_err(failed)?;
-        let forgotten = if left == 0 && (copy > 0 || kind != Kind::Rule) {
+        let forgotten = if left == 0 && (copy > 0 || stale_without_copies(kind)) {
             transaction
                 .execute("DELETE FROM installations WHERE id = ?1", [id])
                 .map_err(failed)?;
@@ -923,7 +941,7 @@ impl LedgerStore for Sqlite {
             .optional()
             .map_err(failed)?;
         let Some((agent, held)) = copy else {
-            if kind != Kind::Rule && count(&transaction).map_err(failed)? == 0 {
+            if stale_without_copies(kind) && count(&transaction).map_err(failed)? == 0 {
                 transaction
                     .execute("DELETE FROM installations WHERE id = ?1", [id])
                     .map_err(failed)?;
@@ -1112,6 +1130,7 @@ impl LedgerStore for Sqlite {
                         origin: origin.map(|text| Origin::from(redacted(&text))),
                         content_hash,
                         targets: Vec::new(),
+                        entries: Vec::new(),
                     },
                 ));
             }
@@ -1123,6 +1142,19 @@ impl LedgerStore for Sqlite {
                     path,
                     content_hash: held,
                 });
+            }
+        }
+        // Asked apart rather than joined beside the targets, which would
+        // give a row for each pair of a copy and an entry.
+        let entries = entries_of(
+            &self.connection,
+            "installations.project = ?1 AND installations.kind = ?2",
+            rusqlite::params![project, kind.slug()],
+        )
+        .map_err(failed)?;
+        for (id, entry) in entries {
+            if let Some((_, record)) = records.iter_mut().find(|(at, _)| *at == id) {
+                record.entries.push(entry);
             }
         }
         Ok(records.into_iter().map(|(_, record)| record).collect())
@@ -1583,6 +1615,27 @@ fn retarget_in(
     Ok(Some(id))
 }
 
+/// Whether an installation of `kind` recording no copy is forgotten whole by
+/// a change at a path in its project that reached none of its copies, as
+/// [`uninstalled_copy`](LedgerStore::uninstalled_copy) and
+/// [`renamed_copy`](LedgerStore::renamed_copy) are asked.
+///
+/// A skill's is one only a build from before installations had targets
+/// wrote, held to a change by name, as records were. A rule's is one a build
+/// writes, for a rule that reaches no agent the project names, and an MCP
+/// server's never records a copy, since what it writes is an entry in each
+/// agent's config file (D-10), which no change at a path reaches: either way
+/// the change reached nothing it installed, and it stays. Forgetting a
+/// server's would take its entries' record with it, and leave what
+/// Mindweaver wrote there somebody's, never updated or taken out again. On
+/// every kind with no wildcard, so a kind added says which it is.
+fn stale_without_copies(kind: Kind) -> bool {
+    match kind {
+        Kind::Skill => true,
+        Kind::Rule | Kind::Mcp => false,
+    }
+}
+
 /// Record `targets` as the copies of the installation `id`, through
 /// `connection`, which a caller holds a transaction on, and which holds none
 /// of them yet.
@@ -1595,6 +1648,82 @@ fn insert_targets(connection: &Connection, id: i64, targets: &[Target]) -> rusql
         )?;
     }
     Ok(())
+}
+
+/// Record `entries` as the entries of the installation `id`, in place of
+/// those it recorded, through `connection`, which a caller holds a
+/// transaction on.
+fn replace_entries(
+    connection: &Connection,
+    id: i64,
+    entries: &[EntryTarget],
+) -> rusqlite::Result<()> {
+    connection.execute(
+        "DELETE FROM installation_entries WHERE installation_id = ?1",
+        [id],
+    )?;
+    for entry in entries {
+        connection.execute(
+            "INSERT INTO installation_entries
+                 (installation_id, agent, file, name, fingerprint)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![
+                id,
+                entry.agent.name(),
+                entry.file,
+                entry.name,
+                entry.fingerprint
+            ],
+        )?;
+    }
+    Ok(())
+}
+
+/// Every entry of the installations `filter` picks, a condition on
+/// `installations` and `installation_entries` taking `params`, each beside
+/// its installation's id, in agent order: one naming an agent this build
+/// does not know is passed over, as a row naming a kind it does not know is.
+fn entries_of(
+    connection: &Connection,
+    filter: &str,
+    params: impl rusqlite::Params,
+) -> rusqlite::Result<Vec<(i64, EntryTarget)>> {
+    let mut statement = connection.prepare(&format!(
+        "SELECT installation_entries.installation_id, installation_entries.agent,
+                installation_entries.file, installation_entries.name,
+                installation_entries.fingerprint
+           FROM installation_entries
+           JOIN installations ON installations.id = installation_entries.installation_id
+          WHERE {filter}
+          ORDER BY installation_entries.installation_id, installation_entries.agent"
+    ))?;
+    let rows = statement.query_map(params, |row| {
+        Ok((
+            row.get::<_, i64>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, String>(3)?,
+            row.get::<_, ContentHash>(4)?,
+        ))
+    })?;
+    let mut entries = Vec::new();
+    for row in rows {
+        let (id, agent, file, name, fingerprint) = row?;
+        let Ok(agent) = agent.parse::<Agent>() else {
+            continue;
+        };
+        entries.push((
+            id,
+            EntryTarget {
+                agent,
+                file,
+                name: ArtifactName::from(name),
+                fingerprint,
+            },
+        ));
+    }
+    entries.sort_by(|(a, one), (b, other)| (a, one.agent).cmp(&(b, other.agent)));
+    Ok(entries)
 }
 
 /// [`Ledger::set_created`](crate::ledger::Ledger::set_created), through `connection`, which may hold a
@@ -2071,6 +2200,39 @@ ALTER TABLE installations
     ADD COLUMN project_id TEXT REFERENCES projects(id) ON UPDATE CASCADE ON DELETE SET NULL;
 
 CREATE INDEX installations_by_project_id ON installations (project_id);
+";
+
+/// The sixth schema: the entries an MCP server's installation writes into
+/// its agents' config files (#93).
+///
+/// An MCP server is installed as one entry in each agent's own config file
+/// (D-10), `.mcp.json`, `.codex/config.toml` or OpenCode's, never as a
+/// copy, so its installation has no target: an entry is found by the key it
+/// is under in a file every server of the project shares, not by a path of
+/// its own, and a copy's `path` would name the same file for every server.
+/// `installation_entries` keeps one row an entry: the agent it is for, the
+/// file, as a route from the project, the key, and the `fingerprint` of
+/// what was written there ([`crate::hash::fingerprint`]), which is what
+/// tells an entry untouched from one edited since (D-04) and the one thing
+/// that says it is Mindweaver's, since an entry can carry no mark. One
+/// entry an agent, since each agent reads one file, and gone with the
+/// installation, as its targets go.
+///
+/// Where the server's definition came from is the installation's `origin`,
+/// which every installation has kept since schema 3 and which an entry is
+/// held to what is offered now by, so this step adds nothing for it.
+///
+/// Nothing older is filled in: no build before this one installed an MCP
+/// server, and every installation it recorded is a skill's or a rule's.
+const SCHEMA_V6: &str = "
+CREATE TABLE installation_entries (
+    installation_id INTEGER NOT NULL REFERENCES installations(id) ON DELETE CASCADE,
+    agent           TEXT    NOT NULL,
+    file            TEXT    NOT NULL,
+    name            TEXT    NOT NULL,
+    fingerprint     TEXT    NOT NULL,
+    UNIQUE (installation_id, agent)
+);
 ";
 
 #[cfg(test)]

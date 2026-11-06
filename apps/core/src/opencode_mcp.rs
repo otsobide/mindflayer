@@ -67,9 +67,10 @@ use crate::agent::{Agent, AgentHomes};
 use crate::artifact::{self, issue_list, ValidationIssue};
 use crate::code::codes;
 use crate::config_entry::{self, ConfigFile, Edit, EntryError, FileError, Format, Value, Written};
+use crate::hash;
 use crate::install;
-use crate::mcp::{self, Inexpressible, McpDefinition, Transport, TransportType};
-use crate::value::{ArtifactName, InputName, VariableName};
+use crate::mcp::{self, Inexpressible, McpDefinition, Runs, Transport, TransportType};
+use crate::value::{ArtifactName, ContentHash, InputName, VariableName};
 
 /// Where OpenCode reads a project's config from its root, in the order one
 /// is chosen: the first of them there is the one written into.
@@ -82,6 +83,12 @@ pub const FILES: [&str; 4] = [
 
 /// The one of [`FILES`] made when none of them is there.
 pub const FILE: &str = FILES[0];
+
+/// Where OpenCode reads its global config, in its own folder, every one of
+/// them there is merged under a project's config key by key (docs/agents.md,
+/// docs-only): what doctor reads for a server of an installed one's name,
+/// never written.
+pub const USER_FILES: [&str; 3] = ["config.json", "opencode.json", "opencode.jsonc"];
 
 /// The most a file of [`FILES`] is read for: 2 MiB, as Claude's
 /// `.mcp.json` is.
@@ -142,6 +149,20 @@ impl Entry {
     /// lays out again is still the one Mindweaver wrote.
     pub fn canonical(&self) -> String {
         self.value.canonical()
+    }
+
+    /// The entry's fingerprint, [`hash::fingerprint`] of its
+    /// [canonical form](Self::canonical): what the ledger keeps of it once
+    /// it is written, and what one an agent's file holds is told by.
+    pub fn fingerprint(&self) -> ContentHash {
+        hash::fingerprint(&self.canonical())
+    }
+
+    /// What the agent runs or reaches, read off the entry as it is written,
+    /// its `command`, the program and its arguments in one array, or its `url`: what an install says it gives the agent before it writes
+    /// anything, never spelled again from the definition.
+    pub fn runs(&self) -> Runs {
+        Runs::of_line(&self.value).expect("an entry is written with a program or an address")
     }
 }
 
@@ -317,16 +338,7 @@ pub fn render(
     definition: &McpDefinition,
     homes: &AgentHomes,
 ) -> Result<Rendered, OpenCodeMcpError> {
-    let checked = entry(definition, Shape::V2)?;
-    let (file, _) = config(root)?;
-    if let Some((file, home, reader)) = install::in_agent_home(homes, &[file.path()]) {
-        return Err(OpenCodeMcpError::UserScope { file, home, reader });
-    }
-    let standing = standing(&file, checked.name.as_str())?;
-    let given = match standing.map_or_else(|| followed(&file), Ok)? {
-        Shape::V2 => checked,
-        Shape::V1 => entry(definition, Shape::V1)?,
-    };
+    let (file, given, standing) = prepared(root, definition, homes)?;
     let key = given.shape.key(given.name.as_str());
     let edit = match standing {
         None => Edit::Insert(given.value.clone()),
@@ -338,6 +350,54 @@ pub fn render(
         written,
         entry: given,
     })
+}
+
+/// What [`render`] would write, with nothing written: for an install to
+/// say what OpenCode would be given before it writes anything.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Planned {
+    /// The one of [`FILES`] it would be written into.
+    pub file: PathBuf,
+    /// The entry, in the shape that file would be given it in.
+    pub entry: Entry,
+}
+
+/// What [`render`] would write into the first of [`FILES`] there is at
+/// `root`, read and refused as [`render`] reads and refuses it, in the
+/// shape it would write, with nothing written: one place deciding both, so
+/// what an install says OpenCode will be given is what it then writes.
+pub fn planned(
+    root: &Path,
+    definition: &McpDefinition,
+    homes: &AgentHomes,
+) -> Result<Planned, OpenCodeMcpError> {
+    let (file, entry, _) = prepared(root, definition, homes)?;
+    Ok(Planned {
+        file: file.path(),
+        entry,
+    })
+}
+
+/// The file [`render`] writes into, the entry it writes there in the shape
+/// it is written in, and the shape a server of the name stands in there
+/// already, each refusal asked in the order [`render`] asks it: what it
+/// and [`planned`] share.
+fn prepared(
+    root: &Path,
+    definition: &McpDefinition,
+    homes: &AgentHomes,
+) -> Result<(ConfigFile, Entry, Option<Shape>), OpenCodeMcpError> {
+    let checked = entry(definition, Shape::V2)?;
+    let (file, _) = config(root)?;
+    if let Some((file, home, reader)) = install::in_agent_home(homes, &[file.path()]) {
+        return Err(OpenCodeMcpError::UserScope { file, home, reader });
+    }
+    let standing = standing(&file, checked.name.as_str())?;
+    let given = match standing.map_or_else(|| followed(&file), Ok)? {
+        Shape::V2 => checked,
+        Shape::V1 => entry(definition, Shape::V1)?,
+    };
+    Ok((file, given, standing))
 }
 
 /// Take the server keyed `name` out of the first of [`FILES`] there is at
@@ -353,7 +413,29 @@ pub fn render(
 /// one Mindweaver made, so another of [`FILES`] chosen in its place, once it
 /// is gone, stays whatever it holds. `.opencode` is never taken away.
 pub fn remove(root: &Path, name: &str, created: bool) -> Result<Written, OpenCodeMcpError> {
-    let (file, route) = config(root)?;
+    remove_from(root, chosen(root)?, name, created)
+}
+
+/// [`remove`], from OpenCode's config file at `route`, one of [`FILES`],
+/// rather than from the first of them there is: for a server recorded in
+/// the file it was written into, which another of the four may have come
+/// before since, as [`servers`] reads one where its record says. Taken out
+/// of the first instead, it would be a server of the name somebody keeps
+/// there, and the one written left behind.
+///
+/// A route that is none of [`FILES`] holds no server OpenCode reads, so
+/// nothing is taken out of it ([`Written::Unchanged`]), as [`servers`]
+/// finds none an entry could be told by there.
+pub fn remove_from(
+    root: &Path,
+    route: &str,
+    name: &str,
+    created: bool,
+) -> Result<Written, OpenCodeMcpError> {
+    if !FILES.contains(&route) {
+        return Ok(Written::Unchanged);
+    }
+    let file = ConfigFile::new(root, route, Format::Jsonc)?.capped(MAX_BYTES);
     let standing = standing(&file, name)?;
     // Taken whole when the server is all it holds, rather than written
     // without it first only to be taken away.
@@ -368,6 +450,82 @@ pub fn remove(root: &Path, name: &str, created: bool) -> Result<Written, OpenCod
         return Ok(Written::Unchanged);
     };
     Ok(file.edit(&shape.key(name), &Edit::Remove)?)
+}
+
+/// Every server OpenCode's config file at `route`, one of [`FILES`], in
+/// the project at `root` holds, by its key, with the shape it stands in,
+/// V2's under `mcp.servers` first and then V1's under `mcp`, each in the
+/// order the file holds them: none when there is no file there.
+///
+/// Read as [`render`] reads a file to write into it, as JSONC and up to
+/// [`MAX_BYTES`], so a file it would refuse to write into is refused here
+/// too, with the same code, and so is one holding a server in both shapes
+/// ([`OpenCodeMcpError::Twice`]), which `render` and `remove` refuse:
+/// which of the two OpenCode reads cannot be told. `route` rather than the
+/// file [`render`] picks, so a server is read where its record says it was
+/// written, whichever of the four comes first now.
+pub fn servers(root: &Path, route: &str) -> Result<Vec<(String, Shape, Value)>, OpenCodeMcpError> {
+    let file = ConfigFile::new(root, route, Format::Jsonc)?.capped(MAX_BYTES);
+    let Some(Value::Object(members)) = file.get(&[MCP])? else {
+        return Ok(Vec::new());
+    };
+    let mut servers = Vec::new();
+    let mut v1 = Vec::new();
+    for (key, value) in members {
+        match (key.as_str(), value) {
+            (SERVERS, Value::Object(v2)) => {
+                servers.extend(v2.into_iter().map(|(name, value)| (name, Shape::V2, value)))
+            }
+            (key, value) if !held(key) => v1.push((key.to_owned(), Shape::V1, value)),
+            _ => {}
+        }
+    }
+    if let Some((name, ..)) = v1
+        .iter()
+        .find(|(name, ..)| servers.iter().any(|(other, ..)| other == name))
+    {
+        return Err(OpenCodeMcpError::Twice {
+            path: file.path(),
+            name: name.clone(),
+        });
+    }
+    servers.extend(v1);
+    Ok(servers)
+}
+
+/// The first of OpenCode's global config files ([`USER_FILES`]) in the
+/// folders `homes` gives it ([`AgentHomes::opencode_dirs`]) that holds a
+/// server keyed `name`, in either shape: none when none does, or no folder
+/// is given.
+///
+/// Read through a link and up to [`MAX_BYTES`], as JSONC, as Codex's own
+/// config is read ([`config_entry::read_through`]): only read, and a
+/// user's config is most often linked into the home from a repository of
+/// their settings.
+pub(crate) fn held_by_user(
+    homes: &AgentHomes,
+    name: &str,
+) -> Result<Option<PathBuf>, OpenCodeMcpError> {
+    for path in homes
+        .opencode_dirs()
+        .into_iter()
+        .flat_map(|folder| USER_FILES.map(|file| folder.join(file)))
+    {
+        let Some(text) = config_entry::read_through(&path, MAX_BYTES)? else {
+            continue;
+        };
+        let holds = |key: &[&str]| {
+            config_entry::get(Format::Jsonc, &text, key).map_err(|source| FileError::Entry {
+                path: path.clone(),
+                source,
+            })
+        };
+        let v1 = !held(name) && holds(&Shape::V1.key(name))?.is_some();
+        if v1 || holds(&Shape::V2.key(name))?.is_some() {
+            return Ok(Some(path));
+        }
+    }
+    Ok(None)
 }
 
 /// The shape a server not in `file` yet is written in: V1's when `file`
@@ -427,13 +585,14 @@ fn config(root: &Path) -> Result<(ConfigFile, &'static str), OpenCodeMcpError> {
 }
 
 /// The first of [`FILES`] there is at `root`, as the issue (#92) orders
-/// them, or [`FILE`] when none is.
+/// them, or [`FILE`] when none is: what [`Agent::mcp_file`] says of
+/// OpenCode, so the file an entry is recorded in is the one written into.
 ///
 /// Whatever is there counts, a link or a folder too, so that the file's
 /// route refuses it ([`ConfigFile`]) rather than a server being written
 /// into another beside it. A `.opencode` that is no folder holds none of
 /// them, as OpenCode finds none in it.
-fn chosen(root: &Path) -> Result<&'static str, OpenCodeMcpError> {
+pub(crate) fn chosen(root: &Path) -> Result<&'static str, FileError> {
     for route in FILES {
         let path = root.join(route);
         match fs::symlink_metadata(&path) {
@@ -443,7 +602,7 @@ fn chosen(root: &Path) -> Result<&'static str, OpenCodeMcpError> {
                     error.kind(),
                     io::ErrorKind::NotFound | io::ErrorKind::NotADirectory
                 ) => {}
-            Err(source) => return Err(FileError::Read { path, source }.into()),
+            Err(source) => return Err(FileError::Read { path, source }),
         }
     }
     Ok(FILE)

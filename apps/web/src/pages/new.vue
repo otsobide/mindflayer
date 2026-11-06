@@ -58,7 +58,7 @@ watch(kind, () => {
 
 const draft = computed<Draft | undefined>(() =>
   kind.value && (name.value !== '' || description.value !== '')
-    ? { type: 'add', kind: kind.value, name: name.value, description: description.value, template: template.value }
+    ? { type: 'add', kind: kind.value, name: name.value, description: description.value, template: template.value, server: null }
     : undefined
 )
 // Judged once somebody stops typing for a moment, not at every key.
@@ -86,7 +86,8 @@ async function add() {
     kind: at,
     name: added,
     description: description.value,
-    template: template.value
+    template: template.value,
+    server: null
   })
   if (ran?.outcome.ok) {
     await router.push(artifactLink(at, added))

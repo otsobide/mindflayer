@@ -129,10 +129,10 @@ fn a_task_nobody_knows_is_refused_with_every_one_there_is() {
             "Failed to deserialize the JSON body into the target type: type: unknown variant \
              `deploy`, expected one of `init_workspace`, `init_project`, `link`, `link_here`, \
              `init_and_link`, `unlink`, `relink`, `load`, `load_here`, `unload`, \
-             `unload_here`, `add`, `show`, `edit`, `save`, `rename`, `remove`, `validate`, \
-             `minds`, `marks`, `shelf`, `workspaces`, `gather`, `targets`, `settings`, \
-             `toggled`, `update`, `install`, `uninstall`, `uninstall_orphaned`, `adopt`, \
-             `migrate`, `open_install`, `apply_install`, `refresh` at line 1 column 16",
+             `unload_here`, `add`, `show`, `edit`, `save`, `edit_server`, `rename`, `remove`, \
+             `validate`, `minds`, `marks`, `shelf`, `workspaces`, `gather`, `targets`, \
+             `settings`, `toggled`, `update`, `install`, `uninstall`, `uninstall_orphaned`, \
+             `adopt`, `migrate`, `open_install`, `apply_install`, `refresh` at line 1 column 16",
         );
 }
 

@@ -28,7 +28,7 @@ use std::path::Path;
 use crate::agent::AgentHomes;
 use crate::catalog::Reference;
 use crate::gather::Scrub;
-use crate::install::{self, Candidate, Edits, InstallError, Installation, Removed};
+use crate::install::{self, Candidate, Confirmed, Edits, InstallError, Installation, Removed};
 use crate::kind::Kind;
 use crate::ledger::{Ledger, LedgerError};
 use crate::value::ArtifactName;
@@ -76,7 +76,10 @@ pub struct Offered {
 /// name each is offered ([`install::offered_typed`], `from` and `base` as it
 /// takes them), installed there ([`install::install_with`]), writing over an
 /// edited copy only when `edits` says so, and into none of the agents' own
-/// folders, `homes`.
+/// folders, `homes`. One that waits for a yes ([`install::asks_first`]),
+/// an MCP server from elsewhere than the library, is only previewed
+/// ([`install::mcp::preview`]) until `confirmed` says yes: what each agent
+/// would run said, and nothing written.
 ///
 /// A part for each project once, in the order asked: two spellings of one
 /// directory are one project, installed into once. A project offered nothing
@@ -87,7 +90,13 @@ pub struct Offered {
 /// The ledger is opened to write once, for every part
 /// ([`WeaverWorkspace::ledger_to_write`]), as an update opens it, and only
 /// that refuses the whole batch, before anything is written. A batch of no
-/// project opens nothing: there is nothing to record.
+/// project opens nothing: there is nothing to record. Nor does a batch
+/// whose every part is only previewed, which writes nothing: it reads the
+/// ledger without making it ([`previewed`]), as an update's dry run does,
+/// and scrubs nothing.
+// Each a word of the command line it carries out, which a struct of them
+// would only spell again.
+#[allow(clippy::too_many_arguments)]
 pub fn install(
     workspace: &WeaverWorkspace,
     projects: &[MindProject],
@@ -96,7 +105,16 @@ pub fn install(
     base: &Path,
     homes: &AgentHomes,
     edits: Edits,
+    confirmed: Confirmed,
 ) -> Result<Assigned<Install>, LedgerError> {
+    if confirmed == Confirmed::No {
+        if let Some(parts) = previewed(workspace, projects, reference, from, base, homes, edits)? {
+            return Ok(Assigned {
+                parts,
+                scrub: Scrub::default(),
+            });
+        }
+    }
     let Some((ledger, scrub)) = opened(workspace, projects)? else {
         return Ok(nothing());
     };
@@ -105,9 +123,11 @@ pub fn install(
         .map(|project| {
             let done = install::offered_typed(workspace, &ledger, project, reference, from, base)
                 .map(|candidate| {
-                    let installed = install::install_with(
-                        workspace, &ledger, project, &candidate, homes, edits,
-                    );
+                    let installed = if candidate.asks_first() && confirmed == Confirmed::No {
+                        install::mcp::preview(workspace, &ledger, project, &candidate, homes, edits)
+                    } else {
+                        install::install_with(workspace, &ledger, project, &candidate, homes, edits)
+                    };
                     Offered {
                         candidate,
                         installed,
@@ -120,6 +140,58 @@ pub fn install(
         })
         .collect();
     Ok(Assigned { parts, scrub })
+}
+
+/// [`install`]'s parts, when every one of them waits for a yes: each
+/// project offered what it is to be asked about, previewed
+/// ([`install::mcp::preview`]) against the ledger read without being made.
+/// None when a part would install, which the ledger opened to write is for,
+/// and so when there is no project; and none when one is refused, which is
+/// asked again of the ledger opened to write: until its scrub has run, two
+/// rows an older build kept of one shelf source, one with a credential, are
+/// offered twice, and a refusal read before it could be one the scrub
+/// takes away.
+///
+/// Asked first, as what a dry run is, rather than after opening the ledger
+/// to write: that makes a ledger where there is none, writes the ids of
+/// the projects it is told of, and scrubs or migrates one an older build
+/// left, none of which a command that writes nothing has any reason to do.
+// The words of `install` it previews with.
+#[allow(clippy::too_many_arguments)]
+fn previewed(
+    workspace: &WeaverWorkspace,
+    projects: &[MindProject],
+    reference: &Reference,
+    from: Option<&str>,
+    base: &Path,
+    homes: &AgentHomes,
+    edits: Edits,
+) -> Result<Option<Vec<Part<Install>>>, LedgerError> {
+    if projects.is_empty() {
+        return Ok(None);
+    }
+    let ledger = workspace.ledger_for_reading()?;
+    let mut asked: Vec<(&MindProject, Candidate)> = Vec::new();
+    for project in each(projects) {
+        match install::offered_typed(workspace, &ledger, project, reference, from, base) {
+            Ok(candidate) if candidate.asks_first() => asked.push((project, candidate)),
+            Ok(_) | Err(_) => return Ok(None),
+        }
+    }
+    Ok(Some(
+        asked
+            .into_iter()
+            .map(|(project, candidate)| Part {
+                project: project.clone(),
+                done: Ok(Offered {
+                    installed: install::mcp::preview(
+                        workspace, &ledger, project, &candidate, homes, edits,
+                    ),
+                    candidate,
+                }),
+            })
+            .collect(),
+    ))
 }
 
 /// Take what `reference` names back out of each of `projects`, as one

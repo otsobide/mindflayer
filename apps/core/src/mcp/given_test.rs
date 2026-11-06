@@ -4,6 +4,7 @@
 use super::*;
 use crate::mcp::{InputKind, McpDefinition, Transport};
 use crate::mother::{random, McpMother, SkillMother, VariableNameMother};
+use crate::value::{InputName, VariableName};
 
 /// `given`'s text for a server drawn afresh, read as a definition.
 fn read(given: &Given) -> McpDefinition {
@@ -273,4 +274,163 @@ fn what_reaches_a_server_unseen_is_a_secret_and_what_is_shown_is_not() {
             assert!(input.env_var.is_some(), "{input:?}");
         }
     }
+}
+
+/// `given` as a definition reads it back: each table's keys in the order
+/// a file keeps them, which a TOML table sorts.
+fn as_read(given: &Given) -> Given {
+    let mut given = given.clone();
+    match &mut given {
+        Given::Program(program) => program.env.sort(),
+        Given::Address(address) => address.headers.sort(),
+    }
+    given
+}
+
+#[test]
+fn a_definition_add_writes_reads_back_as_what_it_was_told() {
+    for _ in 0..32 {
+        let given = McpMother::given();
+
+        let definition = read(&given);
+
+        assert_eq!(Given::of(&definition), Some(as_read(&given)), "{given:?}");
+    }
+}
+
+#[test]
+fn a_definition_holding_what_no_option_says_reads_back_as_nothing() {
+    // A secret under a name of its own, a folder to start in and an input
+    // described and required: each is written away by the options.
+    for text in [
+        McpMother::stdio(&McpMother::name()),
+        McpMother::http(&McpMother::name()),
+    ] {
+        let definition = McpDefinition::parse(&text).unwrap();
+
+        assert_eq!(Given::of(&definition), None, "{text}");
+    }
+    // An argument read from a variable before one written as it is, which
+    // `add` writes after every one of them.
+    let text = format!(
+        "format = 1\nname = \"{}\"\ndescription = \"A server\"\n\n\
+         [transport]\ntype = \"stdio\"\ncommand = \"npx\"\nargs = [\"{{TOKEN}}\", \"-y\"]\n\n\
+         [[inputs]]\nname = \"TOKEN\"\nkind = \"arg\"\nenv_var = \"TOKEN\"\n",
+        McpMother::name()
+    );
+    assert_eq!(Given::of(&McpDefinition::parse(&text).unwrap()), None);
+}
+
+#[test]
+fn a_given_goes_out_as_a_front_end_sends_it_and_reads_back_whole() {
+    let given = Given::Address(Address {
+        url: String::from("https://{tenant}.example.com/mcp"),
+        events: false,
+        headers: vec![(String::from("X-Client"), String::from("me"))],
+        secret_headers: vec![(String::from("X-Api-Key"), VariableName::from("API_KEY"))],
+        bearer: Some(VariableName::from("TOKEN")),
+        url_vars: vec![(InputName::from("tenant"), VariableName::from("TENANT"))],
+    });
+
+    let json = serde_json::to_value(&given).unwrap();
+
+    assert_eq!(
+        json,
+        serde_json::json!({
+            "type": "address",
+            "url": "https://{tenant}.example.com/mcp",
+            "events": false,
+            "headers": [["X-Client", "me"]],
+            "secret_headers": [["X-Api-Key", "API_KEY"]],
+            "bearer": "TOKEN",
+            "url_vars": [["tenant", "TENANT"]]
+        })
+    );
+    assert_eq!(serde_json::from_value::<Given>(json).unwrap(), given);
+    // A field it does not have is refused rather than dropped, a value
+    // for a secret above all, which no field holds.
+    let sent = serde_json::json!({
+        "type": "program", "command": "npx", "args": [], "env": [],
+        "secret_env": ["TOKEN"], "arg_env": [], "secret": "a value"
+    });
+    assert!(serde_json::from_value::<Given>(sent).is_err());
+}
+
+/// A definition somebody wrote, with a comment, a provenance and extras
+/// beside its transport.
+const KEPT: &str = "\
+# Ours, kept as written.
+format = 1
+name = \"internal\"
+description = \"Our own server\" # what it is for
+
+[transport]
+type = \"stdio\"
+command = \"old\"
+
+[provenance]
+upstream_name = \"io.example/internal\"
+
+[extras.claude]
+timeout = 30000
+";
+
+#[test]
+fn a_transport_written_again_keeps_every_other_key_and_its_comments() {
+    let given = McpMother::given_address(false);
+
+    let text = retransported(KEPT, &given).unwrap();
+
+    let before = McpDefinition::parse(KEPT).unwrap();
+    let after = McpDefinition::parse(&text).unwrap_or_else(|error| panic!("{error}:\n{text}"));
+    assert_eq!(after.name, before.name);
+    assert_eq!(after.description, before.description);
+    assert_eq!(after.provenance, before.provenance);
+    assert_eq!(after.extras, before.extras);
+    assert_eq!(Given::of(&after), Some(as_read(&given)), "{text}");
+    for kept in [
+        "# Ours, kept as written.\n",
+        "description = \"Our own server\" # what it is for\n",
+    ] {
+        assert!(text.contains(kept), "{text}");
+    }
+    // Where the transport was, its inputs after it, and the extras after
+    // both, as a file is read top to bottom.
+    let at = |key: &str| text.find(key).unwrap_or_else(|| panic!("{key}:\n{text}"));
+    assert!(at("[transport]") < at("[[inputs]]"), "{text}");
+    assert!(at("[[inputs]]") < at("[provenance]"), "{text}");
+    assert!(!text.contains("command = \"old\""), "{text}");
+}
+
+#[test]
+fn a_transport_told_what_the_file_holds_is_not_written_again_in_another_order() {
+    let given = Given::Program(Program {
+        command: String::from("npx"),
+        env: vec![
+            (String::from("B"), String::from("1")),
+            (String::from("A"), String::from("2")),
+        ],
+        secret_env: vec![VariableName::from("TOKEN")],
+        ..Program::default()
+    });
+    // As `add` writes it, with a comment of somebody's in its transport.
+    let text = given
+        .text("acme", "Acme's tools")
+        .replace("[transport]\n", "[transport]\n# Ours.\n");
+    let read = Given::of(&McpDefinition::parse(&text).unwrap()).unwrap();
+    assert_ne!(read, given, "read back in the order of its keys");
+
+    assert_eq!(retransported(&text, &read).unwrap(), text);
+    // Told something new, it is written again.
+    let Given::Program(mut changed) = read else {
+        unreachable!("a program is read back as one");
+    };
+    changed.env[0].1 = String::from("3");
+    let written = retransported(&text, &Given::Program(changed)).unwrap();
+    assert!(written.contains("A = \"3\""), "{written}");
+}
+
+#[test]
+fn a_transport_is_not_written_into_what_reads_as_no_definition() {
+    assert!(retransported("format = 1\nname = ", &McpMother::given()).is_err());
 }

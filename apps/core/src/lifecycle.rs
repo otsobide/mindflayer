@@ -37,14 +37,14 @@ use thiserror::Error;
 use crate::artifact::{self, issue_list, Artifact, ArtifactError, ValidationIssue};
 use crate::catalog::{Catalog, Reference, QUALIFIER};
 use crate::code::codes;
-use crate::create::{scaffold, CreateError, Start};
+use crate::create::{self, scaffold, CreateError, Start};
 use crate::frontmatter;
 use crate::gather::Scrub;
 use crate::hash;
 use crate::install::{self, InstallError};
 use crate::kind::{Kind, Layout};
 use crate::ledger::Carried;
-use crate::mcp::McpDefinition;
+use crate::mcp::{self, Given, McpDefinition};
 use crate::paths;
 use crate::skill::SkillManifest;
 use crate::value::{ArtifactName, ContentHash};
@@ -250,16 +250,20 @@ pub fn find(project: &MindProject, reference: &Reference) -> Result<Target, Life
 }
 
 /// [`find`], for a change made with `workspace` consulted: a name the project
-/// holds nothing of where it authors, but received as a rule, is refused as
-/// such ([`LifecycleError::Received`]) rather than as nothing at all.
+/// holds nothing of where it authors, but received as a rule or as an MCP
+/// server, is refused as such ([`LifecycleError::Received`],
+/// [`LifecycleError::ReceivedServer`]) rather than as nothing at all.
 ///
 /// A rule a project marked by its settings received is no file of its own
 /// but a section of the block in its `AGENTS.md`, and maybe a file for
-/// Claude, rendered from where it was installed from (D-23): a change made
-/// there is undone by the next render, and what reaches it is a change made
-/// where it is offered. `status` lists it, so "nothing named" would deny
-/// what the report just showed; the ledger says whether it is one, and the
-/// refusal says how to take it out instead.
+/// Claude, rendered from where it was installed from (D-23), and a server
+/// it received is an entry in each of its agents' config files, written
+/// from the definition it was installed from: a change made there is
+/// undone by the next install, or read as an edit, and what reaches it is
+/// a change made where it is offered. `status` lists either, so "nothing
+/// named" would deny what the report just showed; the ledger says whether
+/// it is one, and the refusal says how to take it out instead. A rule is
+/// asked of first, a name received as both being one a qualifier settles.
 pub fn find_to_change(
     workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
@@ -270,20 +274,46 @@ pub fn find_to_change(
         found => return found,
     };
     let name = reference.name();
-    let received = project.settings().is_some()
-        && reference.kind().is_none_or(|kind| kind == Kind::Rule)
-        && install::is_installable_name(Kind::Rule, name)
-        && workspace.is_some_and(|workspace| {
+    let received = |kind: Kind| {
+        project.settings().is_some()
+            && reference.kind().is_none_or(|asked| asked == kind)
+            && install::is_installable_name(kind, name)
+            && workspace.is_some_and(|workspace| {
+                let entry = install::entry_for_root(workspace, project.root());
+                workspace
+                    .ledger_for_reading()
+                    .and_then(|ledger| ledger.installation(&entry, kind, name))
+                    .is_ok_and(|record| record.is_some())
+            })
+    };
+    // Typed bare, an uninstall finds the server when the ledger records
+    // the name as no other kind a bare name could be ([`install::kinds_named`],
+    // `uninstall_typed`); one it records as a skill too needs its qualifier.
+    let recorded = |kind: Kind| {
+        workspace.is_some_and(|workspace| {
             let entry = install::entry_for_root(workspace, project.root());
             workspace
                 .ledger_for_reading()
-                .and_then(|ledger| ledger.installation(&entry, Kind::Rule, name))
+                .and_then(|ledger| ledger.installation(&entry, kind, name))
                 .is_ok_and(|record| record.is_some())
-        });
-    Err(if received {
-        LifecycleError::Received {
+        })
+    };
+    let alone = install::kinds_named(&Reference::parse(name))
+        .into_iter()
+        .filter(|&kind| kind != Kind::Mcp)
+        .all(|kind| !recorded(kind));
+    let project = project.name().to_owned();
+    Err(if received(Kind::Rule) {
+        LifecycleError::Received { typed, project }
+    } else if received(Kind::Mcp) {
+        LifecycleError::ReceivedServer {
             typed,
-            project: project.name().to_owned(),
+            project,
+            named: if alone {
+                name.to_owned()
+            } else {
+                format!("{}{QUALIFIER}{name}", Kind::Mcp.slug())
+            },
         }
     } else {
         LifecycleError::NotFound { typed }
@@ -524,6 +554,50 @@ pub fn replace_contents(
         changed: true,
         copy,
     })
+}
+
+/// Change how the MCP server `target` in `project` is started or reached,
+/// and what is supplied for it, to what `given` says, as `add` would write
+/// them from a command line's options; every other key of its definition,
+/// its name, description, provenance and extras, kept as the file holds
+/// it (`mcp::retransported`). `workspace` is the one consulted, as for
+/// [`replace_contents`].
+///
+/// What `edit` does when it is told a server's options rather than its
+/// contents: the edit for a form, which has the options' words and no
+/// text. The definition is read as it is now, rewritten, and written as
+/// contents given whole are ([`replace_contents`]), held to every rule
+/// they are, so it refuses what `validate` would call invalid, a token
+/// written as it is among it, and writes nothing when nothing changes.
+/// Refused for any other kind, as `add` refuses a transport for one
+/// (`edit_transport_not_mcp`), and before it reads the file for what no
+/// definition can be written from as given, a credential typed into the
+/// address and a key given twice, by `add`'s own checks.
+pub fn retransport(
+    workspace: Option<&WeaverWorkspace>,
+    project: &MindProject,
+    target: &Target,
+    given: &Given,
+) -> Result<Edited, LifecycleError> {
+    let text = retransported(target, given)?;
+    replace_contents(workspace, project, target, text.as_bytes(), None)
+}
+
+/// What [`retransport`] would write into `target`: its definition, read
+/// as the file holds it now, rewritten from `given`. Apart from the write
+/// so a draft is judged as the write is ([`crate::draft::retransported`]).
+pub(crate) fn retransported(target: &Target, given: &Given) -> Result<String, LifecycleError> {
+    if target.kind != Kind::Mcp {
+        return Err(LifecycleError::TransportNotMcp { kind: target.kind });
+    }
+    create::writable(given).map_err(LifecycleError::Server)?;
+    let file = target.file();
+    let text = fs::read_to_string(&file).map_err(|source| LifecycleError::Io {
+        path: file.clone(),
+        source,
+    })?;
+    mcp::retransported(&text, given)
+        .map_err(|reason| LifecycleError::ServerUnreadable { path: file, reason })
 }
 
 /// Where `contents` given whole for `target` in `project` would be written,
@@ -1273,6 +1347,18 @@ pub enum LifecycleError {
     /// from where it was installed from ([`find_to_change`]).
     #[error("`{typed}` is a rule {project} received, rendered from where it was installed from rather than kept in it, so it is not changed from here: uninstall it, or change it where it is offered and install it again")]
     Received { typed: String, project: String },
+    /// Not authored in the project but received: an MCP server written into
+    /// its agents' config files from the definition it was installed from
+    /// ([`find_to_change`]). Uninstalled by `named`, however it was typed:
+    /// its name bare where an uninstall finds the server by it, and
+    /// qualified as a server's where the ledger records it as another kind
+    /// too, which a bare name would be refused for as two.
+    #[error("`{typed}` is an MCP server {project} received, an entry in its agents' config files written from the definition it was installed from rather than kept in it, so it is not changed from here: uninstall it as `{named}`, or change its definition in the library it came from and update")]
+    ReceivedServer {
+        typed: String,
+        project: String,
+        named: String,
+    },
     /// Listed, from a folder the project's agents read, but in none the
     /// project authors in: installed there, or somebody's own.
     #[error("`{typed}` is at {path}, in a folder this project's agents read and it does not author in, so it is not changed from here")]
@@ -1356,6 +1442,20 @@ pub enum LifecycleError {
         #[source]
         source: io::Error,
     },
+    /// A server's transport given for a kind no agent starts.
+    #[error(
+        "`--command` and `--url` say how an MCP server is started or reached, and a {} is \
+         neither started nor reached",
+        .kind.noun()
+    )]
+    TransportNotMcp { kind: Kind },
+    /// A server whose definition does not read, so what is its transport
+    /// and what is the rest cannot be told apart to write the one again.
+    #[error("{path}: it cannot be read as an MCP server's definition ({reason}), so how it is started cannot be written again; fix it with `mind edit` first")]
+    ServerUnreadable { path: PathBuf, reason: String },
+    /// What `add` refuses of a transport as given, refused by its checks.
+    #[error(transparent)]
+    Server(CreateError),
     #[error(transparent)]
     Workspace(#[from] WorkspaceError),
     #[error(transparent)]
@@ -1365,6 +1465,7 @@ pub enum LifecycleError {
 codes!(LifecycleError {
     Self::NotFound { .. } => "not_found",
     Self::Received { .. } => "change_received_rule",
+    Self::ReceivedServer { .. } => "change_received_mcp",
     Self::NotAuthored { .. } => "change_not_authored",
     Self::Ambiguous { .. } => "ambiguous_name",
     Self::Name { .. } => "rename_name_unfit",
@@ -1387,7 +1488,10 @@ codes!(LifecycleError {
     Self::Stale { .. } => "edit_stale",
     Self::LeadsOut { .. } => "edit_leads_outside",
     Self::Io { .. } => "change_failed",
+    Self::TransportNotMcp { .. } => "edit_transport_not_mcp",
+    Self::ServerUnreadable { .. } => "edit_server_unreadable",
 } carried {
+    Self::Server(error) => error,
     Self::Workspace(error) => error,
     Self::Artifact(error) => error,
 });

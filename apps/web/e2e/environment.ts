@@ -256,11 +256,15 @@ const LINK = /^(?<origin>http:\/\/127\.0\.0\.1:\d+)\/\?token=(?<token>[0-9a-f]+)
  * trace, timing each request from the browser, cannot (#240). Not the
  * config's server, whose stderr Playwright prints, a line for every
  * request of every test: no spec runs a change on it.
+ *
+ * With `variables` set in its environment beside what `environment` gives,
+ * for that server alone and every line it runs: what a spec sets where the
+ * agents of its projects would run, an MCP server's secret among it.
  */
-export function serve(at: Places, workspace: 'fixture' | 'none' = 'fixture'): Promise<Serving> {
+export function serve(at: Places, workspace: 'fixture' | 'none' = 'fixture', variables: Record<string, string> = {}): Promise<Serving> {
   const child = spawn(binary(at.bin, 'mindweaver'), ui(at, workspace, true), {
     cwd: at.workspace,
-    env: environment(at),
+    env: { ...environment(at), ...variables },
     stdio: ['ignore', 'pipe', 'pipe']
   })
   return new Promise((resolve, refuse) => {

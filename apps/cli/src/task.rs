@@ -28,6 +28,7 @@
 
 use clap::Parser as _;
 use mindweaver_core::install::Change;
+use mindweaver_core::mcp;
 use mindweaver_core::url::redacted;
 use mindweaver_core::{
     codes, hash, Agent, Kind, Names, Share, WeaverWorkspace, DEFAULT_SUBDIRECTORY, QUALIFIER,
@@ -150,13 +151,24 @@ pub enum Task {
     /// `mind unload <path>`: out of the workspace above the project the TUI
     /// is on, by its absolute path, which reads the same from anywhere.
     UnloadHere { path: String },
-    /// `… add [--template <template>] <kind> <name> <description>`.
+    /// `… add [--template <template>] <kind> <name> <description>`, or,
+    /// for an MCP server, `… add mcp <name> <description>` and the options
+    /// that say how an agent starts it or reaches it (`server`): what the
+    /// panel's form adding one sends, the form's fields as the options'
+    /// words, each secret the name of the variable it is read from.
     Add {
         holder: Holder,
         kind: Kind,
         name: String,
         description: String,
         template: Option<String>,
+        /// None but for a server added from its options, which a template
+        /// says otherwise: the grammar refuses both, and so the line does.
+        //
+        // Boxed, being most of what a task can hold, so every other task,
+        // and every screen's state holding one, is not as large.
+        #[serde(default)]
+        server: Option<Box<mcp::Given>>,
     },
     /// `… show <kind:name>`.
     Show { holder: Holder, reference: String },
@@ -187,6 +199,17 @@ pub enum Task {
         name: String,
         text: String,
         hash: String,
+    },
+    /// `… edit mcp:<name>` and the options that say how an agent starts
+    /// the server or reaches it: its transport and inputs written again
+    /// from them, everything else its definition holds kept
+    /// (`lifecycle::retransport`). What the panel's form changing one
+    /// sends, as the form adding one sends `add`'s.
+    EditServer {
+        holder: Holder,
+        name: String,
+        // Boxed, as an add's is.
+        server: Box<mcp::Given>,
     },
     /// `… rename <kind:name> <to>`.
     Rename {
@@ -305,12 +328,28 @@ pub enum Task {
     /// would keep it a name, was the alternative, and it would change the
     /// line the TUI has always run and shown for such a project.
     ///
+    /// With `yes`, `--yes`: an MCP server from elsewhere than the library
+    /// written ([`install::asks_first`]), once what each agent would run
+    /// has been shown, as the install screen shows it before it applies;
+    /// without, such a line writes nothing and says what it would.
+    ///
+    /// In JSON for the panel's confirmation of such a server alone (#97):
+    /// a plan's task carries none ([`Task::from`]), and its confirmation,
+    /// shown beside what each agent would run, is the one task that does
+    /// ([`Task::confirmed`], the backend's `Planned::asks`). A yes sent
+    /// with any other install is refused by the path policy before a line
+    /// is built (`policy::confirmed`, `install_yes_unasked`), and one left
+    /// out is none, as before a yes could be sent.
+    ///
     /// [`WeaverWorkspace::naming`]: mindweaver_core::WeaverWorkspace::naming
+    /// [`install::asks_first`]: mindweaver_core::install::asks_first
     Install {
         projects: Vec<String>,
         kind: Kind,
         name: String,
         from: Option<String>,
+        #[serde(default)]
+        yes: bool,
     },
     /// `mindweaver uninstall -p <project>... <kind:name>`: one artifact taken
     /// back out of each project named, whichever place its copy came from,
@@ -390,6 +429,7 @@ impl From<Change> for Task {
                 kind,
                 name: name.into_string(),
                 from: Some(from.into_string()),
+                yes: false,
             },
             Change::Uninstall {
                 projects,
@@ -402,6 +442,29 @@ impl From<Change> for Task {
                 force: false,
             },
         }
+    }
+}
+
+impl Task {
+    /// The task that runs `change` once what it would write has been shown
+    /// and somebody said yes to it: `--yes` on an install that waits for
+    /// one ([`install::asks_first`]), an MCP server from elsewhere than the
+    /// library, as the install screen shows what each agent would run
+    /// before it applies. Every other change is the task [`Task::from`]
+    /// gives it.
+    ///
+    /// [`install::asks_first`]: mindweaver_core::install::asks_first
+    pub fn confirmed(change: Change) -> Task {
+        let asks = matches!(
+            &change,
+            Change::Install { kind, from, .. }
+                if mindweaver_core::install::asks_first(*kind, from)
+        );
+        let mut task = Task::from(change);
+        if let Task::Install { yes, .. } = &mut task {
+            *yes = asks;
+        }
+        task
     }
 }
 
@@ -557,6 +620,7 @@ impl Task {
                 name,
                 description,
                 template,
+                server,
             } => {
                 let mut command = vec!["add"];
                 let from = template
@@ -565,7 +629,19 @@ impl Task {
                 if let Some(from) = &from {
                     command.extend(from.iter().map(String::as_str));
                 }
+                let told = server.as_deref().map(server_options).unwrap_or_default();
+                command.extend(told.iter().map(String::as_str));
                 vec![at(holder, &command, &[kind.slug(), name, description])]
+            }
+            Task::EditServer {
+                holder,
+                name,
+                server,
+            } => {
+                let told = server_options(server);
+                let mut command = vec!["edit"];
+                command.extend(told.iter().map(String::as_str));
+                vec![at(holder, &command, &[&qualified(Kind::Mcp, name)])]
             }
             Task::Show { holder, reference } => vec![at(holder, &["show"], &[reference])],
             Task::Edit { holder, kind, name } => {
@@ -719,15 +795,20 @@ impl Task {
                     _ => vec![at(holder, &[&["update", "--yes"], forced].concat(), &named)],
                 }
             }
+            // `--yes` before the name, as `adopt` has it.
             Task::Install {
                 projects,
                 kind,
                 name,
                 from,
+                yes,
             } => {
                 let mut head = picking(&["mindweaver", "install"], projects);
                 if let Some(from) = from {
                     head.extend(option("--from", from));
+                }
+                if *yes {
+                    head.push(String::from("--yes"));
                 }
                 let head: Vec<&str> = head.iter().map(String::as_str).collect();
                 vec![words(&head, &[&qualified(*kind, name)])]
@@ -979,6 +1060,7 @@ impl Refusal {
                 | Command::List { .. }
                 | Command::Validate { .. }
                 | Command::Status { .. }
+                | Command::Doctor { .. }
                 | Command::Link
                 | Command::Unlink
                 | Command::Load { .. }
@@ -1027,6 +1109,7 @@ impl Refusal {
                 | WeaverCommand::List { .. }
                 | WeaverCommand::Validate { .. }
                 | WeaverCommand::Status { .. }
+                | WeaverCommand::Doctor { .. }
                 | WeaverCommand::Link { .. }
                 | WeaverCommand::Unlink { .. }
                 | WeaverCommand::Relink { .. }
@@ -1048,9 +1131,14 @@ impl Refusal {
 
     /// Why an `edit` at either level is not run by a front end with no
     /// terminal, by how it takes what the artifact is to hold: an editor
-    /// or standard input, each the terminal's, are refused, and a file is
-    /// run, its contents held to core's rules as any edit's are.
+    /// or standard input, each the terminal's, are refused, and a file or
+    /// a server's options are run, held to core's rules as any edit is.
     fn of_edit(editing: &Editing) -> Option<Refusal> {
+        // A server's options open nothing and read nothing but the line,
+        // and the grammar takes them with neither an editor nor contents.
+        if editing.server.given().is_some() {
+            return None;
+        }
         match editing.given() {
             None => Some(Refusal::Editor),
             Some(Given::Input) => Some(Refusal::Input),
@@ -1151,6 +1239,7 @@ impl Caution {
                 | Command::Show { .. }
                 | Command::Validate { .. }
                 | Command::Status { .. }
+                | Command::Doctor { .. }
                 | Command::Link
                 | Command::Load { .. }
                 | Command::Agents { .. }
@@ -1195,6 +1284,7 @@ impl Caution {
                 | WeaverCommand::Show { .. }
                 | WeaverCommand::Validate { .. }
                 | WeaverCommand::Status { .. }
+                | WeaverCommand::Doctor { .. }
                 | WeaverCommand::Link { .. }
                 | WeaverCommand::Relink { .. }
                 | WeaverCommand::Load { .. }
@@ -1351,6 +1441,53 @@ fn picking(head: &[&str], projects: &[String]) -> Vec<String> {
         line.push(directory(project));
     }
     line
+}
+
+/// The options `add mcp` and `edit` are told how a server is started or
+/// reached by, in the order the grammar lists them, each value after the
+/// option that takes it ([`option`]), so one led by a dash, an argument
+/// above all, is still its value: `--arg=-y`. A pair is its two words
+/// joined by `=`, which the option ends the name at, so a name holding one
+/// would reach the command as another pair: a task from outside naming one
+/// is refused before its line is built (`policy::sayable`).
+fn server_options(given: &mcp::Given) -> Vec<String> {
+    let mut words = Vec::new();
+    match given {
+        mcp::Given::Program(program) => {
+            words.extend(option("--command", &program.command));
+            for arg in &program.args {
+                words.extend(option("--arg", arg));
+            }
+            for (key, value) in &program.env {
+                words.extend(option("--env", &format!("{key}={value}")));
+            }
+            for variable in &program.secret_env {
+                words.extend(option("--secret-env", variable));
+            }
+            for variable in &program.arg_env {
+                words.extend(option("--arg-env", variable));
+            }
+        }
+        mcp::Given::Address(address) => {
+            words.extend(option("--url", &address.url));
+            if address.events {
+                words.push(String::from("--sse"));
+            }
+            for (key, value) in &address.headers {
+                words.extend(option("--header", &format!("{key}={value}")));
+            }
+            for (header, variable) in &address.secret_headers {
+                words.extend(option("--secret-header", &format!("{header}={variable}")));
+            }
+            if let Some(variable) = &address.bearer {
+                words.extend(option("--bearer-env", variable));
+            }
+            for (name, variable) in &address.url_vars {
+                words.extend(option("--url-var", &format!("{name}={variable}")));
+            }
+        }
+    }
+    words
 }
 
 /// `skill:deploy`: a name that says which kind it names.

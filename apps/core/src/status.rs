@@ -82,7 +82,10 @@ pub struct ProjectStatus {
     /// Each rule it received that some of its agents read nowhere, all of it
     /// there as it was installed, in the order of `artifacts`: one about
     /// some files only, which Claude alone reads, or one Codex and OpenCode
-    /// read nowhere because no block could be written for them.
+    /// read nowhere because no block could be written for them. And each
+    /// MCP server it received that some of them are given no entry of: one
+    /// an agent's renderer refuses, or whose file git tracks in a local
+    /// project, as its install said.
     ///
     /// Said of each rule rather than of its kind, as `unreached` says a
     /// skill's: a skill reaches the agents that read the folders its kind is
@@ -92,6 +95,40 @@ pub struct ProjectStatus {
     pub missed: Vec<Missed>,
     /// Everything it holds, grouped by kind and ordered by name.
     pub artifacts: Vec<ArtifactStatus>,
+    /// Each entry of an MCP server its agents' config files hold, and each
+    /// one the ledger records writing, by agent in report order, then name:
+    /// what it received as entries, and what somebody keeps there that
+    /// nothing records, foreign (D-23). None for a project a `mind.toml`
+    /// marks, which names no agent, and for a read that leaves MCP servers
+    /// out.
+    pub entries: Vec<EntryStatus>,
+}
+
+/// One entry of an MCP server in one of a project's agents' config files,
+/// and how it stands there: what the installed view lists of what it
+/// received as entries rather than copies (D-23).
+///
+/// One an agent rather than one a server, as an installation's entries are
+/// recorded: what Claude's `.mcp.json` holds of a server can be edited
+/// while Codex's is not, and a foreign one is somebody's in one file alone.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct EntryStatus {
+    /// The agent whose config file it is in.
+    pub agent: Agent,
+    /// That file, as a route from the project, with `/` whatever the
+    /// platform: the one the ledger recorded writing it into, or for a
+    /// foreign one the one the agent reads now (`Agent::mcp_file`).
+    pub file: String,
+    /// The server's name, the key it is under.
+    pub name: ArtifactName,
+    /// How it stands, as an artifact's state says it: never `authored`,
+    /// which no entry is, and `foreign` for one nothing records.
+    pub state: State,
+    /// Where what was installed came from, as `--from` takes it; none for a
+    /// foreign entry.
+    pub origin: Option<Origin>,
 }
 
 /// One artifact a project received that some of its agents read nowhere,
@@ -391,6 +428,7 @@ impl Status {
                         unreached: Vec::new(),
                         missed: Vec::new(),
                         artifacts: Vec::new(),
+                        entries: Vec::new(),
                     });
                     failures.push(StatusFailure::Stale(error));
                 }
@@ -477,6 +515,10 @@ impl ProjectStatus {
         let mut catalog = Catalog::discover_kinds(std::slice::from_ref(project), kinds);
         let mut entry = None;
         let mut installed: Vec<InstallRecord> = Vec::new();
+        // Every offer of an MCP server, which what an installation of one
+        // wrote is held to, read only when one is recorded.
+        let mut servers_offered: Vec<install::Offer> = Vec::new();
+        let mut linked_to = None;
         // How each installation stands, by kind and name, as core tells it
         // by the hash of what was written and what its origin offers now
         // (D-04).
@@ -488,6 +530,7 @@ impl ProjectStatus {
             workspace.and_then(|workspace| Some((workspace, workspace.linked_as(root)?)))
         {
             entry = Some(paths::as_route(linked));
+            linked_to = Some(workspace);
             let named = install::entry_for_root(workspace, root);
             let read = workspace.ledger_for_reading().and_then(|ledger| {
                 let records = kinds
@@ -506,7 +549,16 @@ impl ProjectStatus {
                     // ledger that cannot be read does, said once: never an
                     // edited install quietly said to be current.
                     let mut unread = None;
+                    if installed.iter().any(|record| record.kind == Kind::Mcp) {
+                        match install::offers(workspace, &ledger, Kind::Mcp) {
+                            Ok(offered) => servers_offered = offered,
+                            Err(error) => unread = Some(error),
+                        }
+                    }
                     for &kind in kinds {
+                        if unread.is_some() {
+                            break;
+                        }
                         match install::standings(workspace, &ledger, project, kind) {
                             Ok(told) => standings.extend(
                                 told.into_iter()
@@ -540,7 +592,38 @@ impl ProjectStatus {
             .into_iter()
             .partition(|record| record.kind == Kind::Rule && project.settings().is_some());
         let received: Vec<String> = rules.iter().map(|record| record.name.to_string()).collect();
-        let rendered = rendered(root, &agents, rules, &standings);
+        let mut rendered = rendered(root, &agents, rules, &standings);
+        // And what it received as MCP servers is entries in its agents'
+        // config files, read from the ledger and those files, never by
+        // discovery, which reads no config file (D-23).
+        let (servers, installed): (Vec<InstallRecord>, Vec<InstallRecord>) = installed
+            .into_iter()
+            .partition(|record| record.kind == Kind::Mcp);
+        let served: Vec<String> = servers
+            .iter()
+            .map(|record| record.name.to_string())
+            .collect();
+        let mut entries = Vec::new();
+        if kinds.contains(&Kind::Mcp) {
+            let (listed, unread) =
+                install::entries::listed(linked_to, project, &servers, &servers_offered, &agents);
+            for failure in unread {
+                catalog = catalog.failing(failure);
+            }
+            rendered.extend(entered(&agents, servers, &listed, &standings));
+            entries = listed
+                .into_iter()
+                .filter_map(|listed| {
+                    Some(EntryStatus {
+                        state: State::of_standing(listed.standing)?,
+                        agent: listed.agent,
+                        file: listed.file,
+                        name: listed.name,
+                        origin: listed.origin,
+                    })
+                })
+                .collect();
+        }
         let (artifacts, placed): (Vec<ArtifactStatus>, Vec<Vec<String>>) =
             standing(root, catalog.artifacts(), installed, rendered, &standings)
                 .into_iter()
@@ -552,9 +635,10 @@ impl ProjectStatus {
             marker: Some(project.marker_file()),
             stale: None,
             unreached: unreached(project, kinds, &agents),
-            missed: missed(&agents, &artifacts, &received),
+            missed: missed(&agents, &artifacts, &received, &served),
             agents,
             artifacts,
+            entries,
         };
         (status, catalog, placed)
     }
@@ -787,19 +871,90 @@ fn rendered(
         .collect()
 }
 
-/// Each of `artifacts` that is one of the rules a project marked by its
-/// settings `received`, installed whole, with the agents among `agents`,
-/// its own, that read it nowhere ([`ProjectStatus::missed`]).
+/// How each MCP server's installation into a project stands, from what its
+/// entries are found to hold where its record says it wrote them (`listed`,
+/// as [`install::entries::listed`] lists them), each listed under the same
+/// rule as a rule received: after what discovery found, and not under a
+/// name the project holds something else by.
 ///
-/// From the rows as the report lists them, so what is said of a rule is
-/// what its row says it reaches.
-fn missed(agents: &[Agent], artifacts: &[ArtifactStatus], received: &[String]) -> Vec<Missed> {
+/// Missing while an entry it recorded is not found, and otherwise as core
+/// stands it, edited or orphaned over missing. It reaches each of `agents`,
+/// the project's own, whose entry is found in the file it was written into;
+/// where it is held is each of those files.
+fn entered(
+    agents: &[Agent],
+    records: Vec<InstallRecord>,
+    listed: &[install::entries::Listed],
+    standings: &[(Kind, String, Standing)],
+) -> Vec<(ArtifactStatus, Vec<String>)> {
+    records
+        .into_iter()
+        .map(|record| {
+            let found: Vec<(Agent, bool)> = record
+                .entries
+                .iter()
+                .map(|entry| {
+                    let held = listed.iter().any(|listed| {
+                        listed.agent == entry.agent
+                            && listed.file == entry.file
+                            && listed.name == entry.name
+                            && listed.standing != Standing::Foreign
+                            && listed.held
+                    });
+                    (entry.agent, held)
+                })
+                .collect();
+            let missing = found.iter().any(|(_, held)| !held);
+            let reached = agents
+                .iter()
+                .copied()
+                .filter(|agent| found.contains(&(*agent, true)))
+                .collect();
+            let mut placed: Vec<String> = record
+                .entries
+                .iter()
+                .map(|entry| entry.file.clone())
+                .collect();
+            placed.sort();
+            placed.dedup();
+            (
+                ArtifactStatus {
+                    kind: Kind::Mcp,
+                    state: State::installed(standing_of(standings, &record), missing),
+                    name: record.name,
+                    agents: reached,
+                    origin: record.origin,
+                },
+                placed,
+            )
+        })
+        .collect()
+}
+
+/// Each of `artifacts` that is one of the rules a project marked by its
+/// settings `received`, or of the MCP servers it was `served`, installed
+/// whole, with the agents among `agents`, its own, that read it nowhere
+/// ([`ProjectStatus::missed`]).
+///
+/// From the rows as the report lists them, so what is said of a rule or a
+/// server is what its row says it reaches.
+fn missed(
+    agents: &[Agent],
+    artifacts: &[ArtifactStatus],
+    received: &[String],
+    served: &[String],
+) -> Vec<Missed> {
     artifacts
         .iter()
         .filter(|held| {
-            held.kind == Kind::Rule
-                && held.state.whole()
-                && received.iter().any(|route| *route == held.name)
+            // Matched on the kind, so a kind added says whether it is
+            // received a section or an entry at a time.
+            let of = match held.kind {
+                Kind::Rule => received,
+                Kind::Mcp => served,
+                Kind::Skill => &[],
+            };
+            held.state.whole() && of.iter().any(|name| *name == held.name)
         })
         .filter_map(|held| {
             let agents: Vec<Agent> = agents

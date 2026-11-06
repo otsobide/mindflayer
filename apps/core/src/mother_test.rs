@@ -369,6 +369,36 @@ fn an_install_record_mother_files_each_copy_where_its_kind_goes() {
 
     let old = InstallRecordMother::before_hashes("deploy");
     assert_eq!((old.origin, old.content_hash), (None, None));
+
+    // A server's is entries, one in each agent's file under its name, and
+    // no copy.
+    let name = McpMother::name();
+    let server = InstallRecordMother::mcp(&name);
+    assert_eq!(server.kind, Kind::Mcp);
+    assert!(server.targets.is_empty());
+    let agents: Vec<Agent> = server.entries.iter().map(|entry| entry.agent).collect();
+    assert_eq!(agents, Agent::ALL);
+    let project = tempfile::TempDir::new().unwrap();
+    for entry in &server.entries {
+        assert_eq!(entry.name, name);
+        assert_eq!(
+            entry.agent.mcp_file(project.path()).ok(),
+            Some(entry.file.as_str())
+        );
+    }
+}
+
+#[test]
+fn any_install_record_holds_entries_for_a_server_alone_and_one_an_agent() {
+    for _ in 0..DRAWS {
+        let record = InstallRecordMother::any();
+        let mut agents: Vec<Agent> = record.entries.iter().map(|entry| entry.agent).collect();
+        assert!(record.kind == Kind::Mcp || agents.is_empty(), "{record:?}");
+        let count = agents.len();
+        agents.dedup();
+        assert_eq!(agents.len(), count, "{record:?}");
+        assert!(record.entries.iter().all(|entry| entry.name == record.name));
+    }
 }
 
 #[test]

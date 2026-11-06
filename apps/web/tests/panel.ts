@@ -21,6 +21,9 @@ import library from './fixtures/library.json'
 import loadsJson from './fixtures/loads.json'
 import planned from './fixtures/plans.json'
 import scan from './fixtures/scan.json'
+import servedJson from './fixtures/served.json'
+import serversJson from './fixtures/servers.json'
+import serving from './fixtures/serving.json'
 import unmade from './fixtures/unmade.json'
 import updated from './fixtures/updated.json'
 import surveyed from './fixtures/updates.json'
@@ -43,9 +46,12 @@ import workspace from './fixtures/workspace.json'
  * and an entry that opens none; and `updating`, a workspace to update,
  * which the page of updates draws beside tests/fixtures/updates.json: an
  * installation outdated, edited, missing and orphaned, and an entry that
- * opens none.
+ * opens none; and `serving`, a workspace keeping MCP servers, which their
+ * page draws beside tests/fixtures/servers.json: a program, an address and
+ * one reached over server-sent events, a loaded workspace's that waits for
+ * a yes, and a project for every agent holding one.
  */
-const FIXTURES = { workspace, unmade, candidates, assigning, updating }
+const FIXTURES = { workspace, unmade, candidates, assigning, updating, serving }
 
 export type Fixture = keyof typeof FIXTURES
 
@@ -245,6 +251,30 @@ export function authored(): Commanded[] {
  */
 export function loadings(): Commanded[] {
   return structuredClone(loadsJson) as unknown as Commanded[]
+}
+
+/**
+ * What the serving fixture's server answers when its page of MCP servers
+ * and its matrix ask (tests/fixtures/servers.json): a server to add judged
+ * fit, one whose secret is read from a variable no agent can refer to,
+ * `github` given another transport, and plans of the team's `sentry`, which
+ * waits for a yes, and the library's `linear`, into `web`. Copied, so a
+ * test may change its copy.
+ */
+export function servers(): Answered[] {
+  return structuredClone(serversJson) as unknown as Answered[]
+}
+
+/**
+ * What the serving fixture's server answers when each change its page of
+ * MCP servers and its matrix send is previewed and run, each on the
+ * workspace as it was built (tests/fixtures/served.json): a server added,
+ * `github` given another transport, and `sentry` into `web`, by the plan's
+ * task, which installs nothing, then by its confirmation's. Copied, so a
+ * test may change its copy.
+ */
+export function served(): Commanded[] {
+  return structuredClone(servedJson) as unknown as Commanded[]
 }
 
 /** A task as `send` was handed it, and how. */

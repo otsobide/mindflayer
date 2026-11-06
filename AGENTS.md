@@ -9,7 +9,8 @@ code; a **weaver workspace** (`.mindweaver/weaver.toml`, or the
 holds artifacts of its own, gathers skills from git onto a shelf and installs
 them into projects. `README.md` is the first page a newcomer reads: short,
 friendly and centred on the control panel (`mindweaver ui`), with screenshots
-`make docs/screenshots` takes and no command's output. `docs/reference.md`
+`make docs/screenshots` takes and no command's output but one, what an MCP
+server's install prints (#95). `docs/reference.md`
 is the user-facing reference: every command with its literal output, the
 formats, `--json`, the TUI, the panel in full and upgrading.
 `docs/api.md` is the guide to the HTTP API `mindweaver ui` serves, every
@@ -165,9 +166,15 @@ under `apps/` with its own `Makefile`:
   rendered into Claude's `.mcp.json` as its one entry and taken out again
   (`claude_mcp`), into Codex's `.codex/config.toml` the same way
   (`codex_mcp`), and into OpenCode's `opencode.json`, in either of its
-  shapes (`opencode_mcp`), and what `add` is told of
+  shapes (`opencode_mcp`), each with what it would write planned and
+  nothing written (`codex_mcp::planned`, `opencode_mcp::planned`), what an
+  agent runs or reaches of one, as its entry spells it (`mcp::Runs`,
+  `mcp/runs.rs`), and what `add` is told of
   how one is started or reached, a program or an address, and the
-  definition it writes from it (`mcp::Given`), the
+  definition it writes from it (`mcp::Given`), read back from one as the
+  options would say it (`Given::of`) and written again into one, every
+  other key kept (`mcp::retransported`, `lifecycle::retransport`, what
+  `edit` told the options does), the
   agents and where each kind goes for them (`agent`), the catalog, gathering
   (through `port::Remote`), the ledger (through `port::LedgerStore`), installing, keeping installs out of git
   (`exclude`), a project's rules rendered into the block of its `AGENTS.md`
@@ -175,9 +182,13 @@ under `apps/` with its own `Makefile`:
   Claude reads that block and the `@AGENTS.md` import in a project's
   `CLAUDE.md` that makes it (`claude_md`), installing a rule through those
   three, or as a copy into a project a `mind.toml` marks (`install::rules`),
-  changing a project's agents or share mode and carrying its installs along
-  (`reapply`), what each project holds, from where and for which agents
-  (`status`), finding a project that moved again by its id and giving a
+  installing an MCP server as an entry in the config file of each agent a
+  project names, through those renderers, and taking it out, and what an
+  install would give each agent, nothing written (`install::mcp`,
+  `install::mcp::preview`), changing a project's agents or share mode and carrying its installs along
+  (`reapply`), what each project holds, from where and for which agents,
+  each MCP server's entry in its agents' config files among it, as it stands
+  (`status`, `status::EntryStatus`, told in `install::entries`), finding a project that moved again by its id and giving a
   copy made with its `.mind` one of its own (`relink`), the workspaces this
   machine knows, a list the default
   workspace keeps, and those a front end on one may switch to
@@ -198,10 +209,15 @@ under `apps/` with its own `Makefile`:
   workspace's own from every project it links before the library
   (`everywhere`), and bringing a skill somebody keeps in a project's agents'
   folders into the library, its copies recorded as installed from there
-  (`adopt`), the stable code each of its errors gives (`code`), the
+  (`adopt`), what keeps a project's agents from what it gives them, which
+  no agent says, found from file reads alone and told the agent homes and
+  the names of the variables set (`doctor`, `doctor::Machine`), the stable
+  code each of its errors gives (`code`), the
   snapshot every front end reads a workspace through, with what it counts,
-  each project's health, and every offer with each project's box of it,
-  and the part of it `list --json` prints (`view`), every path a snapshot reads that a front end watches for a
+  each project's health, every offer with each project's box of it,
+  what doctor finds of each and each of the library's MCP servers as each
+  agent would be given it (`view::LibraryServer`), and the part of it
+  `list --json` prints (`view`), every path a snapshot reads that a front end watches for a
   change, each with the holder it is of (`watch`), one file of an artifact
   read as text for
   the panel, cut at its front matter when it is the one the artifact is
@@ -241,12 +257,14 @@ under `apps/` with its own `Makefile`:
   commands has a file under `src/commands/`: `project` (init, link, unlink,
   relink, scan), `workspace` (load, unload), `activate` (activate, which), `known`
   (workspaces, workspaces forget), `artifact` (add, edit, rename, remove,
-  templates), `read` (list, show, validate), `status`, `settings` (agents,
-  share, targets), `gather`, `install`, `update` and `migrate` (each at both
-  levels), `adopt` (mindweaver adopt) and `ui` (the panel, at both levels).
+  templates), `read` (list, show, validate), `status`, `doctor`, `settings`
+  (agents, share, targets), `gather`, `install`, `update` and `migrate`
+  (each at both levels), `adopt` (mindweaver adopt) and `ui` (the panel, at
+  both levels).
   `add mcp`'s options for how a server is started or reached are one
-  struct both binaries flatten (`ServerOptions`), which hands core a
-  `mcp::Given`. `src/render.rs` holds `Outcome`,
+  struct both binaries' `add` and `edit` flatten (`ServerOptions`), which
+  hands core a `mcp::Given`, and which a template, an editor and contents
+  each conflict with by the group clap gives it. `src/render.rs` holds `Outcome`,
   `Failure` and `Warning` (a stderr line, with its code beside it), the
   table helpers and the envelope every `--json` prints (`json`, and
   `as_json`, which lays a text outcome out in it),
@@ -319,7 +337,8 @@ under `apps/` with its own `Makefile`:
   by hand, `src/api/plan.ts` the queries of a plan of the boxes marked
   on the matrix and of the lines it runs (`usePlan`, `usePreview`), of one
   box once, for the command palette (`usePlanOnce`), and the batch a plan
-  applies (`batchOf`), and
+  applies (`batchOf`, each install said yes to as the task its
+  confirmation carries), and
   `src/api/updates.ts` the query of what an update of every project would
   do (`useUpdates`) and the task of updating them all (`UPDATE_ALL`),
   `src/api/folders.ts` the query of the folders inside one, read again
@@ -337,7 +356,9 @@ under `apps/` with its own `Makefile`:
   (`library`), one of its own
   (`artifact`, named by its kind and name in the query), its editor
   (`edit`, named the same way), the page adding one (`new`, its kind in
-  the query), the workspaces it loads and those this machine knows
+  the query), the library's MCP servers, each as each agent would be
+  given it, and the form adding one or changing how the one the query
+  names is started (`mcp`), the workspaces it loads and those this machine knows
   (`loads`), the shelf (`shelf`) and the sources (`sources`). `src/address.ts` reads and changes
   the query a page keeps its state in, `src/library.ts` finds the projects
   holding one of the library's own, `src/boxes.ts` a box of the matrix in
@@ -364,7 +385,9 @@ under `apps/` with its own `Makefile`:
   removal of one of the library's own everywhere, dry run first
   (`RemoveOffer`), its rename (`RenameForm`), the editor, CodeMirror in a
   shadow root of its own (`MarkdownEditor`), what core says of a draft
-  (`DraftVerdict`), the
+  (`DraftVerdict`), the form of an MCP server's transport, each of its
+  fields an option's value and a secret a variable's name
+  (`ServerForm`), the
   matrix's grid, drawn a screen at a time (`AssignGrid`), and
   what the runner draws beside the pages:
   `CommandRunner`, which makes it and says how each task ended in a toast,
@@ -430,7 +453,10 @@ These are easy to break from a single file without noticing.
   locked, by the code the command refuses it with (`Standing::refused`).
   Where an agent reads
   (`Agent::reads`) is kept apart from where it is sent a copy: OpenCode reads
-  `.claude/skills` and is sent nothing there. Which folders a project is read
+  `.claude/skills` and is sent nothing there. Which config file an agent is
+  given an MCP server's entry in is core's too (`Agent::mcp_file`), asked of
+  the renderer that writes it, OpenCode's the first of its four there is.
+  Which folders a project is read
   from is core's too (`Catalog::folders`), and so are the names at a
   project's root that show an agent works there (`Agent::reads_at_root`) and
   the order `mindweaver scan --suggest` ranks what it finds in (`scan::Order`),
@@ -496,7 +522,22 @@ These are easy to break from a single file without noticing.
   `mindweaver install` and `mindweaver uninstall` lines they amount to
   (`Screen::task`), as core plans them (`install::Plan::of`), each change
   the task that runs it (`Task::from`), each run whatever came of the others
-  (`Task::chained`), so its transcript runs again. A batch a screen builds
+  (`Task::chained`), so its transcript runs again. An MCP server marked
+  that comes from elsewhere than the library is previewed when the screen
+  is built (`install::mcp::preview`), each agent's line shown in the
+  confirmation before the screen applies (`Screen::previews`), and only
+  its line carries `--yes` (`Task::confirmed`). The panel's matrix confirms
+  one the same way: a plan hands, beside its tasks, each install that
+  waits for a yes with the same lines (`Planned::asks`, laid out by
+  `install::foreseen` under `install::heading`, which the screen uses too)
+  and the task carrying the yes (`Task::confirmed`), which the page sends
+  in the place of the plan's own only once those lines are ticked as read
+  (`batchOf`); `Task::Install`'s `yes` is JSON for that alone, the panel
+  setting it on no task of its own, and the path policy refuses one sent
+  with any other install (`policy::confirmed`, `install_yes_unasked`). The
+  MCP page's form sends `Task::Add` with a `server` and `Task::EditServer`,
+  `add mcp`'s and `edit`'s options as an `mcp::Given`, for the task module
+  to spell. A batch a screen builds
   from its marks or its toggles is built in the task module, from what was
   marked (`Task::minds`, from each folder's `MindsChange`) or what the
   settings and the toggles say (`Task::settings`, from two `Toggles`), and
@@ -549,8 +590,8 @@ These are easy to break from a single file without noticing.
   by hand for a line built from text.
 - **Reading commands print JSON in one envelope, and its names are a
   contract.** A reading command's `--json` (`list`, `show`, `validate`,
-  `templates` and `status` at both levels, `workspaces`, `scan` and `gather
-  list`) prints `render::json`'s `{"version": 2, "data": ..., "warnings":
+  `templates`, `status` and `doctor` at both levels, `workspaces`, `scan`
+  and `gather list`) prints `render::json`'s `{"version": 2, "data": ..., "warnings":
   [...], "coded_warnings": [...]}`, never a shape of its own, with what its
   text says on stderr as `warning:` lines in `warnings`, the same lines
   with their codes in `coded_warnings`, and the exit status its text has;
@@ -583,6 +624,12 @@ These are easy to break from a single file without noticing.
   end. It is a read: the ledger only through `ledger_for_reading`, the
   default workspace never made, nothing scrubbed, and no scan, which is a
   query of its own (a test counts scans with `scan::scans`, a test build's).
+  What doctor finds of each project is in it (`doctor`), and of a project
+  no workspace links beside its read (`view::Project::read_examined`),
+  told the agent homes and the names of the variables set the front end
+  decided (`doctor::Machine`, handed to `Snapshot::of` and
+  `Snapshot::read`), and what it reads is watched as the rest is
+  (`watch::watched`, given the same agent homes).
   Its names are a contract under `view::FORMAT`, as a report's are under
   `ENVELOPE_VERSION`, and every URL in it, an error's message included,
   goes out through `url::redacted`. What a front end reads beside it is
@@ -679,9 +726,10 @@ These are easy to break from a single file without noticing.
     `# mindweaver:begin`/`# mindweaver:end` in
     `$GIT_COMMON_DIR/info/exclude` (`exclude`), where an edit rewrites only its
     own project's `# project <key>` group: an install writes one entry per
-    copy for a local project, keyed by its id, before the copies land, and
-    a render of Claude's rule files one per file, and neither opens the file
-    for a shared project or one a `mind.toml` marks. A
+    copy for a local project, keyed by its id, before the copies land, an
+    install of an MCP server one per config file it makes, before the file
+    lands, and a render of Claude's rule files one per file, and none opens
+    the file for a shared project or one a `mind.toml` marks. A
     project turning shared has its whole group forgotten (`exclude::forget`),
     and one turning local an entry written for each copy in place. No entry
     is written for a copy git tracks (`install::untracked`), by an install,
@@ -803,7 +851,10 @@ These are easy to break from a single file without noticing.
     project at the workspace's root is that project's (D-03).
 - **Mindweaver only manages what it installed.** The ledger's record of an
   install (one installation, a target for each copy it wrote, its origin and
-  the `hash::tree` of what it wrote, that hash's one definition) is what
+  the `hash::tree` of what it wrote, that hash's one definition, or for an
+  MCP server an entry target for each entry it wrote into an agent's config
+  file, keyed by the agent, with the `hash::fingerprint` of what it wrote,
+  schema 6's `installation_entries`) is what
   allows overwriting and deleting. An install writes a copy in every target
   `install::targets` gives (each folder the project's agents read, or the one
   a `mind.toml` names), built from one tree and put in place together or not
@@ -814,7 +865,13 @@ These are easy to break from a single file without noticing.
   was written there and by what its origin offers now (`install::Standing`,
   `install::standings`, D-04): `Current`, `Outdated`, `Edited`, `Missing` or
   `Orphaned`, the first true of edited, orphaned, missing and outdated said
-  over the rest. An `Edited` copy refuses the whole install or uninstall as a
+  over the rest. An MCP server's entry stands in the same words, told by its
+  record, the fingerprint its agent's file holds under its name and what is
+  offered now as its renderer renders it for that agent
+  (`install::entries`, `install::entry_standings`): foreign by its name in
+  the file rather than by a path, missing when the file cannot be read too,
+  which is said with the renderer's code (`install::ConfigUnread`), and
+  each file read as its renderer reads it to write. An `Edited` copy refuses the whole install or uninstall as a
   foreign one does (`Installed::Edited`, `Removed::Edited`) unless it is
   forced (`install_with`, `uninstall_with` and `uninstall_typed` given
   `Edits::Forced`, the CLI's `--force`), and forcing never reaches a copy
@@ -827,11 +884,44 @@ These are easy to break from a single file without noticing.
   rules in one render that keeps an orphaned rule as it is
   (`install::rules::update_held`); it leaves an `Edited` one, every copy of
   it, unless forced, and says an `Orphaned` one without failing. An
-  uninstall removes the copies its record names and nothing else. No
-  install writes an MCP server yet (`install::installs`, refused as
-  `not_installable` wherever a project is asked where one goes, which every
-  project's boxes in the snapshot say), nor does an adoption or a gather;
-  `add` writes a definition where its holder keeps servers, as it writes a
+  uninstall removes the copies its record names and nothing else. An MCP
+  server is installed as entries (`install::mcp`): one installation, an
+  entry in the config file of each agent the project names, written through
+  the agent's renderer and recorded by its fingerprint, all of them or none,
+  a file that fails putting back each written before it and recording
+  nothing. An agent its renderer refuses the definition (one it cannot
+  express, an input read from no variable, a name the user's Codex config
+  holds), one whose file git tracks in a local project without
+  `edit_tracked`, and Codex in a project it does not trust, which is written
+  all the same, are said as not reached by their code
+  (`install::mcp::Rendered`), the others given it; one reaching none is
+  refused (`mcp_unreached`). A server of the name nothing records in a file
+  it writes is `Standing::Foreign` and refuses the whole install
+  (`Installed::Foreign`), and an edited entry refuses an install or an
+  uninstall unless forced, forcing never reaching an entry nothing records.
+  An agent its renderer now refuses loses the entry an earlier install
+  recorded for it, taken out as an uninstall takes it, and one whose file
+  is withheld keeps it, recorded. An
+  uninstall takes out only the entries its record names, from the file
+  each names (`opencode_mcp::remove_from`), every other server kept, and a
+  file Mindweaver made with its last server; one in a file git tracks in a
+  local project without `edit_tracked` refuses it (`mcp_entry_unedited`).
+  An update writes one through `install_held`, as a skill. A local project
+  keeps out of git only the config files an install makes, a line each
+  written before the file lands, noted in `created_files`. A server is
+  stepped through as every kind is (`install::installs`, which `survey`,
+  `receives`, a name typed bare and the plan follow), and never asked for
+  a folder (`install::targets` refuses it, `not_copied`). What an install
+  gives each agent is decided before anything is written (`decide`), and
+  a preview asks the same of each renderer's plan, writing nothing
+  (`install::mcp::preview`, `codex_mcp::planned`, `opencode_mcp::planned`);
+  what each agent runs or reaches is read off its renderer's own entry
+  (`mcp::Runs`, `Entry::runs`), never spelled again in a front end. One
+  from elsewhere than the library, a loaded workspace's or the shelf's,
+  is only previewed until somebody says yes (`install::asks_first`,
+  `install::Confirmed`, the CLI's `--yes`), the library's own installed
+  as a skill is. No adoption or gather writes one; `add`
+  writes a definition where its holder keeps servers, as it writes a
   skill, and records nothing, writing nothing into an agent's config. No copy
   holds a skill's top-level `.claude-plugin`
   (`install::LeftOut`), and none lands inside an agent's own folder
@@ -890,7 +980,9 @@ These are easy to break from a single file without noticing.
   ledger and the block (`status`, D-23), never by discovery, which reads no
   block, and a front end finds what to change through
   `lifecycle::find_to_change`, which refuses such a rule as received rather
-  than as nothing.
+  than as nothing, and an MCP server the ledger records as one the project
+  received too (`LifecycleError::ReceivedServer`), with a hint to uninstall
+  it or change the library's definition and update.
 - **Strict when writing, lenient when reading.** A skill's front matter is
   the Agent Skills format. `mind add`, `rename`, `install`, `mindweaver adopt`
   and `edit --contents` (`lifecycle::replace_contents`, which also refuses
@@ -969,7 +1061,10 @@ These are easy to break from a single file without noticing.
     (`policy::switched`): another spelling, a path never listed or one
     starting with a dash is refused (`switch_unlisted`), a listed one that
     does not open is refused with why, never made, and a refusal switches
-    nothing. A refused task runs nothing, and every refusal has a code.
+    nothing. A yes an install carries is one to an MCP server that asks
+    first (`policy::confirmed`), held by `Admission::task` as every value
+    is, and refused otherwise. A refused task runs nothing, and every
+    refusal has a code.
   - A file reaches the browser only as text inside JSON, no larger than
     `contents::CAP`, binary or larger reported by its size alone, and never
     served as itself (`contents::Contents`); its links are judged by
@@ -1040,8 +1135,8 @@ These are easy to break from a single file without noticing.
     redacted where it is written.
 - **Writers take turns; readers never wait.** Core's writers hold the
   workspace's `.mindweaver/lock` (`WeaverWorkspace::lock`) while they change
-  it: `edit_array`, `install::install` and `uninstall`,
-  `install::rules::render`, `gather::gather`,
+  it: `edit_array`, `install::install` and `uninstall`, an MCP server's
+  among them (`install::mcp`), `install::rules::render`, `gather::gather`,
   `gather::scrub`, which `WeaverWorkspace::ledger_to_write` runs, when it has
   clones to rewrite, `migrate::library`, from its plan to its rewrite of
   the marker, `migrate::names`, from its plan to the rename of the folder
@@ -1059,7 +1154,7 @@ These are easy to break from a single file without noticing.
   `install::rules::update_held`, which take none of their own. A new
   writer takes it the same way, inside core; `config_entry::ConfigFile`,
   `claude_mcp::render` and `remove`, `codex_mcp::render` and `remove`,
-  `opencode_mcp::render` and `remove`, `agents_md::render`, `claude_rules::render`, `claude_md::render` and
+  `opencode_mcp::render`, `remove` and `remove_from`, `agents_md::render`, `claude_rules::render`, `claude_md::render` and
   `MindProject::change_settings` take none, since
   the writers that call them hold it, and `assign::install` and
   `uninstall` none across their batch, leaving it to each project's
@@ -1205,17 +1300,26 @@ These are easy to break from a single file without noticing.
   (`--claude-config-dir`, `--codex-home`, `--opencode-config-dir`,
   `--agents-dir`), then `$CLAUDE_CONFIG_DIR`, `$CODEX_HOME` or
   `$OPENCODE_CONFIG_DIR`, then `~/.claude`, `~/.codex`, `~/.config/opencode`
-  or `~/.agents`; empty means none. Those folder names are core's
-  (`AgentHomes::defaults_under`), and only the user's home is the CLI's to
-  find. Core takes the answer as `AgentHomes` and never resolves one.
+  or `~/.agents`; empty means none. While `$CLAUDE_CONFIG_DIR` or
+  `$OPENCODE_CONFIG_DIR` names a folder of its own, the one in the user's
+  home is kept beside it (`claude_dir_in_home`, `opencode_dir_in_home`),
+  which OpenCode reads all the same (docs/agents.md); an option names the
+  one folder outright, so a pinned test reaches neither. Those folder
+  names are core's (`AgentHomes::defaults_under`), and only the user's
+  home is the CLI's to find. Core takes the answer as `AgentHomes` and never resolves one.
   `Lookup::given` decides them once per command line, into the `Lookup`
   (`Lookup::agents`), and install is the first to take them, to refuse a
   copy inside one, as `agents_md::render` and `claude_rules::render` take
   them to refuse rules there, `claude_md` to leave the user memory file
   out of what keeps Claude from reading `AGENTS.md`,
   `codex_mcp::render` to refuse a `.codex/config.toml` inside one and to
-  read, never write, the Codex home's `config.toml`, and
-  `opencode_mcp::render` to refuse OpenCode's config inside one. `tui::execute` hands each line the TUI's own
+  read, never write, the Codex home's `config.toml`,
+  `opencode_mcp::render` to refuse OpenCode's config inside one, and
+  doctor to read, never write, what each holds that a project's agents
+  read too (`AgentHomes::skills_read_by`), told beside them the names of
+  the environment variables set, names alone (`Lookup::variables`,
+  `Lookup::machine`), decided once per command line the same way.
+  `tui::execute` hands each line the TUI's own
   with the rest of its `Lookup`, and so does its install screen: a command
   the TUI runs carries none of the four options, so it would decide them
   again from the environment.
@@ -1442,14 +1546,15 @@ These are easy to break from a single file without noticing.
   `Agent::reads_at_root`, matches every agent the same way. So do the
   matches that say what a kind is not yet given: a default folder beside
   the code (`Directories::default_for`), an install (`install::installs`,
-  behind the refusal in `install::targets`), a scaffold
+  behind the refusal in `install::targets`, and `install::asks_first`,
+  which says whether one waits for a yes), a scaffold
   (`create::scaffolds`), and the words a sentence names it by
   (`Kind::noun`, `Kind::plural`), which every message and count asks rather
   than spelling `{kind}s`. And the matches on the agent that say which MCP
   servers' names it keeps for itself (`mcp::name`'s `reserved` and
-  `claimed`) and what it cannot be given of a definition
-  (`McpDefinition::inexpressible`), each from docs/agents.md's "MCP
-  servers".
+  `claimed`), what it cannot be given of a definition
+  (`McpDefinition::inexpressible`) and what it asks before it starts one
+  (`Agent::starts_a_server`), each from docs/agents.md's "MCP servers".
   "Adding an agent" also lists what no match covers: `Agent::ALL`, and an
   agent home's field, option and place in `common::PINNED` and `CLEARED`.
 
@@ -1463,8 +1568,9 @@ These are easy to break from a single file without noticing.
   `apps/core/src/mother/`), never by hand where a mother makes it: one per
   value object (`ContentHashMother`, `RedactedMother`, `OriginMother`,
   `ArtifactNameMother`, `RevisionMother`, `ProjectIdMother`), per record the
-  ledger keeps (`InstallRecordMother`, `TargetMother`, `SourceMother`,
-  `GatheredMother`, `MovedMother`, `EntryMother`), for a skill's and a
+  ledger keeps (`InstallRecordMother`, `TargetMother`, `EntryTargetMother`,
+  `SourceMother`, `GatheredMother`, `MovedMother`, `EntryMother`), for a
+  skill's and a
   rule's text (`SkillMother`, `RuleMother`), an MCP server's definition,
   one for each transport and one for each shape a rule or an agent is
   about (`McpMother`: `misnamed`, `secret_without_variable`, a token of each
@@ -1723,7 +1829,12 @@ These are easy to break from a single file without noticing.
   what `mindweaver validate` says once one is written, which the editor's
   verdict is held to word for word (`validated.json`), and each change
   authoring sends, previewed and run each on the workspace as built
-  (`authored.json`). `tests/panel.ts` reads them and
+  (`authored.json`), and, of a workspace built to keep MCP servers
+  (`serving.json`), what its MCP page and its matrix ask of it, drafts of
+  a server judged and plans of one that asks first and one that does not
+  (`servers.json`), and each change they send, previewed and run each on
+  the workspace as built (`served.json`), none of them holding a token.
+  `tests/panel.ts` reads them and
   mounts the panel at an address, answering its queries with them, and a
   task with its preview and its run, told finished on the stream before
   it is answered, as the server tells it (`commanding`); a test about
@@ -1765,10 +1876,13 @@ These are easy to break from a single file without noticing.
   to seeing one. No spec changes the shared workspace: a test that changes
   something takes a workspace and a `mindweaver ui` of its own (`own`, built by
   `changeable`, or what the spec's `building` names, `assignable` for the
-  matrix's, `updatable` for updating and removing or `authorable` for
-  editing, adding and renaming in the library, beside a copy of it
+  matrix's, `updatable` for updating and removing, `authorable` for
+  editing, adding and renaming in the library or `serveable` for adding
+  an MCP server and assigning it, beside a copy of it
   and served by `serve`, through
-  `environment.ts` as every process is), and holds what the panel left to
+  `environment.ts` as every process is, with what the spec's `variables`
+  set in its environment alone, an MCP server's secret drawn as the run
+  starts among them), and holds what the panel left to
   what the same command leaves in the copy. That `mindweaver ui` runs with
   `--log`, and a test that fails keeps what it said beside its trace
   (`close`, in `panel.ts`), which `log.spec.ts` holds to saying a run and
@@ -1867,9 +1981,11 @@ These are easy to break from a single file without noticing.
   them, updates `docs/api.md` too, whose answers `api_guide_test` holds to
   the server's. Literal output belongs in the reference, never in the
   README, which says what Mindweaver is and tours the panel in a few
-  screens. A change to what the panel shows, a page, a view or its look,
-  runs `make docs/screenshots`, and its PR carries the images it wrote; a
-  change to what the README says of the panel goes with it.
+  screens: its one example is what an MCP server's install prints, re-run
+  with the reference's when that changes. A change to what the panel
+  shows, a page, a view or its look, runs `make docs/screenshots`, and its
+  PR carries the images it wrote; a change to what the README says of the
+  panel goes with it.
 
 ## Style
 

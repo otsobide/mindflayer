@@ -14,12 +14,13 @@ use std::io;
 use std::time::Duration;
 
 use mindweaver_core::gather::Watch;
-use mindweaver_core::install;
+use mindweaver_core::install::{self, Edits};
 use mindweaver_core::ledger::Ledger;
-use mindweaver_core::{Kind, MindProject, WeaverWorkspace};
+use mindweaver_core::{AgentHomes, Kind, MindProject, WeaverWorkspace};
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::DefaultTerminal;
 
+use crate::commands::install::{entries_said, named};
 use crate::commands::workspace::load_warnings;
 use crate::tui::state::{transcript, Done};
 use crate::{tui, CliError, Failure, Lookup, Outcome, Warning};
@@ -36,7 +37,7 @@ use state::{Screen, Step, Target};
 /// chose.
 pub fn run(workspace: &WeaverWorkspace, lookup: &Lookup) -> Result<Outcome, Failure> {
     let (projects, warnings) = registered(workspace);
-    let screen = open(workspace, projects)?;
+    let screen = open(workspace, projects, &lookup.agents)?;
 
     if screen.targets.is_empty() {
         let mut stderr = warnings;
@@ -110,9 +111,17 @@ pub fn finish(
 /// The screen `mindweaver install` opens and the one inside the TUI both open here
 /// and apply as the lines [`Screen::task`] gives, so they cannot differ about
 /// either.
-pub fn open(workspace: &WeaverWorkspace, projects: Vec<MindProject>) -> Result<Screen, CliError> {
+///
+/// `homes` are the agents' own folders the command line decided, which what
+/// an install of an MCP server would give each agent is read against, as
+/// the line that installs it reads it.
+pub fn open(
+    workspace: &WeaverWorkspace,
+    projects: Vec<MindProject>,
+    homes: &AgentHomes,
+) -> Result<Screen, CliError> {
     let read = workspace.ledger_for_reading()?;
-    Ok(build(workspace, &read, projects)?)
+    Ok(build(workspace, &read, projects, homes)?)
 }
 
 /// Carry out what `screen` marked: each line it amounts to ([`Screen::task`])
@@ -152,7 +161,9 @@ pub fn registered(workspace: &WeaverWorkspace) -> (Vec<MindProject>, Vec<Warning
 }
 
 /// Ask core how everything of every kind that can be installed stands with
-/// each project.
+/// each project, and, for each offer whose install waits for a yes, what it
+/// would give each agent there ([`install::mcp::preview`]), laid out as the
+/// line installing it says it ([`previewed`]).
 ///
 /// Public because it and [`apply`] are the two ends of this feature that do
 /// not need a terminal: a test builds a screen, presses the keys a person
@@ -161,6 +172,7 @@ pub fn build(
     workspace: &WeaverWorkspace,
     ledger: &Ledger,
     projects: Vec<MindProject>,
+    homes: &AgentHomes,
 ) -> Result<Screen, install::InstallError> {
     let mut targets = Vec::new();
     for project in projects {
@@ -176,10 +188,78 @@ pub fn build(
         for (row, held) in target.rows.iter_mut().zip(held) {
             row.was = held;
             row.checked = held;
+            if row.candidate.asks_first() {
+                row.preview = Some(foreseen(
+                    workspace,
+                    ledger,
+                    &target.project,
+                    &row.candidate,
+                    homes,
+                ));
+            }
         }
         targets.push(target);
     }
     Ok(Screen::new(targets))
+}
+
+/// What installing `candidate`, which waits for a yes, into `project` would
+/// give each agent there, as a confirmation shows it before the yes: core's
+/// preview of it ([`install::mcp::preview`]), laid out as the line
+/// installing it says it ([`previewed`]). One for the install screen and
+/// the panel's backend, so the two confirm a server in the same words.
+pub(crate) fn foreseen(
+    workspace: &WeaverWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+    candidate: &install::Candidate,
+    homes: &AgentHomes,
+) -> Vec<String> {
+    previewed(install::mcp::preview(
+        workspace,
+        ledger,
+        project,
+        candidate,
+        homes,
+        Edits::Kept,
+    ))
+}
+
+/// The line a confirmation names an install by, above what it would give
+/// each agent ([`foreseen`]): `mcp github into api, from load:../team:`.
+pub(crate) fn heading(kind: Kind, name: &str, project: &str, origin: &str) -> String {
+    format!("{} into {project}, from {origin}:", named(kind, name))
+}
+
+/// What a preview of an install, `done`, says, a line each, as the line
+/// installing it says it under its own ([`entries_said`]), each warning
+/// after what each agent would run, or why it would be refused.
+fn previewed(done: Result<install::Installation, install::InstallError>) -> Vec<String> {
+    match done {
+        Ok(done) => {
+            let Some(entries) = &done.entries else {
+                // Refused before any agent was asked: somebody's server of
+                // the name, or an entry changed since it was written.
+                return vec![format!("  refused: {}", refused(&done.installed))];
+            };
+            let (lines, warned) = entries_said(entries, None, false);
+            let mut said: Vec<String> = lines.lines().map(str::to_owned).collect();
+            said.extend(
+                warned
+                    .into_iter()
+                    .map(|warning| format!("  {}", warning.text)),
+            );
+            said
+        }
+        Err(error) => vec![format!("  error: {error}")],
+    }
+}
+
+/// Why an install wrote nothing, by its code, as the line says it.
+fn refused(installed: &install::Installed) -> String {
+    installed
+        .refused()
+        .map_or_else(String::new, |refused| refused.code().to_owned())
 }
 
 /// Draw, wait for a key, repeat.

@@ -87,6 +87,22 @@ fn a_report_serializes_every_field_by_the_name_it_is_held_to() {
                         origin: Some(Origin::from("workspace")),
                     },
                 ],
+                entries: vec![
+                    EntryStatus {
+                        agent: Agent::Claude,
+                        file: String::from(".mcp.json"),
+                        name: "github".into(),
+                        state: State::Edited,
+                        origin: Some(Origin::from("workspace")),
+                    },
+                    EntryStatus {
+                        agent: Agent::OpenCode,
+                        file: String::from("opencode.json"),
+                        name: "theirs".into(),
+                        state: State::Foreign,
+                        origin: None,
+                    },
+                ],
             },
             ProjectStatus {
                 name: None,
@@ -98,6 +114,7 @@ fn a_report_serializes_every_field_by_the_name_it_is_held_to() {
                 unreached: Vec::new(),
                 missed: Vec::new(),
                 artifacts: Vec::new(),
+                entries: Vec::new(),
             },
         ],
     };
@@ -116,9 +133,15 @@ fn a_report_serializes_every_field_by_the_name_it_is_held_to() {
             r#"{"kind":"skill","name":"deploy","state":"missing","#,
             r#""agents":["opencode"],"origin":"workspace"},"#,
             r#"{"kind":"rule","name":"rust/errors","state":"current","#,
-            r#""agents":["claude"],"origin":"workspace"}]},"#,
+            r#""agents":["claude"],"origin":"workspace"}],"#,
+            r#""entries":["#,
+            r#"{"agent":"claude","file":".mcp.json","name":"github","state":"edited","#,
+            r#""origin":"workspace"},"#,
+            r#"{"agent":"opencode","file":"opencode.json","name":"theirs","state":"foreign","#,
+            r#""origin":null}]},"#,
             r#"{"name":null,"entry":"../old-api","path":"/old-api","marker":null,"#,
-            r#""agents":[],"stale":"gone","unreached":[],"missed":[],"artifacts":[]}]}"#,
+            r#""agents":[],"stale":"gone","unreached":[],"missed":[],"artifacts":[],"#,
+            r#""entries":[]}]}"#,
         )
     );
 }
@@ -143,6 +166,7 @@ fn where_an_artifact_is_held_is_every_copy_found_and_every_place_recorded() {
             target(".claude/skills/deploy"),
             target(".agents/skills/deploy"),
         ],
+        entries: Vec::new(),
     };
     let found = || {
         vec![

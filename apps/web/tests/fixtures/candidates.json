@@ -14,15 +14,7 @@
   ],
   "boxes": [
     {
-      "closed": [
-        {
-          "kind": "mcp",
-          "why": {
-            "code": "not_installable",
-            "message": "MCP servers cannot be installed into a project yet"
-          }
-        }
-      ],
+      "closed": [],
       "entry": "api",
       "held": [
         {
@@ -42,15 +34,7 @@
       ]
     },
     {
-      "closed": [
-        {
-          "kind": "mcp",
-          "why": {
-            "code": "not_installable",
-            "message": "MCP servers cannot be installed into a project yet"
-          }
-        }
-      ],
+      "closed": [],
       "entry": "web",
       "held": [
         {
@@ -70,15 +54,7 @@
       ]
     },
     {
-      "closed": [
-        {
-          "kind": "mcp",
-          "why": {
-            "code": "not_installable",
-            "message": "MCP servers cannot be installed into a project yet"
-          }
-        }
-      ],
+      "closed": [],
       "entry": "docs",
       "held": [
         {
@@ -149,13 +125,87 @@
         {
           "kind": "mcp",
           "why": {
-            "code": "not_installable",
-            "message": "MCP servers cannot be installed into a project yet"
+            "code": "no_target",
+            "message": "legacy names no agent in its settings that MCP servers are installed for, so none can be installed into it"
           }
         }
       ],
       "entry": "legacy",
       "held": []
+    }
+  ],
+  "doctor": [
+    {
+      "entry": "api",
+      "failures": [],
+      "findings": [],
+      "name": "api",
+      "path": "/home/you/Projects/api"
+    },
+    {
+      "entry": "web",
+      "failures": [],
+      "findings": [
+        {
+          "agents": [
+            "opencode"
+          ],
+          "code": "doctor_copies_differ",
+          "fix": "make the copies hold the same, or keep one and remove the others",
+          "message": "/home/you/Projects/web/.agents/skills/review: `review` is also at /home/you/Projects/web/.claude/skills/review, which OpenCode reads too, and the copies differ, so it loads one of them",
+          "path": "/home/you/Projects/web/.agents/skills/review"
+        }
+      ],
+      "name": "web",
+      "path": "/home/you/Projects/web"
+    },
+    {
+      "entry": "docs",
+      "failures": [],
+      "findings": [
+        {
+          "agents": [
+            "codex"
+          ],
+          "code": "doctor_unreached",
+          "fix": "point them at one of those folders, or install skills where they read with `mind targets reset skill`",
+          "message": "/home/you/Projects/docs/.skills: Codex reads none of the folders the project installs skills in (.skills), so what is installed there reaches it nowhere until it is pointed at one",
+          "path": "/home/you/Projects/docs/.skills"
+        }
+      ],
+      "name": "docs",
+      "path": "/home/you/Projects/docs"
+    },
+    {
+      "entry": "gone",
+      "failures": [
+        {
+          "code": "not_a_project",
+          "message": "/home/you/Projects/gone: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
+        }
+      ],
+      "findings": [],
+      "name": null,
+      "path": "/home/you/Projects/gone"
+    },
+    {
+      "entry": "old",
+      "failures": [
+        {
+          "code": "not_a_project",
+          "message": "/home/you/Projects/old: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
+        }
+      ],
+      "findings": [],
+      "name": null,
+      "path": "/home/you/Projects/old"
+    },
+    {
+      "entry": "legacy",
+      "failures": [],
+      "findings": [],
+      "name": "legacy",
+      "path": "/home/you/Projects/legacy"
     }
   ],
   "format": 1,
@@ -346,6 +396,56 @@
       }
     ],
     "origin": "workspace",
+    "servers": [
+      {
+        "agents": [
+          {
+            "agent": "claude",
+            "dropped": [],
+            "refused": [],
+            "runs": {
+              "line": "npx -y @modelcontextprotocol/server-github",
+              "reaches": false
+            },
+            "starts": "once_approved"
+          },
+          {
+            "agent": "codex",
+            "dropped": [],
+            "refused": [],
+            "runs": {
+              "line": "npx -y @modelcontextprotocol/server-github",
+              "reaches": false
+            },
+            "starts": "in_a_trusted_project"
+          },
+          {
+            "agent": "opencode",
+            "dropped": [],
+            "refused": [],
+            "runs": {
+              "line": "npx -y @modelcontextprotocol/server-github",
+              "reaches": false
+            },
+            "starts": "unasked"
+          }
+        ],
+        "given": {
+          "arg_env": [],
+          "args": [
+            "-y",
+            "@modelcontextprotocol/server-github"
+          ],
+          "command": "npx",
+          "env": [],
+          "secret_env": [
+            "GITHUB_PERSONAL_ACCESS_TOKEN"
+          ],
+          "type": "program"
+        },
+        "name": "github"
+      }
+    ],
     "templates": [
       {
         "kind": "skill",
@@ -482,6 +582,7 @@
           "path": "rules"
         }
       ],
+      "entries": [],
       "entry": "api",
       "failures": [],
       "health": "ok",
@@ -625,6 +726,7 @@
           "path": "rules"
         }
       ],
+      "entries": [],
       "entry": "web",
       "failures": [
         {
@@ -752,6 +854,7 @@
           "path": "rules"
         }
       ],
+      "entries": [],
       "entry": "docs",
       "failures": [],
       "health": "broken",
@@ -848,6 +951,7 @@
       "agents": [],
       "artifacts": [],
       "directories": [],
+      "entries": [],
       "entry": "gone",
       "failures": [],
       "health": "stale",
@@ -917,6 +1021,7 @@
       "agents": [],
       "artifacts": [],
       "directories": [],
+      "entries": [],
       "entry": "old",
       "failures": [],
       "health": "stale",
@@ -995,6 +1100,7 @@
           "path": "rules"
         }
       ],
+      "entries": [],
       "entry": "legacy",
       "failures": [],
       "health": "ok",

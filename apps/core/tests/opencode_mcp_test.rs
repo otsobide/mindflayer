@@ -319,7 +319,7 @@ fn an_entry_laid_out_again_is_still_the_one_mindweaver_wrote() {
     let key = ["mcp", "servers", name.as_str()];
     assert_eq!(
         file.get(&key).unwrap().unwrap().fingerprint(),
-        rendered.entry.value.fingerprint()
+        rendered.entry.fingerprint()
     );
 
     // As a person might write it again: on one line, its keys in another
@@ -473,6 +473,36 @@ fn only_the_opencode_json_mindweaver_makes_is_ever_taken_away() {
         read(root.path(), ".opencode/opencode.jsonc"),
         "{\n  \"mcp\": {\n    \"servers\": {}\n  }\n}\n"
     );
+}
+
+#[test]
+fn a_server_is_taken_out_of_the_file_named_though_another_comes_first_now() {
+    let name = McpMother::name();
+    let root = TempDir::new().unwrap();
+    let written = ".opencode/opencode.json";
+    write(root.path(), written, "{}\n");
+    render(root.path(), &McpMother::http(&name));
+    // Somebody keeps a server of the name in the file that comes first now.
+    write(root.path(), FILE, TEAMS);
+    render(root.path(), &McpMother::http(&name));
+    let theirs = read(root.path(), FILE);
+
+    assert_eq!(
+        opencode_mcp::remove_from(root.path(), written, &name, false).unwrap(),
+        Written::Changed
+    );
+    assert_eq!(
+        read(root.path(), written),
+        "{\n  \"mcp\": {\n    \"servers\": {}\n  }\n}\n"
+    );
+    assert_eq!(read(root.path(), FILE), theirs);
+    // A route that is none of OpenCode's files holds none of its servers.
+    write(root.path(), "config.json", &theirs);
+    assert_eq!(
+        opencode_mcp::remove_from(root.path(), "config.json", &name, true).unwrap(),
+        Written::Unchanged
+    );
+    assert_eq!(read(root.path(), "config.json"), theirs);
 }
 
 #[test]
@@ -873,4 +903,30 @@ fn the_keys_opencode_s_mcp_holds_itself_are_no_servers_of_v1_s() {
         );
     }
     assert_eq!(read(root.path(), FILE), TEAMS);
+}
+
+#[test]
+fn what_a_render_would_write_is_planned_in_its_file_and_shape_with_nothing_written() {
+    let name = McpMother::name();
+    let definition = parsed(&McpMother::stdio(&name));
+    let empty = TempDir::new().unwrap();
+    let kept = TempDir::new().unwrap();
+    write(kept.path(), FILES[1], TEAMS_V1);
+
+    let new = opencode_mcp::planned(empty.path(), &definition, &AgentHomes::default()).unwrap();
+    let old = opencode_mcp::planned(kept.path(), &definition, &AgentHomes::default()).unwrap();
+
+    assert_eq!(new.file, empty.path().join(FILE));
+    assert_eq!(new.entry.shape, Shape::V2);
+    assert!(names(empty.path()).is_empty());
+    assert_eq!(old.file, kept.path().join(FILES[1]));
+    assert_eq!(old.entry.shape, Shape::V1);
+    assert_eq!(read(kept.path(), FILES[1]), TEAMS_V1);
+    // What it plans is what the render then writes.
+    for (root, planned) in [(&empty, new), (&kept, old)] {
+        let rendered =
+            opencode_mcp::render(root.path(), &definition, &AgentHomes::default()).unwrap();
+        assert_eq!(rendered.entry, planned.entry);
+        assert_eq!(rendered.file, planned.file);
+    }
 }
