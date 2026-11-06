@@ -1395,11 +1395,10 @@ nothing: a Codex project nothing trusts reads none of its
 `AGENTS.md`, a skill at user scope holds something else under a project
 skill's name, and an MCP server's variable is not set. `mindweaver doctor`
 finds them in every project the workspace links, `-p` in one, and `mind
-doctor` in the project you are in. In `collapse`, given the rule
-`git/commits` and the skill `code-review`, with a `CLAUDE.local.md` made since
-and a `code-review` of your own in `~/.agents/skills`, and in `tanukeys`, for
-Claude Code and Codex, with a `.codex/config.toml` your Codex config does not
-trust:
+doctor` in the project you are in. Where [the status
+above](#what-each-project-has) leaves the two, with the rule `git/commits`
+installed into `collapse` since, a `CLAUDE.local.md` made there after it,
+and a `code-review` of your own in `~/.agents/skills`:
 
 ```
 $ cd ~/Projects
@@ -1408,13 +1407,13 @@ collapse: /home/you/Projects/collapse/CLAUDE.local.md: Claude Code reads it in p
   fix: install one of them again (`mind install rule:git/commits`), which renders every rule for Claude Code as the project stands, through an import of AGENTS.md or in .claude/rules/mindweaver
 collapse: /home/you/Projects/collapse/.agents/skills/code-review: Codex and OpenCode also read a skill `code-review` at user scope, at /home/you/.agents/skills/code-review, which holds something else, and one name at both scopes resolves differently in each agent
   fix: rename the project's or the one at user scope, or make them hold the same
-collapse: /home/you/Projects/collapse/.claude/skills/code-review: OpenCode also reads a skill `code-review` at user scope, at /home/you/.agents/skills/code-review, which holds something else, and one name at both scopes resolves differently in each agent
-  fix: rename the project's or the one at user scope, or make them hold the same
-tanukeys: /home/you/Projects/tanukeys/.codex/config.toml: Codex reads it only in a project it trusts, and /home/you/.codex/config.toml does not mark /home/you/Projects/tanukeys `trusted`
-  fix: trust the project when Codex asks, or add `trust_level = "trusted"` under `[projects."/home/you/Projects/tanukeys"]` in /home/you/.codex/config.toml
 
-2 projects checked, 4 findings
+2 projects checked, 2 findings
 ```
+
+Nothing is said of `tanukeys`, which a `mind.toml` marks and so names no
+agent: only what an install left in it and what `status` says are looked at
+there.
 
 Each finding names the file it is about and what fixes it. What it checks,
 each against [where the agents read](agents.md), for the agents a project
