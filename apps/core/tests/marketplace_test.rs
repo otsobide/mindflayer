@@ -243,8 +243,9 @@ fn a_catalog_of_more_than_a_hundred_plugins_is_listed_without_cloning_any_of_the
     assert_eq!(ledger.sources().unwrap().len(), 1);
 }
 
-#[test]
-fn every_plugin_of_a_large_catalog_is_looked_at_writing_nothing() {
+/// A marketplace, `big`, listing thirty plugins, each a folder of its
+/// repository holding one skill: more than `--all` gathers without a yes.
+fn large() -> TempDir {
     let entries: Vec<String> = (0..30)
         .map(|n| format!(r#"{{"name": "plugin-{n}", "source": "./plugins/{n}"}}"#))
         .collect();
@@ -264,7 +265,12 @@ fn every_plugin_of_a_large_catalog_is_looked_at_writing_nothing() {
         .iter()
         .map(|(path, text)| (path.as_str(), text.as_str()))
         .collect();
-    let market = repository(&borrowed);
+    repository(&borrowed)
+}
+
+#[test]
+fn every_plugin_of_a_large_catalog_is_looked_at_writing_nothing() {
+    let market = large();
     let routes = Arc::new(Routes::default().to(MARKET, &market));
     let home = TempDir::new().unwrap();
     // A workspace nothing has made yet, as a dry run of a gather is handed.
@@ -278,6 +284,34 @@ fn every_plugin_of_a_large_catalog_is_looked_at_writing_nothing() {
     assert_eq!(listed.name, "big");
     // No workspace, no cache and no ledger made, let alone a source.
     assert_eq!(fs::read_dir(home.path()).unwrap().count(), 0);
+}
+
+#[test]
+fn every_plugin_of_a_large_catalog_is_gathered_only_when_told_yes() {
+    let market = large();
+    let routes = Arc::new(Routes::default().to(MARKET, &market));
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    // Whatever a front end looked at before: the catalog this fetches is
+    // the one held to it.
+    let error = marketplace::gather(&workspace, &ledger, &request(&routes, Pick::All)).unwrap_err();
+
+    assert_eq!(error.code(), "marketplace_all_unconfirmed");
+    assert_eq!(
+        error.to_string(),
+        "the marketplace big lists 30 plugins, more than 25: --all gathers every one of them \
+         only with --yes"
+    );
+    assert!(ledger.gathered().unwrap().is_empty());
+    // The catalog recorded, as a listing records it, and no plugin.
+    assert_eq!(ledger.sources().unwrap().len(), 1);
+
+    let report =
+        marketplace::gather(&workspace, &ledger, &request(&routes, Pick::AllConfirmed)).unwrap();
+
+    assert_eq!(report.children.len(), 30);
+    assert_eq!(ledger.gathered().unwrap().len(), 30);
 }
 
 #[test]

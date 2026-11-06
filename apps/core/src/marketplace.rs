@@ -710,8 +710,15 @@ pub enum Pick {
     /// (`--plugin`). A name it does not list refuses the whole, before any
     /// plugin is gathered (`marketplace_plugin_not_listed`).
     Plugins(Vec<String>),
-    /// Every entry it lists that can be gathered (`--all`).
+    /// Every entry it lists that can be gathered (`--all`), when it lists no
+    /// more than [`UNCONFIRMED`]: one listing more refuses the whole, before
+    /// any plugin is gathered (`marketplace_all_unconfirmed`). Here rather
+    /// than in a front end that looked at the catalog first, which a gather
+    /// fetches again and may find grown.
     All,
+    /// Every entry it lists that can be gathered, however many: `--all`
+    /// told `--yes`.
+    AllConfirmed,
     /// The plugins of it gathered before, by their entries, as `gather
     /// update` gathers a marketplace again ([`again`]): one the catalog no
     /// longer lists is said (`marketplace_entry_unlisted`), its source kept
@@ -1079,7 +1086,8 @@ fn free(ledger: &Ledger, wanted: SourceName, own: Option<i64>) -> Result<SourceN
 /// The entries `pick` takes of `listed`, in the catalog's order, each once,
 /// with what it names that the catalog lists no more, for a pick of what
 /// was gathered before; or the first name a pick of plugins names that it
-/// does not list.
+/// does not list, or that it lists more than a pick of all of them takes
+/// without a yes.
 ///
 /// A name it lists as an entry that cannot be gathered is no entry to take,
 /// and no refusal either: that entry's failure says why already.
@@ -1103,7 +1111,11 @@ fn picked<'a>(
     };
     match pick {
         Pick::Listing => Ok((Vec::new(), Vec::new())),
-        Pick::All => Ok((listed.entries.iter().collect(), Vec::new())),
+        Pick::All if listed.needs_confirming() => Err(MarketplaceError::Unconfirmed {
+            marketplace: listed.name.clone(),
+            listed: listed.listed,
+        }),
+        Pick::All | Pick::AllConfirmed => Ok((listed.entries.iter().collect(), Vec::new())),
         Pick::Plugins(names) => {
             if let Some(name) = names.iter().find(|name| !lists(name)) {
                 return Err(MarketplaceError::NotListed {
@@ -1427,6 +1439,13 @@ pub enum MarketplaceError {
         name: String,
         marketplace: SourceName,
     },
+    /// `--all` without `--yes`, of a catalog listing more than
+    /// [`UNCONFIRMED`].
+    #[error("the marketplace {marketplace} lists {listed} plugins, more than {UNCONFIRMED}: --all gathers every one of them only with --yes")]
+    Unconfirmed {
+        marketplace: SourceName,
+        listed: usize,
+    },
     /// The repository holds no catalog where the marketplace is.
     #[error("{}: no such file, so this is no Claude Code marketplace", .path.display())]
     CatalogMissing { path: PathBuf },
@@ -1451,6 +1470,7 @@ pub enum MarketplaceError {
 codes!(MarketplaceError {
     Self::NameUnusable { .. } => "marketplace_name_unusable",
     Self::NotListed { .. } => "marketplace_plugin_not_listed",
+    Self::Unconfirmed { .. } => "marketplace_all_unconfirmed",
     Self::CatalogMissing { .. } => "marketplace_catalog_missing",
     Self::CatalogOutside { .. } => "marketplace_catalog_outside",
     Self::CatalogTooLarge { .. } => "marketplace_catalog_too_large",

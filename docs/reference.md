@@ -1145,7 +1145,9 @@ and never taken.
 
 `--all` gathers every plugin the catalog lists. A catalog listing more than
 25 waits for `--yes`: without it, `--all` says what it would gather and
-gathers nothing, with no source recorded and no clone left.
+gathers nothing, with no source recorded and no clone left. One that grew
+beyond 25 between that look and the gather is refused all the same, its
+catalog recorded and no plugin gathered.
 
 An entry that cannot be gathered is a warning beside the rest, and the
 command exits non-zero, as a skill a gather cannot take makes it: an npm

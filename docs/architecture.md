@@ -3488,7 +3488,11 @@ a dry run of `gather git` looks, resolved as a read, fetched into a folder
 of its own under the cache and taken away again, and nothing is registered,
 logged or made; with 25 or fewer, the gather goes ahead, which fetches the
 catalog a second time rather than move a dry run's clone into a source's
-folder.
+folder. The rule is core's, not the look's: the gather holds the catalog it
+fetched to it (`Pick::All`, `Pick::AllConfirmed` once told `--yes`), and one
+grown beyond 25 since the look refuses the whole before any plugin is
+gathered (`marketplace_all_unconfirmed`), the catalog recorded as a listing
+records it.
 
 The catalog is read whole, as the JSON Claude Code reads (jsonc-parser's
 tree with every extension off, which stops at a depth of nesting a catalog

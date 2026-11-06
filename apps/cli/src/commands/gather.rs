@@ -83,18 +83,18 @@ pub(crate) fn run_gather(
                 .map_err(CliError::from)?
                 .named(name.clone())
                 .watched_by(watch.clone());
-            let pick = if *list {
-                Pick::Listing
-            } else if *all {
-                Pick::All
-            } else {
-                Pick::Plugins(plugins.clone())
+            let pick = match (*list, *all, *yes) {
+                (true, _, _) => Pick::Listing,
+                (_, true, true) => Pick::AllConfirmed,
+                (_, true, false) => Pick::All,
+                _ => Pick::Plugins(plugins.clone()),
             };
             let request = marketplace::Request::new(catalog, pick);
             // Looked at first, as a read that makes no workspace and writes
             // nothing, as a dry run of `gather git` is: one with more plugins
             // than a yes is waited for beyond stops there, and one with
-            // fewer is gathered whole without one.
+            // fewer is gathered whole without one. What it prints is all this
+            // decides: the gather refuses a catalog grown beyond them since.
             if *all && !*yes {
                 let mut waits = None;
                 let said = reading_workspace(directory, lookup, |workspace| {

@@ -306,6 +306,7 @@ export type CoreCode =
   | "marketplace_entry_unlisted"
   | "marketplace_name_unusable"
   | "marketplace_plugin_not_listed"
+  | "marketplace_all_unconfirmed"
   | "marketplace_catalog_missing"
   | "marketplace_catalog_outside"
   | "marketplace_catalog_too_large"
