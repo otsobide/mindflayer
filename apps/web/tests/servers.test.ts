@@ -116,6 +116,19 @@ describe('the page of MCP servers', () => {
     expect(section(page, 'linear').find('[data-testid="no-holders"]').exists()).toBe(true)
   })
 
+  it('gives no element an id another holds, whatever its servers are named', async () => {
+    const snapshot = fixture('serving')
+    const github = snapshot.library.servers.find(server => server.name === 'github')!
+    snapshot.library.servers.push(...['form', 'form-heading', 'github-heading'].map(name => ({ ...structuredClone(github), name })))
+    const { page, router } = await render('/mcp', snapshot)
+
+    const ids = [...page.get('[data-testid="mcp"]').element.querySelectorAll('[id]')].map(each => each.id)
+    expect(ids.filter((id, at) => ids.indexOf(id) !== at)).toEqual([])
+    await router.push('/mcp?edit=form')
+    await flushPromises()
+    expect(document.activeElement?.closest('[data-testid="form"]')).not.toBeNull()
+  })
+
   it('names the commands that add one when the library holds none', async () => {
     const snapshot = fixture('serving')
     snapshot.library.servers = []
@@ -266,11 +279,11 @@ describe('the form changing one', () => {
     snapshot.library.servers.find(server => server.name === 'linear')!.given = null
     const { page, router } = await render('/mcp', snapshot)
 
-    expect(section(page, 'github').get('[data-testid="change"]').attributes('href')).toBe('/mcp?edit=github#server-form-heading')
+    expect(section(page, 'github').get('[data-testid="change"]').attributes('href')).toBe('/mcp?edit=github#mcp-form-heading')
     expect(section(page, 'linear').get('[data-testid="edit-file"]').attributes('href')).toBe('/edit?kind=mcp&name=linear')
     await router.push('/mcp?edit=linear')
     await flushPromises()
-    expect(document.activeElement?.id).toBe('server-form-heading')
+    expect(document.activeElement?.id).toBe('mcp-form-heading')
     expect(page.find('[data-testid="unformed"]').exists()).toBe(true)
     expect(page.find('[data-testid="server-form"]').exists()).toBe(false)
   })

@@ -96,7 +96,7 @@ watch(editing, async (name) => {
     return
   }
   await nextTick()
-  const heading = document.getElementById('server-form-heading')
+  const heading = document.getElementById('mcp-form-heading')
   heading?.scrollIntoView({ block: 'start' })
   heading?.focus({ preventScroll: true })
 })
@@ -177,18 +177,24 @@ async function done(name: string) {
           </li>
         </ul>
 
+        <!--
+          A server's ids start each with a prefix no other id of the page
+          starts with, the form's included: a name is any run of letters,
+          digits, hyphens and underscores, so `form` or `github-heading`
+          would otherwise be given an id another element holds.
+        -->
         <section
           v-for="server in snapshot.library.servers"
           :id="`server-${server.name}`"
           :key="server.name"
-          :aria-labelledby="`server-${server.name}-heading`"
+          :aria-labelledby="`heading-server-${server.name}`"
           class="flex flex-col gap-3 rounded-lg border border-default p-4"
           data-testid="server"
         >
           <div class="flex flex-wrap items-start gap-x-3 gap-y-1">
             <div class="flex min-w-0 flex-col gap-0.5">
               <h2
-                :id="`server-${server.name}-heading`"
+                :id="`heading-server-${server.name}`"
                 class="font-mono text-base font-semibold text-highlighted"
               >
                 <RouterLink
@@ -215,7 +221,7 @@ async function done(name: string) {
                 color="neutral"
                 variant="outline"
                 size="xs"
-                :to="serversLink(server.name, '#server-form-heading')"
+                :to="serversLink(server.name, '#mcp-form-heading')"
                 :aria-label="`Change how ${server.name} is started or reached`"
                 data-testid="change"
               />
@@ -409,13 +415,13 @@ async function done(name: string) {
         </section>
 
         <section
-          aria-labelledby="server-form-heading"
+          aria-labelledby="mcp-form-heading"
           class="flex flex-col gap-3"
           data-testid="form"
         >
           <div class="flex flex-wrap items-center gap-2">
             <h2
-              id="server-form-heading"
+              id="mcp-form-heading"
               tabindex="-1"
               class="text-base font-semibold text-highlighted focus-visible:outline-2 focus-visible:outline-primary"
             >
