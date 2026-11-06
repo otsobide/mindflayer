@@ -268,7 +268,11 @@ impl Read for Breaking {
 const CATALOG: &str = "https://catalog.example/v0/servers";
 
 fn limits(timeout: Duration, max_bytes: u64) -> Limits {
-    Limits { timeout, max_bytes }
+    Limits {
+        timeout,
+        max_bytes,
+        ..Limits::default()
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -521,4 +525,184 @@ fn a_failure_while_reading_is_said_without_the_credentials_it_quotes() {
         error.to_string(),
         format!("{CATALOG}: connection reset while reading https://mirror.example/v0/servers")
     );
+}
+
+// ---------------------------------------------------------------------------
+// Redirects
+// ---------------------------------------------------------------------------
+
+fn redirect(status: u16, location: &str) -> Reply {
+    Reply::status(status, "").with("Location", location)
+}
+
+#[test]
+fn a_redirect_is_followed_to_where_it_leads() {
+    let fake = Fake::new()
+        .answering(CATALOG, redirect(301, "/v1/servers?limit=10"))
+        .answering(
+            "https://catalog.example/v1/servers?limit=10",
+            Reply::ok("[]"),
+        );
+
+    let fetched = Client::new(&fake).get(&Request::get(CATALOG)).unwrap();
+
+    assert_eq!(fetched.url, "https://catalog.example/v1/servers?limit=10");
+    assert_eq!(fetched.body, b"[]");
+    let sent: Vec<String> = fake.sent().into_iter().map(|sent| sent.url).collect();
+    assert_eq!(
+        sent,
+        [CATALOG, "https://catalog.example/v1/servers?limit=10"]
+    );
+}
+
+#[test]
+fn every_redirect_status_is_followed() {
+    for status in [301, 302, 303, 307, 308] {
+        let fake = Fake::new()
+            .answering(CATALOG, redirect(status, "https://mirror.example/servers"))
+            .answering("https://mirror.example/servers", Reply::ok("[]"));
+
+        let fetched = Client::new(&fake).get(&Request::get(CATALOG)).unwrap();
+
+        assert_eq!(fetched.url, "https://mirror.example/servers", "{status}");
+    }
+}
+
+/// A loop never ends on its own, so the bound is what ends it.
+#[test]
+fn redirects_are_bounded() {
+    let other = "https://catalog.example/elsewhere";
+    let fake = Fake::new()
+        .answering(CATALOG, redirect(302, other))
+        .answering(other, redirect(302, CATALOG));
+
+    let error = Client::new(&fake)
+        .with_limits(Limits {
+            max_redirects: 3,
+            ..Limits::default()
+        })
+        .get(&Request::get(CATALOG))
+        .unwrap_err();
+
+    assert_eq!(error.code(), "http_too_many_redirects");
+    assert_eq!(
+        error.to_string(),
+        format!("{CATALOG}: redirected more than 3 times")
+    );
+    assert_eq!(
+        fake.sent().len(),
+        4,
+        "the first request and three redirects"
+    );
+}
+
+#[test]
+fn a_redirect_to_plain_http_elsewhere_is_refused_and_never_followed() {
+    let fake = Fake::new().answering(CATALOG, redirect(302, "http://mirror.example/servers"));
+
+    let error = Client::new(&fake).get(&Request::get(CATALOG)).unwrap_err();
+
+    assert_eq!(error.code(), "http_redirect_refused");
+    assert_eq!(
+        error.to_string(),
+        format!(
+            "{CATALOG}: redirected to http://mirror.example/servers, which is not followed: \
+             only https is, or http on this machine, and never a URL with credentials in it"
+        )
+    );
+    assert_eq!(fake.sent().len(), 1);
+}
+
+#[test]
+fn a_redirect_to_another_scheme_is_refused() {
+    for location in [
+        "ftp://mirror.example/servers",
+        "file:///etc/passwd",
+        "ftp://127.0.0.1/servers",
+    ] {
+        let fake = Fake::new().answering(CATALOG, redirect(302, location));
+
+        let error = Client::new(&fake).get(&Request::get(CATALOG)).unwrap_err();
+
+        assert_eq!(error.code(), "http_redirect_refused", "{location}");
+        assert_eq!(fake.sent().len(), 1, "{location}");
+    }
+}
+
+#[test]
+fn a_redirect_to_http_on_this_machine_is_followed() {
+    let local = "http://127.0.0.1:8080/servers";
+    let fake = Fake::new()
+        .answering(CATALOG, redirect(307, local))
+        .answering(local, Reply::ok("[]"));
+
+    let fetched = Client::new(&fake).get(&Request::get(CATALOG)).unwrap();
+
+    assert_eq!(fetched.url, local);
+}
+
+#[test]
+fn a_redirect_carrying_credentials_is_refused_without_repeating_them() {
+    let fake = Fake::new().answering(
+        CATALOG,
+        redirect(302, "https://me:s3cret@mirror.example/servers"),
+    );
+
+    let error = Client::new(&fake).get(&Request::get(CATALOG)).unwrap_err();
+
+    assert_eq!(error.code(), "http_redirect_refused");
+    assert!(!error.to_string().contains("s3cret"), "{error}");
+    assert_eq!(fake.sent().len(), 1);
+}
+
+/// A credential is given for the server a request names, not for the one it
+/// is sent on to, whatever the header carrying it is called; what is not a
+/// credential goes along.
+#[test]
+fn credentials_stay_with_the_origin_they_were_given_for() {
+    let mirror = "https://mirror.example/servers";
+    let fake = Fake::new()
+        .answering(CATALOG, redirect(302, mirror))
+        .answering(mirror, Reply::ok("[]"));
+
+    Client::new(&fake)
+        .get(
+            &Request::get(CATALOG)
+                .header("Accept", "application/json")
+                .header("Authorization", "Bearer ghp_token")
+                .credential("X-Api-Key", "k3y"),
+        )
+        .unwrap();
+
+    let sent = fake.sent();
+    assert_eq!(sent[0].header("authorization"), Some("Bearer ghp_token"));
+    assert_eq!(sent[0].header("x-api-key"), Some("k3y"));
+    assert_eq!(sent[1].url, mirror);
+    assert_eq!(sent[1].header("accept"), Some("application/json"));
+    assert_eq!(sent[1].header("authorization"), None);
+    assert_eq!(sent[1].header("x-api-key"), None);
+}
+
+/// Another path on the same server is where the credential was meant for.
+#[test]
+fn credentials_go_along_a_redirect_within_the_origin() {
+    let moved = "https://catalog.example/v1/servers";
+    let fake = Fake::new()
+        .answering(CATALOG, redirect(308, moved))
+        .answering(moved, Reply::ok("[]"));
+
+    Client::new(&fake)
+        .get(&Request::get(CATALOG).credential("X-Api-Key", "k3y"))
+        .unwrap();
+
+    assert_eq!(fake.sent()[1].header("x-api-key"), Some("k3y"));
+}
+
+#[test]
+fn a_redirect_status_with_nowhere_to_go_is_a_failure() {
+    let fake = Fake::new().answering(CATALOG, Reply::status(302, ""));
+
+    let error = Client::new(&fake).get(&Request::get(CATALOG)).unwrap_err();
+
+    assert_eq!(error.code(), "http_status_unsuccessful");
 }

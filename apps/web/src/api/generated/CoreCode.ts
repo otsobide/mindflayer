@@ -225,6 +225,8 @@ export type CoreCode =
   | "http_timed_out"
   | "http_too_large"
   | "http_status_unsuccessful"
+  | "http_redirect_refused"
+  | "http_too_many_redirects"
   | "shelf_copy_missing"
   | "loaded_copy_gone"
   | "name_unsafe"

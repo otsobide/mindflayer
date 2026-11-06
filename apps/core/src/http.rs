@@ -2,8 +2,9 @@
 //! (D-14).
 //!
 //! Catalogs (the MCP Registry, the skill directories) are HTTP APIs, and
-//! what is done with them is rules: which URLs a fetch may name, how long an
-//! answer may take and how large it may be. Rules live in core, so the CLI,
+//! what is done with them is rules: which URLs a fetch may name, which
+//! redirects it follows and what goes along, how long an answer may take and
+//! how large it may be. Rules live in core, so the CLI,
 //! the TUI and the server cannot disagree about them. What carries the bytes
 //! is not a rule, and is behind the port: [`crate::adapter::reqwest`] by
 //! default, and a fake in every test, so none goes online. Front ends
@@ -39,6 +40,10 @@ pub const USER_AGENT: &str = concat!("mindweaver/", env!("CARGO_PKG_VERSION"));
 /// however they were added ([`Request::header`]).
 const CREDENTIAL_HEADERS: [&str; 3] = ["authorization", "proxy-authorization", "cookie"];
 
+/// The statuses that send a request on to another URL, the one their
+/// `Location` names.
+const REDIRECTS: [u16; 5] = [301, 302, 303, 307, 308];
+
 /// What an answer is held to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Limits {
@@ -52,16 +57,20 @@ pub struct Limits {
     pub timeout: Duration,
     /// The most bytes a body may have.
     pub max_bytes: u64,
+    /// The most redirects one fetch follows.
+    pub max_redirects: usize,
 }
 
 impl Default for Limits {
     /// Thirty seconds, reqwest's own default, and 16 MiB: far more than a
     /// page of a catalog needs, and little enough that a server sending bytes
-    /// without end fills neither the memory nor the disk.
+    /// without end fills neither the memory nor the disk. Ten redirects, as
+    /// reqwest would follow, where a service moving its API takes one.
     fn default() -> Self {
         Self {
             timeout: Duration::from_secs(30),
             max_bytes: 16 * 1024 * 1024,
+            max_redirects: 10,
         }
     }
 }
@@ -174,6 +183,20 @@ impl Request {
     pub fn carries_credential(&self) -> bool {
         self.headers.iter().any(Header::is_credential)
     }
+
+    /// The same request sent to `url`, its credentials with it only when
+    /// `credentials` says they may go there.
+    fn to(&self, url: &Url, credentials: bool) -> Self {
+        Self {
+            url: url.to_string(),
+            headers: self
+                .headers
+                .iter()
+                .filter(|header| credentials || !header.credential)
+                .cloned()
+                .collect(),
+        }
+    }
 }
 
 impl fmt::Debug for Request {
@@ -240,8 +263,9 @@ impl fmt::Debug for Answer {
 /// says it succeeded.
 #[derive(Debug)]
 pub struct Fetched {
-    /// The URL it was asked of, one [`fetchable`] let through, so it carries
-    /// no credential.
+    /// The URL the answer came from: the one asked of, or the one the last
+    /// redirect led to. [`fetchable`] let it through, so it carries no
+    /// credential.
     pub url: String,
     pub status: u16,
     pub headers: Headers,
@@ -277,22 +301,49 @@ impl<'a> Client<'a> {
         self.limits
     }
 
-    /// Fetch `request` and read its answer whole.
+    /// Fetch `request` and read its answer whole, following its redirects.
     ///
     /// Refused before anything is sent: a URL [`fetchable`] refuses. A
-    /// failure: an answer that takes longer than the limit, one that is
-    /// larger, and one whose status is not a success, since what a 404 or a
-    /// 503 has in its body is not what was asked for.
+    /// failure: an answer that takes longer than the limit, every redirect
+    /// included, one that is larger, a redirect `followed` refuses or one
+    /// past [`Limits::max_redirects`], and an answer whose status is not a
+    /// success, since what a 404 or a 503 has in its body is not what was
+    /// asked for.
+    ///
+    /// Redirects are followed here rather than by the transport, so a fake
+    /// is held to the same rules as the network. A request's credentials go
+    /// only to the origin it named: they were given for that server, not for
+    /// whichever one it sends the request on to. reqwest drops
+    /// `Authorization` and `Cookie` on such a hop by itself, and only those,
+    /// so a key in a header of a service's own naming would have gone along.
     pub fn get(&self, request: &Request) -> Result<Fetched, HttpError> {
         let url = request.url();
-        fetchable(url)?;
+        let first = fetchable(url)?;
         let started = Instant::now();
-        let left = self.left(url, started)?;
-        let answer = self
-            .http
-            .send(request, left)
-            .map_err(|error| self.overall(url, error))?;
-        self.in_time(url, started)?;
+        let mut hop = request.clone();
+        let mut at = first.clone();
+        let mut redirects = 0;
+        let answer = loop {
+            let left = self.left(url, started)?;
+            let answer = self
+                .http
+                .send(&hop, left)
+                .map_err(|error| self.overall(url, error))?;
+            self.in_time(url, started)?;
+            let Some(location) = redirect(&answer) else {
+                break answer;
+            };
+            redirects += 1;
+            if redirects > self.limits.max_redirects {
+                return Err(HttpError::TooManyRedirects {
+                    url: Redacted::new(url),
+                    limit: self.limits.max_redirects,
+                });
+            }
+            let next = followed(url, &at, location)?;
+            hop = request.to(&next, next.origin() == first.origin());
+            at = next;
+        };
 
         if !(200..300).contains(&answer.status) {
             return Err(HttpError::Status {
@@ -306,7 +357,11 @@ impl<'a> Client<'a> {
             .and_then(|length| length.trim().parse::<u64>().ok());
         let body = self.read(url, answer.body, declared, started)?;
         Ok(Fetched {
-            url: url.to_owned(),
+            url: if redirects == 0 {
+                url.to_owned()
+            } else {
+                at.to_string()
+            },
             status: answer.status,
             headers: answer.headers,
             body,
@@ -445,6 +500,35 @@ pub fn fetchable(url: &str) -> Result<Url, HttpError> {
     }
 }
 
+/// Where `answer` sends the request on to, if it is a redirect.
+///
+/// A redirect status without a `Location` is no redirect: there is nowhere
+/// to follow it to, and it is a failure for the status it is.
+fn redirect(answer: &Answer) -> Option<&str> {
+    REDIRECTS
+        .contains(&answer.status)
+        .then(|| answer.headers.get("location"))
+        .flatten()
+}
+
+/// Where a redirect from `from` to `location` leads, when it may be
+/// followed: to a URL [`fetchable`] lets through, and nowhere else.
+///
+/// So a redirect may not leave https for plain http elsewhere, which would
+/// hand what is fetched to anybody on the way, nor lead to another scheme,
+/// nor carry credentials, which would then be shown wherever its URL is.
+/// Leaving the origin is allowed, since that is where a service keeps its
+/// downloads, but the credentials stay behind ([`Client::get`]). `url` is
+/// the URL the fetch was asked of, which the refusal names.
+fn followed(url: &str, from: &Url, location: &str) -> Result<Url, HttpError> {
+    let refused = |to: &str| HttpError::Redirect {
+        url: Redacted::new(url),
+        to: Redacted::new(to),
+    };
+    let next = from.join(location).map_err(|_| refused(location))?;
+    fetchable(next.as_str()).map_err(|_| refused(next.as_str()))
+}
+
 /// Whether `url` names this machine: a loopback address, or `localhost`.
 ///
 /// Read off the host as the parser writes it, an IPv6 address in brackets,
@@ -499,6 +583,17 @@ pub enum HttpError {
     /// An answer whose status is not a success.
     #[error("{url}: the server answered HTTP {status}")]
     Status { url: Redacted, status: u16 },
+    /// A redirect `followed` refuses: to plain http elsewhere than this
+    /// machine, to another scheme, to a URL with credentials in it, or to
+    /// what is not a URL.
+    #[error(
+        "{url}: redirected to {to}, which is not followed: only https is, or http on this \
+         machine, and never a URL with credentials in it"
+    )]
+    Redirect { url: Redacted, to: Redacted },
+    /// More redirects than [`Limits::max_redirects`], a loop among them.
+    #[error("{url}: redirected more than {limit} times")]
+    TooManyRedirects { url: Redacted, limit: usize },
 }
 
 codes!(HttpError {
@@ -510,6 +605,8 @@ codes!(HttpError {
     Self::Timeout { .. } => "http_timed_out",
     Self::TooLarge { .. } => "http_too_large",
     Self::Status { .. } => "http_status_unsuccessful",
+    Self::Redirect { .. } => "http_redirect_refused",
+    Self::TooManyRedirects { .. } => "http_too_many_redirects",
 });
 
 #[cfg(test)]
