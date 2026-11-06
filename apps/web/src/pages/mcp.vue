@@ -41,7 +41,7 @@ export function startsSaid(starts: Starts): string {
 </script>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { Held } from '@/api/generated/Held'
 import type { LibraryServer } from '@/api/generated/LibraryServer'
@@ -87,6 +87,19 @@ function examined(snapshot: Snapshot, server: LibraryServer) {
 function unread(snapshot: Snapshot): Held[] {
   return snapshot.library.artifacts.filter(held => held.kind === 'mcp' && !snapshot.library.servers.some(server => server.name === held.name))
 }
+
+// The form is below every server, and the router scrolls to nothing: a
+// change opened from a server's section brings the form into view, and the
+// focus to its heading, so the keyboard goes on from there.
+watch(editing, async (name) => {
+  if (name === undefined) {
+    return
+  }
+  await nextTick()
+  const heading = document.getElementById('server-form-heading')
+  heading?.scrollIntoView({ block: 'start' })
+  heading?.focus({ preventScroll: true })
+})
 
 /** Once the form wrote, the server's page in the list, the form back to adding. */
 async function done(name: string) {
@@ -403,7 +416,8 @@ async function done(name: string) {
           <div class="flex flex-wrap items-center gap-2">
             <h2
               id="server-form-heading"
-              class="text-base font-semibold text-highlighted"
+              tabindex="-1"
+              class="text-base font-semibold text-highlighted focus-visible:outline-2 focus-visible:outline-primary"
             >
               {{ editing === undefined ? 'Add a server' : `Change how ${editing} is started or reached` }}
             </h2>

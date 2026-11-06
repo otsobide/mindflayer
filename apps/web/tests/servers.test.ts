@@ -270,6 +270,7 @@ describe('the form changing one', () => {
     expect(section(page, 'linear').get('[data-testid="edit-file"]').attributes('href')).toBe('/edit?kind=mcp&name=linear')
     await router.push('/mcp?edit=linear')
     await flushPromises()
+    expect(document.activeElement?.id).toBe('server-form-heading')
     expect(page.find('[data-testid="unformed"]').exists()).toBe(true)
     expect(page.find('[data-testid="server-form"]').exists()).toBe(false)
   })
