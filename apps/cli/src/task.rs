@@ -1116,7 +1116,11 @@ impl Refusal {
                 | WeaverCommand::Load { .. }
                 | WeaverCommand::Unload { .. }
                 | WeaverCommand::Scan { .. }
-                | WeaverCommand::Gather(GatherCommand::List { .. } | GatherCommand::Sources { .. })
+                | WeaverCommand::Gather(
+                    GatherCommand::List { .. }
+                    | GatherCommand::Sources { .. }
+                    | GatherCommand::Rename { .. },
+                )
                 | WeaverCommand::Install { .. }
                 | WeaverCommand::Uninstall { .. }
                 | WeaverCommand::Update { .. }

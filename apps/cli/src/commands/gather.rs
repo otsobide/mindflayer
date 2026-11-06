@@ -6,7 +6,8 @@ use std::path::Path;
 
 use mindweaver_core::gather::{self, Gathered, Report, Request, Scrub, Watch};
 use mindweaver_core::install::{offered_by_loads, Offer};
-use mindweaver_core::ledger::SourceListing;
+use mindweaver_core::ledger::{Ledger, SourceListing};
+use mindweaver_core::sources::{self, Renamed};
 use mindweaver_core::url::redacted;
 use mindweaver_core::{Kind, WeaverWorkspace};
 
@@ -56,6 +57,17 @@ pub(crate) fn run_gather(
                 reading_workspace(directory, lookup, |workspace| shelf(workspace, &mut found))?;
             Ok(json_or_text(found.filter(|_| *json), text))
         }
+        GatherCommand::Rename { from, to } => {
+            let workspace = workspace_here(directory, lookup)?;
+            let (ledger, said) = ledger_to_change(&workspace)?;
+            match sources::rename(&workspace, &ledger, from, to) {
+                Ok(renamed) => Ok(said.before(renamed_source(&renamed))),
+                Err(error) => Err(Failure {
+                    error: Box::new(error.into()),
+                    warnings: said.lines(),
+                }),
+            }
+        }
         GatherCommand::Sources { json } => {
             let mut found = None;
             let text = reading_workspace(directory, lookup, |workspace| {
@@ -63,6 +75,39 @@ pub(crate) fn run_gather(
             })?;
             Ok(json_or_text(found.filter(|_| *json), text))
         }
+    }
+}
+
+/// The ledger a change to a source is made in: opened to write, scrubbing
+/// it, with what that took out to be said, when there is one, and read
+/// without being made when there is none, as for removing one of the
+/// workspace's own everywhere: a workspace that never gathered has no
+/// source to change, and no reason to be given a ledger to say so.
+fn ledger_to_change(workspace: &WeaverWorkspace) -> Result<(Ledger, Scrubbed), CliError> {
+    if workspace.ledger_path().is_file() {
+        let (ledger, scrub) = workspace.ledger_to_write()?;
+        Ok((ledger, scrubbed(&scrub)))
+    } else {
+        Ok((workspace.ledger_for_reading()?, Scrubbed::default()))
+    }
+}
+
+/// What a rename did: the name the source had and the one it has, and its
+/// URL, which every install from it still records as its origin.
+fn renamed_source(renamed: &Renamed) -> Outcome {
+    let (was, now) = (printable(&renamed.was), printable(&renamed.source.name));
+    let stdout = if renamed.unchanged() {
+        format!("{now} is called that already: nothing changed\n")
+    } else {
+        format!(
+            "renamed source {was} to {now}, gathered from {}\n",
+            printable(&renamed.source.origin())
+        )
+    };
+    Outcome {
+        stdout,
+        stderr: Vec::new(),
+        ok: true,
     }
 }
 

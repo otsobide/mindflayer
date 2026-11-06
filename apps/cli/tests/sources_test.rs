@@ -168,3 +168,101 @@ fn no_sources_says_how_to_gather_one_and_makes_no_ledger() {
     assert!(listed.is_empty());
     assert!(!dir.path().join(WEAVER_DIR).join("mindweaver.db").exists());
 }
+
+// ---------------------------------------------------------------------------
+// gather rename
+// ---------------------------------------------------------------------------
+
+#[test]
+fn gather_rename_calls_a_source_its_new_name_which_from_then_takes() {
+    let (dir, _source, url) = gathered_from(&["deploy"]);
+    weaver(dir.path(), &["gather", "git", &url, "--name", "acme"]).unwrap();
+    let project = dir.path().join("collapse");
+    fs::create_dir(&project).unwrap();
+    new_project(&project);
+    weaver(dir.path(), &["link", "collapse"]).unwrap();
+
+    let renamed = weaver(dir.path(), &["gather", "rename", "acme", "team"]).unwrap();
+
+    assert!(renamed.ok, "{:?}", renamed.stderr);
+    assert_eq!(
+        renamed.stdout,
+        format!("renamed source acme to team, gathered from {url}\n")
+    );
+    let listed = weaver(dir.path(), &["gather", "list"]).unwrap();
+    assert!(listed.stdout.contains("deploy  team"), "{}", listed.stdout);
+    let installed = weaver(
+        dir.path(),
+        &["install", "-p", "collapse", "deploy", "--from", "team"],
+    )
+    .unwrap();
+    assert!(installed.ok, "{:?}", installed.stderr);
+    // The name it had names nothing now.
+    let old = weaver(
+        dir.path(),
+        &["install", "-p", "collapse", "deploy", "--from", "acme"],
+    )
+    .unwrap_err();
+    assert!(old.error.to_string().contains("acme"), "{}", old.error);
+}
+
+#[test]
+fn gather_rename_to_the_name_it_has_says_nothing_changed() {
+    let (dir, _source, url) = gathered_from(&["deploy"]);
+    weaver(dir.path(), &["gather", "git", &url, "--name", "acme"]).unwrap();
+
+    let renamed = weaver(dir.path(), &["gather", "rename", "acme", "acme"]).unwrap();
+
+    assert_eq!(
+        renamed.stdout,
+        "acme is called that already: nothing changed\n"
+    );
+}
+
+#[test]
+fn gather_rename_refuses_a_name_no_source_can_have_or_another_has_with_gathers_codes() {
+    let (dir, _source, url) = gathered_from(&["deploy"]);
+    let branch = {
+        let head = fs::read_to_string(Path::new(&url).join(".git").join("HEAD")).unwrap();
+        head.trim().rsplit('/').next().unwrap().to_owned()
+    };
+    weaver(dir.path(), &["gather", "git", &url, "--name", "acme"]).unwrap();
+    weaver(
+        dir.path(),
+        &["gather", "git", &url, "--ref", &branch, "--name", "other"],
+    )
+    .unwrap();
+
+    let invalid = weaver(dir.path(), &["gather", "rename", "acme", "team/v3"]).unwrap_err();
+    let taken = weaver(dir.path(), &["gather", "rename", "acme", "other"]).unwrap_err();
+    let unknown = weaver(dir.path(), &["gather", "rename", "nobody", "team"]).unwrap_err();
+    // The codes a gather given the same `--name` refuses it with.
+    let gathered = weaver(dir.path(), &["gather", "git", &url, "--name", "other"]).unwrap_err();
+
+    assert_eq!(invalid.error.code(), "source_name_invalid");
+    assert_eq!(taken.error.code(), "source_name_taken");
+    assert_eq!(taken.error.code(), gathered.error.code());
+    assert_eq!(
+        taken.error.to_string(),
+        format!("`other` is the name of the source at {url}#{branch} already: rename this one to another")
+    );
+    assert_eq!(unknown.error.code(), "source_not_found");
+    let names = weaver(dir.path(), &["gather", "sources"]).unwrap();
+    let called: Vec<&str> = names
+        .stdout
+        .lines()
+        .map(|line| line.split_whitespace().next().unwrap())
+        .collect();
+    assert_eq!(called, ["acme", "other"], "nothing renamed");
+}
+
+#[test]
+fn gather_rename_in_a_workspace_that_never_gathered_makes_no_ledger() {
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+
+    let failure = weaver(dir.path(), &["gather", "rename", "acme", "team"]).unwrap_err();
+
+    assert_eq!(failure.error.code(), "source_not_found");
+    assert!(!dir.path().join(WEAVER_DIR).join("mindweaver.db").exists());
+}

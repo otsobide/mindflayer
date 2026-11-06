@@ -360,6 +360,30 @@ fn gather_sources_lists_each_source_by_its_name_with_what_it_holds() {
 }
 
 #[test]
+fn gather_rename_calls_a_source_another_name_from_then_on() {
+    let scenario = acme();
+    scenario.given("~/Projects", "mindweaver gather git ../src/acme-skills");
+
+    scenario
+        .run(
+            "~/Projects",
+            "mindweaver gather rename src-acme-skills team-skills",
+        )
+        .succeeds()
+        .prints("renamed source src-acme-skills to team-skills, gathered from ../src/acme-skills\n")
+        .quiet();
+
+    scenario
+        .run("~/Projects", "mindweaver gather list")
+        .succeeds()
+        .prints(concat!(
+            "commit-style  team-skills  unknown  How this repo writes commit messages\n",
+            "ddd-reviewer  team-skills  unknown  Review a change against the DDD layering rules\n",
+        ))
+        .quiet();
+}
+
+#[test]
 fn a_gathered_skill_installs_from_the_source_it_came_from() {
     let scenario = acme();
     scenario.given("~/Projects", "mindweaver gather git ../src/acme-skills");

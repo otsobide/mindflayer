@@ -1519,6 +1519,21 @@ pub enum GatherCommand {
         json: bool,
     },
 
+    /// Call a source another name: what `gather list` and `gather sources`
+    /// show, and what `--from` takes for what it supplied.
+    ///
+    /// Letters, digits, `.`, `_` and `-`, and one source's only, as `gather
+    /// git --name` takes one.
+    Rename {
+        /// What the source is called now, as `gather sources` lists it.
+        #[arg(value_name = "OLD")]
+        from: String,
+
+        /// What to call it from now on.
+        #[arg(value_name = "NEW")]
+        to: String,
+    },
+
     /// List the sources the shelf is filled from: each by its name, with
     /// its URL, the branch or tag and the commit it is pinned to, how many
     /// skills it holds and when it was last gathered.

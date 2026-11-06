@@ -87,6 +87,8 @@ pub enum CliError {
     #[error(transparent)]
     Gather(#[from] GatherError),
     #[error(transparent)]
+    Source(#[from] mindweaver_core::sources::SourceError),
+    #[error(transparent)]
     Ledger(#[from] LedgerError),
     #[error(transparent)]
     Install(#[from] mindweaver_core::install::InstallError),
@@ -294,6 +296,7 @@ codes!(CliError {
     Self::Chosen { source, .. } => source,
     Self::Artifact(error) => error,
     Self::Gather(error) => error,
+    Self::Source(error) => error,
     Self::Ledger(error) => error,
     Self::Install(error) => error,
     Self::Create(error) => error,
