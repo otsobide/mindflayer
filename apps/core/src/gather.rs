@@ -771,7 +771,14 @@ fn take(
     });
     for (done, (directory, folder, artifact)) in taken.iter().enumerate() {
         let destination = shelf.join(folder);
-        let placed = copy::replace(directory, &destination, &clone.root);
+        // Without what no install copies, so the shelf holds what a project
+        // is given, and a plugin's hooks and servers are never offered.
+        let placed = copy::replace_leaving(
+            directory,
+            &destination,
+            &clone.root,
+            &crate::install::left_out_names(),
+        );
         watch.report(Progress::Placing {
             done: done + 1,
             total: taken.len(),

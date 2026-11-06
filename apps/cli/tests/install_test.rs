@@ -989,15 +989,19 @@ fn installing_a_skill_that_holds_a_claude_plugin_folder_leaves_it_out_and_warns(
     let dir = TempDir::new().unwrap();
     weaver(dir.path(), &["init"]).unwrap();
     with_settings(dir.path(), r#""claude", "codex""#);
-    let source = repository(&[
-        (
-            "skills/deploy/SKILL.md",
-            &skill_file("deploy", "Ship the service"),
-        ),
-        ("skills/deploy/.claude-plugin/plugin.json", "{}"),
-    ]);
+    let source = repository(&[(
+        "skills/deploy/SKILL.md",
+        &skill_file("deploy", "Ship the service"),
+    )]);
     let url = source.path().to_string_lossy().into_owned();
     weaver(dir.path(), &["gather", "git", &url]).unwrap();
+    // As a gather from before #101 left a plugin's skill on the shelf: one
+    // now leaves the folder out, as an install does.
+    let shelf = dir.path().join(".mindweaver/skills");
+    let source_folder = fs::read_dir(&shelf).unwrap().next().unwrap().unwrap();
+    let plugin = source_folder.path().join("deploy/.claude-plugin");
+    fs::create_dir_all(&plugin).unwrap();
+    fs::write(plugin.join("plugin.json"), "{}").unwrap();
 
     let outcome = weaver(dir.path(), &["install", "-p", "alpha", "deploy"]).unwrap();
 

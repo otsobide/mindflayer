@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use common::{repository, skill, url};
+use common::{repository, skill, url, write_files};
 use mindweaver_core::copy;
 use mindweaver_core::gather::{self, Request};
 use mindweaver_core::install::{self, Installed, Removed, Standing};
@@ -1621,17 +1621,24 @@ fn from_typed_with_credentials_names_the_source_they_were_taken_out_of_and_repea
 // ---------------------------------------------------------------------------
 
 /// A shelf holding `deploy` with a `.claude-plugin` folder beside its
-/// `SKILL.md`, as a plugin's skill is gathered, and a project marked by its
-/// settings naming every agent.
+/// `SKILL.md`, as a gather from before #101 left a plugin's skill there,
+/// and a project marked by its settings naming every agent.
+///
+/// Put on the shelf by hand: a gather now leaves the folder out of what it
+/// shelves, as an install does, so only an older one's shelf holds it.
 fn plugin_skill() -> (TempDir, WeaverWorkspace, MindProject, Ledger) {
     let (dir, workspace, _, ledger) = gathered(&[
         ("skills/deploy/SKILL.md", &skill("deploy", "Ship it")),
-        (
-            "skills/deploy/.claude-plugin/plugin.json",
-            r#"{"name": "deploy", "hooks": "hooks.json"}"#,
-        ),
         ("skills/deploy/scripts/.claude-plugin/example.json", "{}"),
     ]);
+    let shelved = workspace.root().join(&ledger.gathered().unwrap()[0].path);
+    write_files(
+        &shelved,
+        &[(
+            ".claude-plugin/plugin.json",
+            r#"{"name": "deploy", "hooks": "hooks.json"}"#,
+        )],
+    );
     let root = dir.path().join("alpha");
     fs::create_dir(&root).unwrap();
     let (project, _) =

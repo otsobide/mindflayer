@@ -64,6 +64,45 @@ fn a_skills_whole_directory_travels_with_it() {
 }
 
 #[test]
+fn a_skill_s_claude_plugin_folder_is_left_off_the_shelf_and_a_gather_again_is_unchanged() {
+    let source = repository(&[
+        (
+            "plugins/ops/skills/deploy/SKILL.md",
+            &skill("deploy", "Ship it"),
+        ),
+        (
+            "plugins/ops/skills/deploy/.claude-plugin/plugin.json",
+            r#"{"name": "deploy", "hooks": "hooks.json"}"#,
+        ),
+        (
+            "plugins/ops/skills/deploy/scripts/.claude-plugin/example.json",
+            "{}",
+        ),
+    ]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    let request = Request::git(url(&source));
+
+    let first = gather::gather(&workspace, &ledger, &request).unwrap();
+    let again = gather::gather(&workspace, &ledger, &request).unwrap();
+
+    let deploy = workspace
+        .gathered_dir(Kind::Skill)
+        .join(&first.directory)
+        .join("deploy");
+    assert!(deploy.join("SKILL.md").is_file());
+    assert!(!deploy.join(".claude-plugin").exists(), "only at its top");
+    assert!(deploy.join("scripts/.claude-plugin/example.json").is_file());
+    assert!(first.warnings.is_empty(), "{:?}", first.warnings);
+    assert_eq!(again.unchanged.len(), 1, "{again:?}");
+    // The hash of what the shelf holds, which an install's copy is too.
+    assert_eq!(
+        ledger.gathered().unwrap()[0].content_hash,
+        Some(mindweaver_core::hash::tree(&deploy).unwrap())
+    );
+}
+
+#[test]
 fn gathering_the_same_repository_again_changes_nothing() {
     let source = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
     let (_dir, workspace) = workspace();

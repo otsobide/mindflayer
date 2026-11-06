@@ -374,6 +374,22 @@ fn replacing_beside_still_leaves_nothing_behind() {
     assert_eq!(names(&skills), ["deploy"]);
 }
 
+#[test]
+fn replacing_beside_leaving_out_a_name_at_the_top_copies_and_compares_without_it() {
+    let (_dir, from, to, _) = fixture();
+    fs::create_dir_all(from.join(".claude-plugin")).unwrap();
+    fs::write(from.join(".claude-plugin").join("plugin.json"), "{}").unwrap();
+    fs::create_dir_all(from.join("scripts").join(".claude-plugin")).unwrap();
+    let left_out = [".claude-plugin"];
+
+    let first = replace_leaving(&from, &to, &from, &left_out).unwrap();
+    let again = replace_leaving(&from, &to, &from, &left_out).unwrap();
+
+    assert_eq!((first, again), (Change::Added, Change::Unchanged));
+    assert_eq!(names(&to), ["SKILL.md", "scripts"]);
+    assert!(to.join("scripts").join(".claude-plugin").is_dir());
+}
+
 #[cfg(unix)]
 #[test]
 fn a_link_is_followed_to_where_it_leads_and_judged_there() {
