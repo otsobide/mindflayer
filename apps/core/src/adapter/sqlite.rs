@@ -610,7 +610,8 @@ impl LedgerStore for Sqlite {
             });
         }
 
-        let directory = self.free_directory(&slug(&format!("{}-{entry}", parent.directory)))?;
+        let directory =
+            self.free_directory(&folder_name(&format!("{}-{entry}", parent.directory)))?;
         let name = self.free_name(&SourceName::child(&parent.name, entry))?;
         let at = self.now();
         // Its branch in `reference_key` alone, for the reason [`SCHEMA_V9`]
@@ -2221,20 +2222,29 @@ fn slug(url: &str) -> String {
     // what is worth keeping after the last `@`.
     let rest = rest.rsplit_once('@').map_or(rest, |(_, rest)| rest);
     let rest = rest.strip_suffix(".git").unwrap_or(rest);
+    folder_name(rest)
+}
 
+/// `text` as one folder name: each plain character kept, in lowercase, and
+/// every run of the rest one hyphen, never `.` or `..`, which would name the
+/// folder it is joined to or the one above it.
+///
+/// What a marketplace's plugin's folder is made of, the catalog's entry
+/// after its marketplace's folder, rather than [`slug`]: an entry is
+/// somebody else's text, and read as a URL, `x@..` keeps what follows its
+/// `@` and is the cache itself.
+fn folder_name(text: &str) -> String {
     let mut out = String::new();
-    for c in rest.chars() {
+    for c in text.chars() {
         if c.is_ascii_alphanumeric() || c == '.' || c == '_' {
             out.push(c.to_ascii_lowercase());
         } else if !out.ends_with('-') {
             out.push('-');
         }
     }
-    let trimmed = out.trim_matches('-');
-    if trimmed.is_empty() {
-        String::from("source")
-    } else {
-        trimmed.to_owned()
+    match out.trim_matches('-') {
+        "" | "." | ".." => String::from("source"),
+        trimmed => trimmed.to_owned(),
     }
 }
 

@@ -22,6 +22,44 @@ fn a_url_becomes_a_readable_directory_name() {
     );
     assert_eq!(slug("https://user:token@host/x"), "host-x");
     assert_eq!(slug("///"), "source");
+    // Never the folder it is joined to, nor the one above it.
+    assert_eq!(slug("foo://.."), "source");
+    assert_eq!(slug("x@."), "source");
+}
+
+#[test]
+fn a_plugins_folder_is_its_entry_after_its_marketplaces_whatever_the_entry_spells() {
+    let ledger = Sqlite::in_memory().unwrap();
+    let url = "https://github.com/acme/market";
+    let market = ledger
+        .source_for(SourceKind::Marketplace, url, None, "")
+        .unwrap();
+
+    // Each of them, read as a URL is, keeps what follows its `@` or its
+    // `://` alone: `..` or `.`.
+    let folders: Vec<String> = ["x@..", "x@.", "a://..", "..", "pdf"]
+        .into_iter()
+        .map(|entry| {
+            ledger
+                .child_for(&market, entry, url, None, "")
+                .unwrap()
+                .directory
+        })
+        .collect();
+
+    assert_eq!(
+        folders,
+        [
+            "github.com-acme-market-x-..",
+            "github.com-acme-market-x-.",
+            "github.com-acme-market-a-..",
+            "github.com-acme-market-..",
+            "github.com-acme-market-pdf",
+        ]
+    );
+    assert!(folders
+        .iter()
+        .all(|folder| crate::install::is_folder_name(folder)));
 }
 
 #[test]

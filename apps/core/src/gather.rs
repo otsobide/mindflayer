@@ -1145,11 +1145,29 @@ fn take(
     pin: Option<&Revision>,
 ) -> Result<Report, GatherError> {
     sweep_dry_runs(&workspace.cache_dir());
-    let cache = workspace.cache_dir().join(&source.directory);
+    let cache = workspace.cache_dir().join(own_folder(source)?);
     let clone = fetch(request, url, pin, &cache)?;
     place(
         workspace, ledger, request, url, source, manifest, pin, &clone,
     )
+}
+
+/// The folder name the ledger records for `source`, which its clone is a
+/// folder of the cache by and its shelf a folder of the shelf's: refused
+/// unless it is one folder name, since a fetch replaces whatever its clone's
+/// folder holds, and `..` would be the workspace's own. No ledger names one
+/// so (`LedgerStore::source_for`, `child_for`), and a row edited by hand is
+/// refused here, before either is joined, as `gather remove` refuses it
+/// ([`crate::sources`]).
+pub(crate) fn own_folder(source: &ledger::Source) -> Result<&str, GatherError> {
+    if crate::install::is_folder_name(&source.directory) {
+        Ok(&source.directory)
+    } else {
+        Err(GatherError::FolderNotItsOwn {
+            name: source.name.clone(),
+            directory: source.directory.clone(),
+        })
+    }
 }
 
 /// Fetch `request`'s source from `url` into `into`, at `pin` when there is
@@ -1188,7 +1206,9 @@ pub(crate) fn place(
     clone: &Cloned,
 ) -> Result<Report, GatherError> {
     let watch = &request.watch;
-    let shelf = workspace.gathered_dir(request.kind).join(&source.directory);
+    let shelf = workspace
+        .gathered_dir(request.kind)
+        .join(own_folder(source)?);
     let mut report = Report {
         revision: clone.revision.clone(),
         directory: source.directory.clone(),
@@ -2084,6 +2104,14 @@ pub enum GatherError {
         #[source]
         source: io::Error,
     },
+    /// The folder the ledger records for the source is not one folder name
+    /// ([`own_folder`]): the condition `gather remove` meets, said for a
+    /// gather.
+    #[error(
+        "the source `{name}` is recorded with the folder `{directory}`, which is no one folder of \
+         the shelf or the cache, so nothing is gathered"
+    )]
+    FolderNotItsOwn { name: SourceName, directory: String },
 }
 
 codes!(GatherError {
@@ -2103,6 +2131,8 @@ codes!(GatherError {
     Self::Git(error) => error,
     Self::Ledger(error) => error,
     Self::Lock(error) => error,
+} echoed {
+    Self::FolderNotItsOwn { .. } => "source_folder_not_its_own",
 });
 
 /// Everything the ledger knows about, for a front end to list.

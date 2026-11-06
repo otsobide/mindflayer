@@ -1532,6 +1532,20 @@ fn each_gather_error_of_its_own_gives_its_own_code() {
     assert_eq!(GatherError::CODES, given.as_slice());
 }
 
+/// A source recorded with a folder that is not its own is the condition
+/// `gather remove` meets, and is given its code.
+#[test]
+fn a_gather_error_echoes_the_code_a_source_recorded_with_a_folder_not_its_own_has() {
+    let error = GatherError::FolderNotItsOwn {
+        name: SourceMother::random().name,
+        directory: String::from(".."),
+    };
+
+    assert_eq!(error.code(), "source_folder_not_its_own");
+    assert_eq!(GatherError::ECHOED, [error.code()]);
+    assert!(crate::sources::SourceError::CODES.contains(&error.code()));
+}
+
 /// A gather carrying another of core's failures says that failure's code,
 /// so the panel tells a busy workspace or a refused fetch apart the same
 /// way whatever met it.

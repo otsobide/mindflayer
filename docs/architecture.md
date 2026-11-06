@@ -3542,7 +3542,14 @@ and moved to where the catalog says its plugin is now, its folder kept,
 since the catalog is what says where a plugin is. It is called
 `<marketplace>.<plugin>` (`SourceName::child`), with the marketplace's name
 in it because two marketplaces list plugins of one name, and a numbered one
-would say nothing of which. A plugin in the marketplace's own repository is
+would say nothing of which. Its folder on the shelf and in the cache is the
+marketplace's followed by its entry, each character a folder name does not
+keep a hyphen, and never `.` or `..`: an entry is the catalog's text, and
+read as a URL's folder is, `x@..` would keep what follows its `@` and be the
+cache itself, which a fetch replaces whole. A source whose recorded folder
+is no one folder name, which only a hand edit makes, is refused by a gather
+before anything is fetched or placed (`source_folder_not_its_own`), as
+`gather remove` refuses it. A plugin in the marketplace's own repository is
 gathered from the marketplace's clone while the lock its catalog was read
 under is still held, so nothing fetches into it between, and has no clone of
 its own; one in a repository of its own is a gather of its own afterwards,

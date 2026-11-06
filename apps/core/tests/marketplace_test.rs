@@ -705,6 +705,73 @@ fn a_header_helper_a_catalog_names_is_never_run() {
 }
 
 #[test]
+fn a_plugins_folders_are_its_own_whatever_its_entry_spells() {
+    // Each read as a URL is, what follows its `@` or its `://` alone, would
+    // be the shelf's folder, the shelf itself, and the cache's folder.
+    let entries = [
+        r#"{"name": "x@..", "source": "./a"}"#,
+        r#"{"name": "x@.", "source": "./b"}"#,
+        r#"{"name": "a://..", "source": {"source": "url", "url": "https://git.example.com/acme/tools.git"}}"#,
+    ]
+    .map(String::from);
+    let tools = repository(&[("skills/lint/SKILL.md", &skill("lint", "Lint it"))]);
+    let market = repository(&[
+        (".claude-plugin/marketplace.json", &catalog("m", &entries)),
+        // Named as the shelf's own folder is, which a copy into the shelf's
+        // parent would replace.
+        ("a/skills/skills/SKILL.md", &skill("skills", "Named so")),
+        ("b/skills/probe/SKILL.md", &skill("probe", "Probe")),
+    ]);
+    let routes = Arc::new(
+        Routes::default()
+            .to(MARKET, &market)
+            .to("https://git.example.com/acme/tools.git", &tools),
+    );
+    let (_ws, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    let kept = workspace.gathered_dir(Kind::Skill).join("kept");
+    fs::create_dir_all(&kept).unwrap();
+    fs::write(kept.join("notes"), "mine").unwrap();
+
+    let report = marketplace::gather(&workspace, &ledger, &request(&routes, Pick::All)).unwrap();
+
+    for child in &report.children {
+        assert!(child.outcome.is_ok(), "{child:?}");
+    }
+    let mut folders: Vec<String> = ledger
+        .sources()
+        .unwrap()
+        .into_iter()
+        .filter(|source| source.parent_id.is_some())
+        .map(|source| source.directory)
+        .collect();
+    folders.sort();
+    assert_eq!(
+        folders,
+        [
+            "github.com-acme-market-a-..",
+            "github.com-acme-market-x-.",
+            "github.com-acme-market-x-..",
+        ]
+    );
+    let shelf = workspace.gathered_dir(Kind::Skill);
+    assert!(shelf
+        .join("github.com-acme-market-x-../skills/SKILL.md")
+        .is_file());
+    assert!(shelf
+        .join("github.com-acme-market-x-./probe/SKILL.md")
+        .is_file());
+    assert!(workspace
+        .cache_dir()
+        .join("github.com-acme-market-a-..")
+        .is_dir());
+    // Nothing outside the source's own folders was written or taken.
+    assert_eq!(fs::read_to_string(kept.join("notes")).unwrap(), "mine");
+    assert!(workspace.ledger_path().is_file());
+    assert!(!workspace.weaver_dir().join("probe").exists());
+}
+
+#[test]
 fn a_plugin_that_cannot_be_fetched_is_said_and_the_rest_gathered() {
     let mixed = mixed();
     // The marketplace and the monorepo, and nothing at acme/tools.

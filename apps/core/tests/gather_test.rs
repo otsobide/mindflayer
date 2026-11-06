@@ -119,6 +119,36 @@ fn gathering_the_same_repository_again_changes_nothing() {
 }
 
 #[test]
+fn a_source_recorded_with_a_folder_that_is_not_its_own_is_refused_and_nothing_fetched_into_it() {
+    let source = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    let request = Request::git(url(&source));
+    gather::gather(&workspace, &ledger, &request).unwrap();
+
+    // What no gather records: the cache's own folder, and the cache itself,
+    // which a fetch would replace whole.
+    for directory in ["..", "."] {
+        rusqlite::Connection::open(workspace.ledger_path())
+            .unwrap()
+            .execute("UPDATE sources SET directory = ?1", [directory])
+            .unwrap();
+
+        let error = gather::gather(&workspace, &ledger, &request).unwrap_err();
+
+        assert_eq!(error.code(), "source_folder_not_its_own", "{directory}");
+        assert!(
+            matches!(&error, GatherError::FolderNotItsOwn { directory: said, .. } if said == directory),
+            "{error:?}"
+        );
+        assert!(workspace.ledger_path().is_file(), "{directory}");
+        assert!(workspace.config_path().is_file(), "{directory}");
+        assert!(workspace.cache_dir().is_dir(), "{directory}");
+        assert_eq!(ledger.gathered().unwrap().len(), 1, "{directory}");
+    }
+}
+
+#[test]
 fn a_skill_that_changed_upstream_is_reported_as_updated() {
     let source = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
     let (_dir, workspace) = workspace();

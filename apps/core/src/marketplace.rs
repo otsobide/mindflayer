@@ -941,7 +941,7 @@ pub fn recorded(
     else {
         return Ok(None);
     };
-    let clone = workspace.cache_dir().join(&parent.directory);
+    let clone = workspace.cache_dir().join(gather::own_folder(&parent)?);
     let read = Catalog::read(&clone, &request.subdirectory)?;
     Ok(Some(Listed::of(
         parent.name,
@@ -971,7 +971,7 @@ fn recorded_now(
         request.source.reference(),
         &request.subdirectory,
     )?;
-    let cache = workspace.cache_dir().join(&parent.directory);
+    let cache = workspace.cache_dir().join(gather::own_folder(&parent)?);
     let outcome = (|| {
         gather::sweep_dry_runs(&workspace.cache_dir());
         let clone = gather::fetch(request, url, None, &cache)?;
@@ -1275,7 +1275,7 @@ fn apart(
                 entry.plugin.path(),
             )?;
             gather::sweep_dry_runs(&workspace.cache_dir());
-            let cache = workspace.cache_dir().join(&source.directory);
+            let cache = workspace.cache_dir().join(gather::own_folder(&source)?);
             let placed =
                 gather::fetch(&request, &url, checked.pinned.as_ref(), &cache).and_then(|clone| {
                     holds = holdings(entry, &clone.root.join(entry.plugin.path()));
