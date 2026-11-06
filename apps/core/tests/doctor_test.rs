@@ -789,3 +789,35 @@ fn a_rule_about_some_files_codex_reads_nowhere_is_found_as_status_says() {
         finding.message
     );
 }
+
+#[test]
+fn a_rule_a_tracked_agents_md_keeps_from_codex_in_a_local_project_is_found_with_its_fix() {
+    let fixture = clean(&[Agent::Claude, Agent::Codex]);
+    let agents_md = fixture.root().join("AGENTS.md");
+    fixture.write(&agents_md, "# Working here\n");
+    // Local, and git tracks the team's AGENTS.md, so the block is kept
+    // out of it (D-02): Claude is given the rule in its own folder, and
+    // Codex nothing.
+    common::indexed(fixture.dir.path());
+    fixture.install_rule("commits", "Write commit messages in the imperative.\n");
+
+    let examined = fixture.examined();
+
+    assert_eq!(codes(&examined), vec!["doctor_missed"]);
+    let finding = &examined.findings[0];
+    assert_eq!(finding.agents, vec![Agent::Codex]);
+    assert_eq!(finding.path, agents_md);
+    assert_eq!(
+        finding.message,
+        format!(
+            "{}: Codex does not read rule `commits`, which the project received",
+            agents_md.display()
+        )
+    );
+    assert!(
+        finding.fix.contains("(`mind share shared`)")
+            && finding.fix.contains("(`mind share local --edit-tracked`)"),
+        "{}",
+        finding.fix
+    );
+}
