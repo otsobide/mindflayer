@@ -2522,6 +2522,13 @@ type derives `Serialize` from the start:
   neither `ENVELOPE_VERSION` nor `view::FORMAT`. Every `origin` holds what
   it held, which an install records ([everything is namespaced by its
   source](#everything-is-namespaced-by-its-source)).
+- **Named by #99**: where a gathered artifact came from, as `upstream_path`,
+  `content_hash` and `license` on a `Gathered`, and the commit a source is
+  pinned to, as `pin` on a `ledger::Source`, each `null` when there is none,
+  and so on each shelf row, on each of the snapshot's `sources` and in what
+  `gather list --json` prints of an offer from the shelf: names added,
+  which move neither `ENVELOPE_VERSION` nor `view::FORMAT` ([what each
+  artifact is recorded with](#what-each-artifact-is-recorded-with)).
 - **Not yet**, being older than the rule and handed to no front end so far:
   the ledger's record of an install (`InstallRecord`), and what an update or
   a change of agents would do as each plans it (`update::Plan`,
@@ -3142,6 +3149,79 @@ is a warning beside the forty that came through, not a reason to be told
 nothing. One that reads but breaks a rule is taken, with a warning for each
 problem ([Strict when writing, lenient when
 reading](#strict-when-writing-lenient-when-reading)).
+
+### Pinned to a commit
+
+`gather git --pin SHA` takes one commit, by its full id, rather than
+whatever the branch or tag `--ref` names is at (#99). Its full id, 40
+hexadecimal digits in either case and kept in lowercase, since a pin is
+what the shelf is said to hold for good, which an abbreviation another
+commit may come to share, or a branch, which moves, cannot say; one that is
+not is refused before anything is registered (`gather_pin_invalid`), and so
+is a URL that carries a credential typed there, as one typed where the
+branch goes is. It is no part of what makes the source
+([D-13](#d-13-sources-have-names-and-a-marketplace-is-a-parent)): the
+source keeps it in `sources.pin`, beside its branch, written past the last
+cancel with the revision the shelf holds, so a gather at another pin moves
+it and one with none drops it, on that one source, and a gather that fails
+leaves the one it had.
+
+The commit is fetched by itself, shallow, through `gix`'s
+`with_revision`, which a remote taking a want of any commit it holds hands
+over, as git's own `upload-pack` does over protocol v2. One that takes only
+what it advertises refuses it, and then a clone that is not shallow is
+made, every branch as `git clone` fetches them, since only the whole of a
+history says whether a commit is in it, and the commit is looked for in the
+history of `--ref`, or of the remote's HEAD without one: found, the
+branch or tag the fetch made of the reference moves to it, as `git reset
+--hard` to it would, and that is what is checked out, the remote-tracking
+branch keeping the tip it was found from; not found, the gather is refused
+with `git_pin_unreachable` and leaves no clone. Moving HEAD alone would not
+do, since `gix` checks out the reference it was asked for rather than HEAD.
+The slow way is taken only when the fast one is refused, by the fetch
+failing; any other failure, the credentials' or the cancel's, is said as it
+is, since a second try would meet it again. A commit a remote hands over by
+itself is not held to the branch named, which only that branch's whole
+history could say (see the open questions).
+
+### What each artifact is recorded with
+
+Each artifact the shelf holds is recorded with where it came from, to the
+commit (#99): its `revision`, the commit it was taken at, as it has been
+since schema 1; its `upstream_path`, its folder in the repository from the
+repository's root, `/` separated, by its lexical route from the clone's
+root, so a folder typed `./skills/` is `skills`; the `content_hash` of the
+copy on the shelf, by `hash::tree`, the recipe an install keeps of a copy,
+so a copy installed from it hashes alike unless it holds a top-level
+`.claude-plugin`, which no installed copy does, and taken of the shelf rather
+than the clone, since a link in the clone is what the copy resolved and the
+hash refuses a link; and its `license`, as written. One that cannot be read
+back to be hashed is recorded with no hash and said with a failure of its
+own (`gathered_unhashed`), as an install records a copy it cannot read
+back, rather than not at all.
+
+The licence is the skill's `license`, as its manifest states it, whatever
+it says (a name, an SPDX expression, `Complete terms in LICENSE.txt`); else
+what a licence file beside the manifest names, `LICENSE` or `LICENCE`,
+bare, as Markdown or as text, in any case, the bare one first; else none,
+which is unknown, and `gather list` says so. Of a file, the identifier a
+line of it tags with `SPDX-License-Identifier:`, since that is the licence
+named in the one spelling every tool reads, put there to be found; and
+otherwise its first line that is not blank, which is how a licence's text
+opens (`MIT License`, `Apache License`), its title as the file writes it.
+The first line alone was the other way, and loses what a tag says
+exactly; the tag alone, the other, and finds nothing in most files, which
+carry none. Telling a licence from the whole of its text, as GitHub's
+licensee does, would be a guess recorded as a fact: what is recorded is
+what the skill says, and reading the text is left to whoever reads it. A
+title names no version (`Apache License` is followed by `Version 2.0` on
+the next line), which a tag does. The file is read from the shelf, the head
+of it alone, so a licence file that is a link is read as the copy resolved
+it, within the clone, never followed anywhere else, and one that cannot be
+read names nothing, as one that is not there: the hash, which reads every
+file of the copy, has said already that one cannot be. A repository's own
+licence, at its root or as a forge's API says it, is not the skill's
+folder's and is not read.
 
 ### Following a gather, and stopping it
 
@@ -11637,6 +11717,9 @@ source](#everything-is-namespaced-by-its-source)), the name and the identity
 among it, and the columns the marketplace's children will use; `--from`
 still takes the origin an install records beside the name, since every
 record and every `origin` the envelope and the snapshot hold spell it.
+#99 gave a git source the pin a child will be held to ([pinned to a
+commit](#pinned-to-a-commit)), kept beside its branch and outside its
+identity, so another pin moves the one source rather than making a second.
 
 ### D-14: Core owns HTTP, behind a seam
 
@@ -13083,6 +13166,25 @@ it once as it closes.
   its step makes rows one, on a read too, but leaves their folders and a
   credential to the scrub, which rewrites a clone before its row and is the
   one that says what it did.
+- **A pin a remote hands over is not held to its branch.** A commit fetched
+  by itself is taken whichever branch it is on, or none, since only the
+  whole history of the branch `--ref` names could say it is on it, and
+  fetching that is what the pin spares; only a remote that refuses it has
+  it looked for there. A pin off its branch is kept beside it all the same,
+  and a later gather without one goes back to the branch. Checking every
+  pin would cost every pinned gather the whole history; whether it should
+  is the owner's to say.
+- **A pin is a SHA-1.** `--pin` takes 40 hexadecimal digits, a SHA-1 commit's
+  id. A repository of SHA-256 objects names a commit by 64, which it
+  refuses, as the `gix` this build has, without its `sha256` feature,
+  clones none of them; one more length is all the rule would need once one
+  does.
+- **A licence only the text names.** A licence file with no SPDX tag is
+  recorded by its first line, which for Apache's and the GPL's is their
+  title without the version on the line after it, and for a file that opens
+  with a copyright line, that line. A reading of the whole text would name
+  more of them, at the cost of a guess recorded as a fact; what would read
+  them, and whether it is core's, is open.
 - **`owner/repo` is GitHub's.** A gather reads two plain names with one `/`
   between them as the GitHub repository they name, so a relative path of
   two folders has to be written `./skills/repo` to be gathered from this

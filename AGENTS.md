@@ -586,6 +586,17 @@ These are easy to break from a single file without noticing.
   origin an install records and the JSON holds, unchanged. Another spelling
   of its URL still names it, said with `install::Respelled`'s warning,
   which fails nothing. No front end spells a source's identity or its name.
+  The commit a gather is pinned to (`gather git --pin`, `gather::pin`, a
+  full id) is no part of that identity: kept in `sources.pin` beside the
+  branch, written with the revision past the last cancel
+  (`LedgerStore::saw_source`), and moved or dropped by the next gather of
+  the source, never a second one. It is fetched by itself, or, where the
+  remote refuses that, looked for in the reference's history from a clone
+  that is not shallow, through the `Remote` port (`Remote::fetch`'s `pin`),
+  and each artifact is recorded with where it came from
+  (`ledger::Upstream`: its folder in the repository, the commit,
+  `hash::tree` of the copy on the shelf and its licence,
+  `gather::license_of`), never a hash of a recipe of its own.
 - **Output is built, then printed.** Commands return an `Outcome` (stdout
   text, stderr lines, ok), so tests assert on the exact text a user sees.
   The two that run until they are stopped write as they run, the TUI its
@@ -1106,7 +1117,10 @@ These are easy to break from a single file without noticing.
     rules, which never climbs out (`install::is_installable_name`).
   - Symlinks are followed only inside the source (`copy::tree`'s `within`),
     and a rule offered for install that leads out of the workspace offering
-    it is refused (`InstallError::Outside`).
+    it is refused (`InstallError::Outside`). A gathered skill's licence
+    file is read from its copy on the shelf, the head of it alone, never
+    from the clone (`gather::license_of`), so a link there is read as the
+    copy resolved it and followed nowhere else.
   - A project's artifact directories must stay inside the project, and so
     must the folders its `targets` name, outside `.mind` and any
     `.mindweaver` too (`misplaced_target`): refused when a change names one,

@@ -519,9 +519,10 @@ mindweaver load <path>...  # offer another workspace's own skills and rules,
                            # read live
 mindweaver unload <path>...  # stop offering them
 
-mindweaver gather git <URL> [--name NAME]
+mindweaver gather git <URL> [--name NAME] [--pin SHA]
                            # collect skills from a repository onto the shelf,
-                           # under a name --from takes
+                           # under a name --from takes, at one commit when
+                           # pinned
 mindweaver gather list [--json]
                            # what is on the shelf or loaded, and where from
 mindweaver install         # a screen for putting skills, rules and MCP
@@ -828,14 +829,19 @@ other-rules: https://github.com/other/rules at 4d5e6f7
 warning: /home/you/Projects/.mindweaver/skills/github.com-other-rules/pdf--forms/SKILL.md: `pdf--forms` is not usable as a name: it has to be lowercase letters and digits, joined by single hyphens
 
 $ mindweaver gather list
-commit-style  acme-skills  How this repo writes commit messages
-commit-style  other-rules  Conventional commits, strictly
-ddd-reviewer  acme-skills  Review a change against the DDD layering rules
-pdf--forms    other-rules  Fill in PDF forms
+commit-style  acme-skills  MIT License  How this repo writes commit messages
+commit-style  other-rules  unknown      Conventional commits, strictly
+ddd-reviewer  acme-skills  Apache-2.0   Review a change against the DDD layering rules
+pdf--forms    other-rules  unknown      Fill in PDF forms
 ```
 
-Each is listed by the name of its source, which is what `--from` takes when
-two sources offer one name:
+Each is listed by the name of its source, then by its licence as the skill
+says it: its `license`, else what a `LICENSE` or `LICENCE` file beside its
+`SKILL.md` names (the identifier a line tags with
+`SPDX-License-Identifier:`, else the file's first line, its title, which
+names no version), else `unknown`. Nothing reads a licence out of the
+whole text, nor the repository's own licence at its root. The name of its
+source is what `--from` takes when two sources offer one name:
 
 ```
 $ mindweaver install -p collapse commit-style --from other-rules
@@ -844,6 +850,40 @@ installed commit-style into collapse, from https://github.com/other/rules
 
 The install records where it came from by the source's URL, as `status` and
 `gather list --json` show it (its `origin`), and `--from` takes that too.
+
+`--pin` takes one commit, by its full id, rather than whatever the branch
+is at, and the source keeps it beside its branch:
+
+```
+$ mindweaver gather git https://github.com/acme/skills --pin a1b2c3d4e5f60718293a4b5c6d7e8f9a0b1c2d3e
+acme-skills: https://github.com/acme/skills at a1b2c3d
+  updated    commit-style  How this repo writes commit messages
+  unchanged  ddd-reviewer  Review a change against the DDD layering rules
+
+2 skills: 0 added, 1 updated, 1 unchanged
+
+$ mindweaver gather list
+commit-style  acme-skills  pinned a1b2c3d  MIT License  How this repo writes commit messages
+commit-style  other-rules                  unknown      Conventional commits, strictly
+ddd-reviewer  acme-skills  pinned a1b2c3d  Apache-2.0   Review a change against the DDD layering rules
+pdf--forms    other-rules                  unknown      Fill in PDF forms
+```
+
+It is the same source at another pin: gathered again with another, it moves
+there, and with none it goes back to the branch, as `--ref` names one, or
+the repository's default. A remote that hands over a commit by itself gives
+it at once; from one that will not, the whole repository is fetched and
+the commit looked for in the branch's history, which takes longer, and one
+that is not there is refused, with the shelf as it was:
+
+```
+$ mindweaver gather git https://github.com/acme/skills --pin 0123456789abcdef0123456789abcdef01234567
+error: https://github.com/acme/skills: commit 0123456789abcdef0123456789abcdef01234567 is neither handed over by itself nor in the history of the remote's HEAD, so it cannot be gathered: name the branch or tag it is on with --ref
+```
+
+A pin is a commit's full id, 40 hexadecimal digits: an abbreviation, a
+branch or a tag is refused before anything is fetched, since only the full
+id names one commit for good.
 
 One repository is one source however its URL is spelled. On GitHub and
 GitLab, `https://github.com/acme/skills`, `https://github.com/Acme/Skills.git`,
@@ -1591,7 +1631,10 @@ warning: /home/you/Projects/collapse/skills/broken/SKILL.md: the file does not s
   for one built in.
 - `gather list`: what can be installed from elsewhere, each with the `place`
   it comes from (`loaded` or `shelf`) and its `origin`, as `--from` takes it,
-  and for one from the shelf its `source`, by its `name` among the rest.
+  and for one from the shelf its `source`, by its `name` and the `pin` it
+  was gathered at among the rest, and where it came from: its
+  `upstream_path` in the repository, the `content_hash` of what was put on
+  the shelf, and its `license`, `null` when unknown.
 - `status`, `workspaces` and `scan`: the reports shown in [what each project
   has](#what-each-project-has), [the weavers this machine
   knows](#the-weavers-this-machine-knows) and [commands](#commands).

@@ -302,7 +302,13 @@ A repository gathered is one source however its URL is spelled (`acme/skills`,
 `https://github.com/acme/skills`, `git@github.com:acme/skills.git`), called
 by a name, `acme-skills` unless `--name` gives it another: what `mindweaver
 gather list` shows, and what `--from` takes when two sources offer one skill
-([#7](https://github.com/otsobide/mindweaver/issues/7)).
+([#7](https://github.com/otsobide/mindweaver/issues/7)). `--pin <commit>`
+takes one commit, by its full id, rather than whatever the branch is at, and
+the source keeps it beside its branch until a gather at another pin, or
+none, moves it. Each gathered skill is recorded with its folder in the
+repository, the commit, the hash of what was put on the shelf and its
+licence as it says it, and `gather list` shows the licence, `unknown` when
+nothing says one, and the commit a source is pinned to.
 
 To try it with nothing gathered, this repository's `examples/` is a
 workspace of two skills and two rules: `mindweaver load <your clone>/examples`
