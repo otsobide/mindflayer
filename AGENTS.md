@@ -165,7 +165,10 @@ under `apps/` with its own `Makefile`:
   rendered into Claude's `.mcp.json` as its one entry and taken out again
   (`claude_mcp`), into Codex's `.codex/config.toml` the same way
   (`codex_mcp`), and into OpenCode's `opencode.json`, in either of its
-  shapes (`opencode_mcp`), and what `add` is told of
+  shapes (`opencode_mcp`), each with what it would write planned and
+  nothing written (`codex_mcp::planned`, `opencode_mcp::planned`), what an
+  agent runs or reaches of one, as its entry spells it (`mcp::Runs`,
+  `mcp/runs.rs`), and what `add` is told of
   how one is started or reached, a program or an address, and the
   definition it writes from it (`mcp::Given`), the
   agents and where each kind goes for them (`agent`), the catalog, gathering
@@ -176,8 +179,9 @@ under `apps/` with its own `Makefile`:
   `CLAUDE.md` that makes it (`claude_md`), installing a rule through those
   three, or as a copy into a project a `mind.toml` marks (`install::rules`),
   installing an MCP server as an entry in the config file of each agent a
-  project names, through those renderers, and taking it out
-  (`install::mcp`), changing a project's agents or share mode and carrying its installs along
+  project names, through those renderers, and taking it out, and what an
+  install would give each agent, nothing written (`install::mcp`,
+  `install::mcp::preview`), changing a project's agents or share mode and carrying its installs along
   (`reapply`), what each project holds, from where and for which agents,
   each MCP server's entry in its agents' config files among it, as it stands
   (`status`, `status::EntryStatus`, told in `install::entries`), finding a project that moved again by its id and giving a
@@ -502,7 +506,13 @@ These are easy to break from a single file without noticing.
   `mindweaver install` and `mindweaver uninstall` lines they amount to
   (`Screen::task`), as core plans them (`install::Plan::of`), each change
   the task that runs it (`Task::from`), each run whatever came of the others
-  (`Task::chained`), so its transcript runs again. A batch a screen builds
+  (`Task::chained`), so its transcript runs again. An MCP server marked
+  that comes from elsewhere than the library is previewed when the screen
+  is built (`install::mcp::preview`), each agent's line shown in the
+  confirmation before the screen applies (`Screen::previews`), and only
+  its line carries `--yes` (`Task::confirmed`); a task in JSON never says
+  yes (`Task::Install`'s `yes` is no field of it), since the panel shows no
+  agent's line yet. A batch a screen builds
   from its marks or its toggles is built in the task module, from what was
   marked (`Task::minds`, from each folder's `MindsChange`) or what the
   settings and the toggles say (`Task::settings`, from two `Toggles`), and
@@ -867,11 +877,19 @@ These are easy to break from a single file without noticing.
   local project without `edit_tracked` refuses it (`mcp_entry_unedited`).
   An update writes one through `install_held`, as a skill. A local project
   keeps out of git only the config files an install makes, a line each
-  written before the file lands, noted in `created_files`. The front ends
-  step through no MCP server yet (`install::installs`, which `survey`,
-  `receives` and a name typed bare follow, so the snapshot's boxes say
-  `not_installable`): one is named qualified (`mcp:github`,
-  `install::offered`) until #95. No adoption or gather writes one; `add`
+  written before the file lands, noted in `created_files`. A server is
+  stepped through as every kind is (`install::installs`, which `survey`,
+  `receives`, a name typed bare and the plan follow), and never asked for
+  a folder (`install::targets` refuses it, `not_copied`). What an install
+  gives each agent is decided before anything is written (`decide`), and
+  a preview asks the same of each renderer's plan, writing nothing
+  (`install::mcp::preview`, `codex_mcp::planned`, `opencode_mcp::planned`);
+  what each agent runs or reaches is read off its renderer's own entry
+  (`mcp::Runs`, `Entry::runs`), never spelled again in a front end. One
+  from elsewhere than the library, a loaded workspace's or the shelf's,
+  is only previewed until somebody says yes (`install::asks_first`,
+  `install::Confirmed`, the CLI's `--yes`), the library's own installed
+  as a skill is. No adoption or gather writes one; `add`
   writes a definition where its holder keeps servers, as it writes a
   skill, and records nothing, writing nothing into an agent's config. No copy
   holds a skill's top-level `.claude-plugin`
@@ -1485,14 +1503,15 @@ These are easy to break from a single file without noticing.
   `Agent::reads_at_root`, matches every agent the same way. So do the
   matches that say what a kind is not yet given: a default folder beside
   the code (`Directories::default_for`), an install (`install::installs`,
-  behind the refusal in `install::targets`), a scaffold
+  behind the refusal in `install::targets`, and `install::asks_first`,
+  which says whether one waits for a yes), a scaffold
   (`create::scaffolds`), and the words a sentence names it by
   (`Kind::noun`, `Kind::plural`), which every message and count asks rather
   than spelling `{kind}s`. And the matches on the agent that say which MCP
   servers' names it keeps for itself (`mcp::name`'s `reserved` and
-  `claimed`) and what it cannot be given of a definition
-  (`McpDefinition::inexpressible`), each from docs/agents.md's "MCP
-  servers".
+  `claimed`), what it cannot be given of a definition
+  (`McpDefinition::inexpressible`) and what it asks before it starts one
+  (`Agent::starts_a_server`), each from docs/agents.md's "MCP servers".
   "Adding an agent" also lists what no match covers: `Agent::ALL`, and an
   agent home's field, option and place in `common::PINNED` and `CLEARED`.
 
