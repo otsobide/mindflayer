@@ -295,7 +295,8 @@ pub enum Command {
         name: String,
 
         /// Where it comes from, when two places offer that name: `workspace`,
-        /// a shelf source's URL, or a loaded workspace's path or name.
+        /// a shelf source's name (as `gather list` shows it) or URL, or a
+        /// loaded workspace's path or name.
         #[arg(long, value_name = "ORIGIN")]
         from: Option<String>,
 
@@ -828,7 +829,8 @@ pub enum WeaverCommand {
         name: Option<String>,
 
         /// Where it comes from, when two places offer that name: `workspace`,
-        /// a shelf source's URL, or a loaded workspace's path or name.
+        /// a shelf source's name (as `gather list` shows it) or URL, or a
+        /// loaded workspace's path or name.
         #[arg(long, value_name = "ORIGIN")]
         from: Option<String>,
 
