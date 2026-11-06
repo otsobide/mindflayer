@@ -80,8 +80,6 @@
 //! holds the workspace's lock, as one calling [`ConfigFile`] does.
 
 use std::collections::BTreeMap;
-use std::fs;
-use std::io::{self, Read as _};
 use std::path::{Path, PathBuf};
 
 use thiserror::Error;
@@ -488,44 +486,17 @@ struct UserConfig {
 
 impl UserConfig {
     /// The user's config in the Codex home `homes` gives, read through a
-    /// link and up to [`MAX_BYTES`]; `None` when no home is given, or it
-    /// holds no such file.
+    /// link and up to [`MAX_BYTES`] ([`config_entry::read_through`]);
+    /// `None` when no home is given, or it holds no such file.
     ///
-    /// Through a link, where a project's [`FILE`] is refused one: it is
-    /// read and never written, and a user's config kept in a repository of
-    /// their settings is most often linked into the home. Refused when it
-    /// does not read as TOML, as Codex refuses it: whether it names a
-    /// server cannot be told of a file that does not parse.
+    /// Refused when it does not read as TOML, as Codex refuses it: whether
+    /// it names a server cannot be told of a file that does not parse.
     fn read(homes: &AgentHomes) -> Result<Option<Self>, CodexMcpError> {
         let Some(home) = &homes.codex_home else {
             return Ok(None);
         };
         let path = home.join(USER_FILE);
-        let failed = |source| FileError::Read {
-            path: path.clone(),
-            source,
-        };
-        let file = match fs::File::open(&path) {
-            Ok(file) => file,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
-            Err(source) => return Err(failed(source).into()),
-        };
-        let mut bytes = Vec::new();
-        // One byte past the cap is enough to know it is past.
-        file.take(MAX_BYTES + 1)
-            .read_to_end(&mut bytes)
-            .map_err(failed)?;
-        if bytes.len() as u64 > MAX_BYTES {
-            return Err(FileError::TooLarge {
-                path,
-                cap: MAX_BYTES,
-            }
-            .into());
-        }
-        let Ok(text) = String::from_utf8(bytes) else {
-            return Err(FileError::NotText { path }.into());
-        };
-        Ok(Some(UserConfig { path, text }))
+        Ok(config_entry::read_through(&path, MAX_BYTES)?.map(|text| UserConfig { path, text }))
     }
 
     /// Whether the user's config marks the project at `root` trusted,
