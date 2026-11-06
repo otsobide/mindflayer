@@ -116,7 +116,9 @@ const FORGES: [&str; 2] = ["github.com", "gitlab.com"];
 /// Elsewhere only what cannot tell two repositories apart goes: the user
 /// name and any credential, the case of the scheme and the host, a trailing
 /// `/`, and `file://` in front of a path, which names the same folder
-/// without it.
+/// without it. A relative path stays as it was typed, its own identity,
+/// since which folder it names depends on where it was typed, which a rule
+/// of text cannot know.
 ///
 /// [`redacted`] first, so a credential is out of it however oddly it was
 /// typed, and then the user ssh logs in as, which is who reaches the

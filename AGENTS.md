@@ -574,7 +574,18 @@ These are easy to break from a single file without noticing.
   type reaches a front end. A cancel is honoured until the shelf starts to
   change, and leaves the shelf and the ledger as they were, so a write to
   either before that last check is undone on a cancel, as registering the
-  source is.
+  source is, and naming it.
+- **A gathered source is one repository, called by one name.** A source is
+  found by `url::canonical` of its URL, credential-free, at its branch
+  (empty for the remote's HEAD) and from its folder, unique behind
+  `sources_by_identity`, so every spelling of one repository gathers into
+  one source (D-13); a gather fetches `url::fetched`, `owner/repo` as
+  GitHub's. It is called by a `value::SourceName`, `owner-repo`
+  (`SourceName::derived`) unless `gather git --name` gave another, which
+  `gather list` shows (`Offer::listed_from`) and `--from` takes beside the
+  origin an install records and the JSON holds, unchanged. Another spelling
+  of its URL still names it, said with `install::Respelled`'s warning,
+  which fails nothing. No front end spells a source's identity or its name.
 - **Output is built, then printed.** Commands return an `Outcome` (stdout
   text, stderr lines, ok), so tests assert on the exact text a user sees.
   The two that run until they are stopped write as they run, the TUI its
@@ -1120,8 +1131,8 @@ These are easy to break from a single file without noticing.
   - URLs are stored, logged and shown without credentials. `url::redacted`
     is the one function that takes them out: the ledger applies it to every
     URL it writes and reads, `GitError` to what it says, the gix adapter's
-    scrub (`Remote::scrub`) to a clone's config and reflogs. A gather refuses a URL that carries one, and one typed as its branch or
-    folder, which the ledger would keep word for word. A
+    scrub (`Remote::scrub`) to a clone's config and reflogs. A gather refuses a URL that carries one, and one typed as its branch,
+    folder or name, which the ledger would keep word for word. A
     command that writes to the ledger opens it with
     `WeaverWorkspace::ledger_to_write`, which scrubs what an older build
     stored first and hands back what it took out to be said; one that only
@@ -1214,7 +1225,10 @@ These are easy to break from a single file without noticing.
     (`apps/core/tests/fixtures/ledger-v<N>.sql`) for a test to migrate.
     What no SQL can know is handed to the step rather than read by it:
     schema 5 is told each linked project's id (`Ledger::open_knowing`, from
-    `WeaverWorkspace::known`).
+    `WeaverWorkspace::known`), and schema 7 which URLs are one repository's
+    (`url::canonical`). A step that makes two rows one hands back the rows
+    that went (`LedgerStore::merged`), whose folders whoever opened the
+    ledger clears (`gather::clear_merged`) and a command that writes says.
 - **What is written outside the code is Mindweaver's, and a Mindflayer
   build's is read beside it, in one constant each.** Mindweaver was
   Mindflayer (D-26, in `docs/architecture.md`): what a build writes on the
