@@ -170,8 +170,9 @@ crate::described::words! {
 /// Where something that can be installed would be copied from.
 #[derive(Debug, Clone)]
 pub enum Offer {
-    /// Gathered from a source onto the shelf.
-    Shelf(Gathered),
+    /// Gathered from a source onto the shelf. Boxed, being far larger than
+    /// the other two, since it carries its source and where it came from.
+    Shelf(Box<Gathered>),
     /// One of the workspace's own artifacts, which it keeps to share with the
     /// projects it manages.
     Workspace {
@@ -1212,7 +1213,7 @@ pub(crate) fn offers(
             .gathered()?
             .into_iter()
             .filter(|gathered| gathered.kind == kind)
-            .map(Offer::Shelf),
+            .map(|gathered| Offer::Shelf(Box::new(gathered))),
     );
 
     offers.retain(|offer| is_installable_name(kind, offer.name()));

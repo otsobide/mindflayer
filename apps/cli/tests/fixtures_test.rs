@@ -23,7 +23,8 @@ mod common;
 
 use common::*;
 use mindweaver_cli::backend::{PanelBackend, Query};
-use mindweaver_core::ledger::{Action, Outcome as Logged};
+use mindweaver_core::hash;
+use mindweaver_core::ledger::{Action, Outcome as Logged, Upstream};
 use mindweaver_core::SourceKind;
 use mindweaver_server::Backend;
 use serde_json::{json, Value};
@@ -490,15 +491,23 @@ fn shelve(root: &Path) {
         .source_for(SourceKind::Git, SOURCE, None, "skills")
         .unwrap();
     ledger.saw_source(source.id, Some(REVISION)).unwrap();
-    for (name, summary) in [
-        ("format", "Format the code the way the team does"),
-        ("triage", "Sort new issues by what they need"),
+    // One with a licence file beside it, which a gather reads its first
+    // line of, and one with none.
+    for (name, summary, license) in [
+        (
+            "format",
+            "Format the code the way the team does",
+            Some("MIT License"),
+        ),
+        ("triage", "Sort new issues by what they need", None),
     ] {
         let shelf = format!(".mindweaver/skills/{}/{name}", source.directory);
-        write_files(
-            &root.join(&shelf),
-            &[("SKILL.md", &skill_file(name, summary))],
-        );
+        let manifest = skill_file(name, summary);
+        let mut files = vec![("SKILL.md", manifest.as_str())];
+        if license.is_some() {
+            files.push(("LICENSE", "MIT License\n\nCopyright (c) Acme\n"));
+        }
+        write_files(&root.join(&shelf), &files);
         ledger
             .record(
                 &source,
@@ -506,7 +515,12 @@ fn shelve(root: &Path) {
                 name,
                 &shelf,
                 Some(summary),
-                Some(REVISION),
+                &Upstream {
+                    revision: Some(REVISION.into()),
+                    path: format!("skills/{name}"),
+                    content_hash: Some(hash::tree(&root.join(&shelf)).unwrap()),
+                    license: license.map(str::to_owned),
+                },
             )
             .unwrap();
     }

@@ -4,14 +4,14 @@
 use crate::agent::Agent;
 use crate::kind::Kind;
 use crate::ledger::{
-    Entry, EntryTarget, Gathered, InstallRecord, Moved, Source, SourceKind, Target,
+    Entry, EntryTarget, Gathered, InstallRecord, Moved, Source, SourceKind, Target, Upstream,
 };
 use crate::mother::random;
 use crate::mother::url::UrlMother;
 use crate::mother::value::{
     ArtifactNameMother, ContentHashMother, OriginMother, RedactedMother, RevisionMother,
 };
-use crate::value::{ArtifactName, ContentHash, Origin, Redacted, SourceName};
+use crate::value::{ArtifactName, ContentHash, Origin, Redacted, Revision, SourceName};
 
 /// Makes [`Source`]s, as the ledger hands one back.
 pub struct SourceMother;
@@ -53,14 +53,43 @@ impl GatheredMother {
 
     /// `name`, of `kind`, gathered from `source`.
     pub fn create(kind: Kind, name: ArtifactName, source: Source) -> Gathered {
+        let upstream = UpstreamMother::random();
         Gathered {
             kind,
             path: format!(".mindweaver/{}/{}/{name}", kind.slug(), source.directory),
+            upstream_path: format!("{}/{name}", source.subdirectory),
             name,
             summary: random::chance().then(|| random::text(30)),
             revision: source.revision.clone(),
             gathered_at: random::between(1_600_000_000, 1_900_000_000) as i64,
             source,
+            content_hash: upstream.content_hash,
+            license: upstream.license,
+        }
+    }
+}
+
+/// Makes [`Upstream`]s, where a gathered artifact came from.
+pub struct UpstreamMother;
+
+impl UpstreamMother {
+    /// From some folder of its repository at some commit, hashed, under a
+    /// licence or none.
+    pub fn random() -> Upstream {
+        Upstream {
+            revision: Some(RevisionMother::random()),
+            path: format!("{}/{}", random::kebab(), random::kebab()),
+            content_hash: Some(ContentHashMother::random()),
+            license: random::chance()
+                .then(|| random::pick(&["MIT", "Apache-2.0", "Proprietary"]).to_owned()),
+        }
+    }
+
+    /// At `revision`, with nothing else known of where it came from.
+    pub fn at(revision: Option<&str>) -> Upstream {
+        Upstream {
+            revision: revision.map(Revision::from),
+            ..Upstream::default()
         }
     }
 }

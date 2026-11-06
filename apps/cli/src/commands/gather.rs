@@ -77,7 +77,7 @@ fn shelf(workspace: &WeaverWorkspace, found: &mut Option<Vec<Offer>>) -> Result<
         // Listed only if it could be installed: a name that is not one folder
         // name never can be, wherever it came from.
         if mindweaver_core::install::is_folder_name(&gathered.name) {
-            offers.push(Offer::Shelf(gathered));
+            offers.push(Offer::Shelf(Box::new(gathered)));
         } else {
             stderr.push(
                 format!(

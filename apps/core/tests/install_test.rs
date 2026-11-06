@@ -2062,7 +2062,7 @@ fn each_offer_serializes_its_place_what_it_holds_and_its_origin() {
 #[test]
 fn a_candidate_from_the_shelf_serializes_without_the_credentials_its_source_carries() {
     let candidate = install::Candidate {
-        offer: install::Offer::Shelf(gather::Gathered {
+        offer: install::Offer::Shelf(Box::new(gather::Gathered {
             kind: Kind::Skill,
             name: "review".into(),
             path: String::from(".mindweaver/skills/github.com-acme-skills/review"),
@@ -2081,7 +2081,10 @@ fn a_candidate_from_the_shelf_serializes_without_the_credentials_its_source_carr
                 directory: String::from("github.com-acme-skills"),
                 name: mindweaver_core::value::SourceName::parse("acme-skills").unwrap(),
             },
-        }),
+            upstream_path: String::from("skills/review"),
+            content_hash: None,
+            license: Some(String::from("MIT")),
+        })),
         standing: Standing::Outdated,
     };
 

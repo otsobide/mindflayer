@@ -372,7 +372,7 @@ fn a_version_2_installation_from_a_source_gets_the_origin_its_offer_has() {
     // The spelling an install from the shelf records now, so a record the
     // step filled in and one written since compare alike.
     for gathered in ledger.gathered().unwrap() {
-        let origin = Offer::Shelf(gathered.clone()).origin();
+        let origin = Offer::Shelf(Box::new(gathered.clone())).origin();
         let recorded: Vec<String> = after
             .prepare("SELECT DISTINCT origin FROM installations WHERE source_id = ?1")
             .unwrap()

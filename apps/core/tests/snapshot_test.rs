@@ -14,7 +14,7 @@ use mindweaver_core::create::Start;
 use mindweaver_core::doctor::Machine;
 use mindweaver_core::install::{self, Confirmed, Edits};
 use mindweaver_core::known;
-use mindweaver_core::ledger::{Action, InstallRecord, Outcome, Target};
+use mindweaver_core::ledger::{Action, InstallRecord, Outcome, Target, Upstream};
 use mindweaver_core::lifecycle;
 use mindweaver_core::mcp::{Address, Given, Program};
 use mindweaver_core::mother::{McpMother, VariableNameMother};
@@ -173,7 +173,12 @@ fn fixture() -> Fixture {
             "lint",
             &shelf,
             Some("Tidy it"),
-            Some(revision),
+            &Upstream {
+                revision: Some(revision.into()),
+                path: String::from("skills/lint"),
+                content_hash: Some(hash::tree(&hub.join(&shelf)).unwrap()),
+                license: Some(String::from("MIT")),
+            },
         )
         .unwrap();
     ledger

@@ -37,7 +37,7 @@ pub use fixture::{
 };
 pub use ledger::{
     EntryMother, EntryTargetMother, GatheredMother, InstallRecordMother, MovedMother, SourceMother,
-    TargetMother,
+    TargetMother, UpstreamMother,
 };
 pub use settings::SettingsMother;
 pub use url::{Credentialed, UrlMother};

@@ -19,7 +19,7 @@ use crate::agent::Agent;
 use crate::kind::Kind;
 use crate::ledger::{
     Action, Carried, Entry, EntryTarget, Forgotten, Gathered, InstallRecord, LedgerError, Merged,
-    Moved, Outcome, Source, SourceKind, Target,
+    Moved, Outcome, Source, SourceKind, Target, Upstream,
 };
 use crate::port::{Clock, LedgerStore};
 use crate::settings::ProjectId;
@@ -633,18 +633,33 @@ impl LedgerStore for Sqlite {
         name: &str,
         path: &str,
         summary: Option<&str>,
-        revision: Option<&str>,
+        upstream: &Upstream,
     ) -> Result<(), LedgerError> {
         self.connection
             .execute(
-                "INSERT INTO artifacts (kind, name, source_id, path, summary, revision, gathered_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                "INSERT INTO artifacts (kind, name, source_id, path, summary, revision, gathered_at,
+                                        upstream_path, content_hash, license)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
                  ON CONFLICT (kind, name, source_id) DO UPDATE SET
                      path = excluded.path,
                      summary = excluded.summary,
                      revision = excluded.revision,
-                     gathered_at = excluded.gathered_at",
-                rusqlite::params![kind.slug(), name, source.id, path, summary, revision, self.now()],
+                     gathered_at = excluded.gathered_at,
+                     upstream_path = excluded.upstream_path,
+                     content_hash = excluded.content_hash,
+                     license = excluded.license",
+                rusqlite::params![
+                    kind.slug(),
+                    name,
+                    source.id,
+                    path,
+                    summary,
+                    upstream.revision.as_deref(),
+                    self.now(),
+                    upstream.path,
+                    upstream.content_hash,
+                    upstream.license
+                ],
             )
             .map(|_| ())
             .map_err(|error| self.failed("recording an artifact", error))
@@ -668,7 +683,7 @@ impl LedgerStore for Sqlite {
             .prepare(
                 "SELECT a.kind, a.name, a.path, a.summary, a.revision, a.gathered_at,
                         s.id, s.kind, s.url, s.reference, s.subdirectory, s.revision, s.directory,
-                        s.name
+                        s.name, a.upstream_path, a.content_hash, a.license
                    FROM artifacts a
                    JOIN sources s ON s.id = a.source_id
                   ORDER BY a.kind, a.name, s.url",
@@ -696,6 +711,9 @@ impl LedgerStore for Sqlite {
                     source_revision: row.get(11)?,
                     directory: row.get(12)?,
                     source_name: row.get(13)?,
+                    upstream_path: row.get(14)?,
+                    content_hash: row.get(15)?,
+                    license: row.get(16)?,
                 })
             })
             .map_err(|source| self.failed("listing what was gathered", source))?;
@@ -726,6 +744,9 @@ impl LedgerStore for Sqlite {
                     directory: row.directory,
                     name: SourceName::recorded(row.source_name),
                 },
+                upstream_path: row.upstream_path,
+                content_hash: row.content_hash,
+                license: row.license,
             });
         }
         Ok(found)
@@ -1831,6 +1852,9 @@ struct Row {
     source_revision: Option<Revision>,
     directory: String,
     source_name: String,
+    upstream_path: String,
+    content_hash: Option<ContentHash>,
+    license: Option<String>,
 }
 
 /// Where a ledger at `path` is copied before a schema step takes it on from

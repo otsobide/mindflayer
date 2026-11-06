@@ -40,7 +40,7 @@ use crate::gather::Watch;
 use crate::kind::Kind;
 use crate::ledger::{
     Action, Carried, Entry, Forgotten, Gathered, InstallRecord, LedgerError, Merged, Moved,
-    Outcome, Source, SourceKind, Target,
+    Outcome, Source, SourceKind, Target, Upstream,
 };
 use crate::settings::ProjectId;
 use crate::value::{Revision, SourceName};
@@ -229,8 +229,9 @@ pub trait LedgerStore: Debug + Send {
     /// otherwise hold on to its folder name. Its files are the caller's.
     fn forget_source(&self, id: i64) -> Result<bool, LedgerError>;
 
-    /// Record one gathered artifact, replacing what that source held under the
-    /// same name.
+    /// Record one gathered artifact, where it sits and the one line a
+    /// listing shows, and where it came from (`upstream`), replacing what
+    /// that source held under the same name.
     ///
     /// The same name from a *different* source is a different row, on purpose:
     /// two repositories offering `commit-style` are two things to choose
@@ -242,7 +243,7 @@ pub trait LedgerStore: Debug + Send {
         name: &str,
         path: &str,
         summary: Option<&str>,
-        revision: Option<&str>,
+        upstream: &Upstream,
     ) -> Result<(), LedgerError>;
 
     /// Everything gathered, ordered the way a listing reads it: by kind, then

@@ -467,6 +467,29 @@ fn any_path_below_the_workspace_is_filed_by_its_route() {
     }
 }
 
+#[test]
+fn a_gathered_folder_is_where_it_is_in_the_repository_from_its_root() {
+    let clone = Path::new("/w/.mindweaver/cache/acme-skills");
+    for _ in 0..DRAWS {
+        let segments: Vec<String> = (0..random::between(1, 4))
+            .map(|_| random::kebab())
+            .collect();
+        let folder = random::kebab();
+        let mut directory = clone.to_path_buf();
+        for segment in &segments {
+            directory.push(segment);
+        }
+        // As a folder typed `./<route>/` leads there.
+        let typed = clone.join(".").join(segments.join("/") + "/").join(&folder);
+
+        let route = format!("{}/{folder}", segments.join("/"));
+        assert_eq!(upstream(&directory.join(&folder), clone, &folder), route);
+        assert_eq!(upstream(&typed, clone, &folder), route, "{typed:?}");
+    }
+    // A skill at the repository's root is its folder alone.
+    assert_eq!(upstream(&clone.join("lint"), clone, "lint"), "lint");
+}
+
 #[cfg(unix)]
 #[test]
 fn a_skill_whose_folder_is_not_utf_8_cannot_be_filed() {
@@ -531,8 +554,19 @@ fn each_gather_failure_names_its_path_and_gives_its_code() {
     let unusable = Failure::UnusableName {
         path: PathBuf::from("/w/.mindweaver/cache/s/x"),
     };
+    let unhashed = Failure::Unhashed {
+        path: PathBuf::from("/w/.mindweaver/skills/s/review"),
+        source: io::Error::other("gone"),
+    };
 
     assert_eq!(copy.code(), "gathered_copy_failed");
+    assert_eq!(unhashed.code(), "gathered_unhashed");
+    assert_eq!(unhashed.path(), Path::new("/w/.mindweaver/skills/s/review"));
+    assert_eq!(
+        unhashed.to_string(),
+        "/w/.mindweaver/skills/s/review: put on the shelf, but cannot be read back to be hashed, \
+         so it is recorded with no hash: gone"
+    );
     assert_eq!(copy.path(), Path::new("/w/.mindweaver/skills/s/deploy"));
     assert_eq!(
         copy.to_string(),
@@ -541,7 +575,11 @@ fn each_gather_failure_names_its_path_and_gives_its_code() {
     assert_eq!(unusable.path(), Path::new("/w/.mindweaver/cache/s/x"));
     assert_eq!(
         Failure::CODES,
-        ["gathered_name_not_utf8", "gathered_copy_failed"]
+        [
+            "gathered_name_not_utf8",
+            "gathered_copy_failed",
+            "gathered_unhashed"
+        ]
     );
 }
 

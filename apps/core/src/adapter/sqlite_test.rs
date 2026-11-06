@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::ledger::LEDGER_FILE;
+use crate::mother::UpstreamMother;
 
 /// A hash as the ledger holds what it is given, which these tests need not
 /// be a real one: what is stored is read back as it was written.
@@ -62,7 +63,7 @@ fn a_forgotten_source_frees_its_directory_and_takes_its_artifacts() {
             "deploy",
             "skills/h-a/deploy",
             None,
-            None,
+            &UpstreamMother::at(None),
         )
         .unwrap();
 
@@ -122,10 +123,24 @@ fn one_name_from_two_sources_is_two_rows() {
         .source_for(SourceKind::Git, "https://h/b", None, "skills")
         .unwrap();
     ledger
-        .record(&a, Kind::Skill, "deploy", "p/a", Some("From a"), Some("1"))
+        .record(
+            &a,
+            Kind::Skill,
+            "deploy",
+            "p/a",
+            Some("From a"),
+            &UpstreamMother::at(Some("1")),
+        )
         .unwrap();
     ledger
-        .record(&b, Kind::Skill, "deploy", "p/b", Some("From b"), Some("2"))
+        .record(
+            &b,
+            Kind::Skill,
+            "deploy",
+            "p/b",
+            Some("From b"),
+            &UpstreamMother::at(Some("2")),
+        )
         .unwrap();
 
     let gathered = ledger.gathered().unwrap();
@@ -141,10 +156,24 @@ fn gathering_the_same_name_again_updates_rather_than_duplicates() {
         .source_for(SourceKind::Git, "https://h/a", None, "skills")
         .unwrap();
     ledger
-        .record(&source, Kind::Skill, "deploy", "p", Some("Old"), Some("1"))
+        .record(
+            &source,
+            Kind::Skill,
+            "deploy",
+            "p",
+            Some("Old"),
+            &UpstreamMother::at(Some("1")),
+        )
         .unwrap();
     ledger
-        .record(&source, Kind::Skill, "deploy", "p", Some("New"), Some("2"))
+        .record(
+            &source,
+            Kind::Skill,
+            "deploy",
+            "p",
+            Some("New"),
+            &UpstreamMother::at(Some("2")),
+        )
         .unwrap();
 
     let gathered = ledger.gathered().unwrap();
@@ -1980,6 +2009,9 @@ fn gathered_from(url: &str) -> Gathered {
             directory: String::from("github.com-acme-skills"),
             name: SourceName::recorded(String::from("acme-skills")),
         },
+        upstream_path: String::from("skills/deploy"),
+        content_hash: Some(recorded(&"a".repeat(64))),
+        license: Some(String::from("MIT")),
     }
 }
 

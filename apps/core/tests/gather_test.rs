@@ -270,6 +270,57 @@ fn another_folder_can_be_named_instead_of_skills() {
 }
 
 #[test]
+fn each_gathered_skill_records_its_folder_upstream_its_commit_and_the_hash_installs_use() {
+    let source = repository(&[
+        (
+            "plugins/ops/skills/audit/SKILL.md",
+            &skill("audit", "Audit it"),
+        ),
+        ("plugins/ops/skills/audit/check.sh", "exit 0\n"),
+        (
+            "plugins/ops/skills/deploy/SKILL.md",
+            &skill("deploy", "Ship it"),
+        ),
+    ]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let request = Request::git(url(&source)).from_subdirectory("./plugins/ops/skills/");
+    let report = gather::gather(&workspace, &ledger, &request).unwrap();
+
+    assert!(report.failures.is_empty(), "{:?}", report.failures);
+    let gathered = ledger.gathered().unwrap();
+    let recorded: Vec<(&str, &str, Option<&str>)> = gathered
+        .iter()
+        .map(|artifact| {
+            (
+                artifact.name.as_str(),
+                artifact.upstream_path.as_str(),
+                artifact.revision.as_deref(),
+            )
+        })
+        .collect();
+    let revision = report.revision.as_deref();
+    assert_eq!(
+        recorded,
+        [
+            ("audit", "plugins/ops/skills/audit", revision),
+            ("deploy", "plugins/ops/skills/deploy", revision),
+        ]
+    );
+    // By the recipe an install hashes its copy by, of what the shelf holds.
+    for artifact in &gathered {
+        let shelved = workspace.root().join(&artifact.path);
+        assert_eq!(
+            artifact.content_hash,
+            Some(mindweaver_core::hash::tree(&shelved).unwrap()),
+            "{}",
+            artifact.name
+        );
+    }
+}
+
+#[test]
 fn a_folder_the_source_does_not_have_is_named_in_the_error() {
     let source = repository(&[("README.md", "nothing to gather\n")]);
     let (_dir, workspace) = workspace();

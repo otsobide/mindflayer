@@ -190,6 +190,45 @@ pub struct Gathered {
     /// When it was gathered, in seconds since the Unix epoch.
     pub gathered_at: i64,
     pub source: Source,
+    /// Its folder in the repository it was gathered from, from the
+    /// repository's root, `/` separated ([`Upstream::path`]).
+    ///
+    /// Not serialized yet, nor the two after it: the envelope and the
+    /// snapshot are given them once a listing shows them.
+    #[serde(skip)]
+    pub upstream_path: String,
+    /// [`crate::hash::tree`] of what the gather put on the shelf, or `None`
+    /// when it could not be read back, or was gathered before hashes were
+    /// kept ([`Upstream::content_hash`]).
+    #[serde(skip)]
+    pub content_hash: Option<ContentHash>,
+    /// Its licence as it says it, or `None` when nothing does
+    /// ([`Upstream::license`]).
+    #[serde(skip)]
+    pub license: Option<String>,
+}
+
+/// Where one gathered artifact came from, to the commit: what a gather
+/// records of it beside where it put it on the shelf
+/// ([`record`](LedgerStore::record)).
+///
+/// Its own type rather than four more arguments, since they travel
+/// together: what an audit of the shelf asks of each artifact, which
+/// repository folder at which commit, under which licence, and whether the
+/// shelf still holds what was taken.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Upstream {
+    /// The commit it was taken at, once one has been resolved.
+    pub revision: Option<Revision>,
+    /// Its folder in the repository, from the repository's root, `/`
+    /// separated: `skills/deploy` for a skill gathered from `skills`.
+    pub path: String,
+    /// [`crate::hash::tree`] of the folder the gather put on the shelf, the
+    /// one recipe an install keeps of a copy, or `None` when it could not be
+    /// read back.
+    pub content_hash: Option<ContentHash>,
+    /// Its licence as the skill says it, or `None` when nothing does.
+    pub license: Option<String>,
 }
 
 /// Something the user asked for, whether or not it worked.

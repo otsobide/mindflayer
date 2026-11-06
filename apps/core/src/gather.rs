@@ -28,8 +28,9 @@ use crate::adapter::gix::Gix;
 use crate::artifact::{Artifact, ArtifactError, ValidationIssue};
 use crate::code::codes;
 use crate::copy::{self, Change};
+use crate::hash;
 use crate::kind::{Kind, Layout};
-use crate::ledger::{self, Action, Ledger, LedgerError, Merged, Outcome, SourceKind};
+use crate::ledger::{self, Action, Ledger, LedgerError, Merged, Outcome, SourceKind, Upstream};
 use crate::lock::LockError;
 use crate::paths;
 use crate::port::{GitError, Remote};
@@ -685,6 +686,21 @@ fn take(
                 issue,
             }));
 
+        // Of the copy on the shelf rather than the folder in the clone: it
+        // is what an install copies from, and what a link in the clone led
+        // to is in it, where the hash would refuse the link itself. One that
+        // cannot be read back is recorded with no hash, as an install
+        // records a copy it cannot read back, rather than not at all.
+        let content_hash = match hash::tree(&destination) {
+            Ok(hash) => Some(hash),
+            Err(source) => {
+                report.failures.push(Failure::Unhashed {
+                    path: destination.clone(),
+                    source,
+                });
+                None
+            }
+        };
         let recorded = relative(workspace, &destination);
         ledger.record(
             source,
@@ -692,7 +708,12 @@ fn take(
             artifact.name(),
             &recorded,
             artifact.summary(),
-            clone.revision.as_deref(),
+            &Upstream {
+                revision: clone.revision.clone(),
+                path: upstream(directory, &clone.root, folder),
+                content_hash,
+                license: None,
+            },
         )?;
 
         let harvested = Harvested {
@@ -771,6 +792,16 @@ fn candidates(root: &Path, manifest: &str) -> Result<Vec<PathBuf>, GatherError> 
     Ok(found)
 }
 
+/// Where `directory` is in the repository cloned at `clone`: its route from
+/// the repository's root, `/` separated, `folder` alone when it has none.
+///
+/// Lexical, as every route is ([`paths::relative_to`]), so a folder typed
+/// `./skills/` is `skills` as it is in the repository.
+fn upstream(directory: &Path, clone: &Path, folder: &str) -> String {
+    paths::relative_to(directory, clone)
+        .map_or_else(|| folder.to_owned(), |route| paths::as_route(&route))
+}
+
 /// A path as the ledger stores it: relative to the workspace, `/` separated,
 /// so a workspace gathered on one platform reads on the other.
 fn relative(workspace: &WeaverWorkspace, path: &Path) -> String {
@@ -780,7 +811,8 @@ fn relative(workspace: &WeaverWorkspace, path: &Path) -> String {
         .unwrap_or_else(|| path.display().to_string())
 }
 
-/// One artifact that could not be taken, out of a source that mostly could.
+/// One artifact that could not be taken, out of a source that mostly could,
+/// or that was taken and could not be read back.
 #[derive(Debug, Error)]
 pub enum Failure {
     #[error(transparent)]
@@ -793,11 +825,20 @@ pub enum Failure {
         #[source]
         source: io::Error,
     },
+    /// Put on the shelf, but not read back for its hash, so recorded with
+    /// none.
+    #[error("{path}: put on the shelf, but cannot be read back to be hashed, so it is recorded with no hash: {source}")]
+    Unhashed {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
 }
 
 codes!(Failure {
     Self::UnusableName { .. } => "gathered_name_not_utf8",
     Self::Copy { .. } => "gathered_copy_failed",
+    Self::Unhashed { .. } => "gathered_unhashed",
 } carried {
     Self::Artifact(error) => error,
 });
@@ -807,7 +848,9 @@ impl Failure {
     pub fn path(&self) -> &Path {
         match self {
             Failure::Artifact(error) => error.path(),
-            Failure::UnusableName { path } | Failure::Copy { path, .. } => path,
+            Failure::UnusableName { path }
+            | Failure::Copy { path, .. }
+            | Failure::Unhashed { path, .. } => path,
         }
     }
 }

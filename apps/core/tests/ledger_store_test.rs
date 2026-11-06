@@ -27,7 +27,7 @@ use mindweaver_core::mother::ledger::RouteMother;
 use mindweaver_core::mother::{
     random, ArtifactNameMother, ContentHashMother, EntryTargetMother, InstallRecordMother,
     McpMother, OriginMother, ProjectIdMother, RedactedMother, RevisionMother, TargetMother,
-    UrlMother,
+    UpstreamMother, UrlMother,
 };
 use mindweaver_core::value::{ArtifactName, Origin, Redacted, SourceName};
 use mindweaver_core::{Agent, Clock, Kind, Ledger, ProjectId, SourceKind, LEDGER_FILE};
@@ -378,7 +378,7 @@ fn a_refusal_names_where_the_store_is_kept_and_records_nothing(mut store: Store)
                 &name,
                 &format!("skills/{name}"),
                 None,
-                None,
+                &UpstreamMother::at(None),
             )
             .unwrap_err(),
         store.installed("collapse", &pointing).unwrap_err(),
@@ -1566,7 +1566,7 @@ fn forgetting_a_source_takes_what_it_brought_and_frees_its_folder(mut store: Sto
                 &name,
                 &format!("skills/{name}"),
                 None,
-                None,
+                &UpstreamMother::at(None),
             )
             .unwrap();
     }
@@ -1613,7 +1613,7 @@ fn every_source_is_listed_by_url_then_branch_then_folder_even_with_nothing_gathe
             "deploy",
             "skills/deploy",
             None,
-            None,
+            &UpstreamMother::at(None),
         )
         .unwrap();
 
@@ -1633,7 +1633,8 @@ fn a_gathered_artifact_reads_back_with_its_source(store: Store) {
     let at = random::between(1_600_000_000, 1_900_000_000) as i64;
     let mut store = store.stamped_by(Arc::new(Stopped(at)));
     let from = source(&store, &UrlMother::https());
-    let revision = RevisionMother::random();
+    let upstream = UpstreamMother::random();
+    let revision = upstream.revision.clone().unwrap();
     store.saw_source(from.id, Some(revision.as_str())).unwrap();
     let name = ArtifactNameMother::random();
     let path = format!(".mindweaver/skills/{}/{name}", from.directory);
@@ -1646,7 +1647,7 @@ fn a_gathered_artifact_reads_back_with_its_source(store: Store) {
             &name,
             &path,
             summary.as_deref(),
-            Some(revision.as_str()),
+            &upstream,
         )
         .unwrap();
 
@@ -1660,6 +1661,9 @@ fn a_gathered_artifact_reads_back_with_its_source(store: Store) {
     assert_eq!(artifact.summary, summary);
     assert_eq!(artifact.revision.as_ref(), Some(&revision));
     assert_eq!(artifact.gathered_at, at);
+    assert_eq!(artifact.upstream_path, upstream.path);
+    assert_eq!(artifact.content_hash, upstream.content_hash);
+    assert_eq!(artifact.license, upstream.license);
     assert_eq!(
         artifact.source,
         Source {
@@ -1674,10 +1678,19 @@ fn gathering_a_name_again_from_one_source_replaces_it_and_from_another_adds_it(m
     let second = source(&store, &UrlMother::https());
     let name = ArtifactNameMother::random();
     store
-        .record(&first, Kind::Skill, &name, "old/path", Some("Old"), None)
+        .record(
+            &first,
+            Kind::Skill,
+            &name,
+            "old/path",
+            Some("Old"),
+            &UpstreamMother::random(),
+        )
         .unwrap();
     let revision = RevisionMother::random();
 
+    // Everything it came from goes with what it was, a licence it said
+    // included.
     store
         .record(
             &first,
@@ -1685,7 +1698,7 @@ fn gathering_a_name_again_from_one_source_replaces_it_and_from_another_adds_it(m
             &name,
             "new/path",
             None,
-            Some(revision.as_str()),
+            &UpstreamMother::at(Some(revision.as_str())),
         )
         .unwrap();
     store
@@ -1695,7 +1708,7 @@ fn gathering_a_name_again_from_one_source_replaces_it_and_from_another_adds_it(m
             &name,
             "other/path",
             Some("Other"),
-            None,
+            &UpstreamMother::at(None),
         )
         .unwrap();
 
@@ -1713,6 +1726,9 @@ fn gathering_a_name_again_from_one_source_replaces_it_and_from_another_adds_it(m
     assert_eq!(replaced[0].path, "new/path");
     assert_eq!(replaced[0].summary, None);
     assert_eq!(replaced[0].revision.as_ref(), Some(&revision));
+    assert_eq!(replaced[0].upstream_path, "");
+    assert_eq!(replaced[0].content_hash, None);
+    assert_eq!(replaced[0].license, None);
     assert_eq!(of(&second)[0].summary.as_deref(), Some("Other"));
 }
 
@@ -1727,7 +1743,7 @@ fn a_shelf_moved_moves_every_path_under_it_and_nothing_else(mut store: Store) {
             &names[0],
             &format!("{under}/a"),
             None,
-            None,
+            &UpstreamMother::at(None),
         )
         .unwrap();
     store
@@ -1737,14 +1753,21 @@ fn a_shelf_moved_moves_every_path_under_it_and_nothing_else(mut store: Store) {
             &names[1],
             &format!("{under}/b.md"),
             None,
-            None,
+            &UpstreamMother::at(None),
         )
         .unwrap();
     // Beside it, spelled to look like it: a prefix of characters is not
     // a folder.
     let beside = format!("{under}_beside/c");
     store
-        .record(&from, Kind::Skill, &names[2], &beside, None, None)
+        .record(
+            &from,
+            Kind::Skill,
+            &names[2],
+            &beside,
+            None,
+            &UpstreamMother::at(None),
+        )
         .unwrap();
 
     let moved = store
@@ -1785,7 +1808,7 @@ fn what_was_gathered_is_listed_by_name_then_source(mut store: Store) {
                     name,
                     &format!("{}/{name}", from.directory),
                     None,
-                    None,
+                    &UpstreamMother::at(None),
                 )
                 .unwrap();
             written.push((name.to_string(), from.url.to_string()));
@@ -1827,7 +1850,7 @@ fn no_credential_typed_into_a_url_comes_back_from_the_store(mut store: Store) {
                 "deploy",
                 "skills/deploy",
                 None,
-                None,
+                &UpstreamMother::at(None),
             )
             .unwrap();
         let mut record = InstallRecordMother::skill("deploy");
@@ -2320,7 +2343,14 @@ fn everything_a_store_stamps_is_stamped_by_the_clock_it_is_handed(store: Store) 
     let mut store = store.stamped_by(Arc::new(Stopped(at)));
     let from = source(&store, &UrlMother::https());
     store
-        .record(&from, Kind::Skill, "deploy", "skills/deploy", None, None)
+        .record(
+            &from,
+            Kind::Skill,
+            "deploy",
+            "skills/deploy",
+            None,
+            &UpstreamMother::at(None),
+        )
         .unwrap();
     store
         .log(Action::Gather, Some("deploy"), Outcome::Ok, None)
@@ -2365,7 +2395,14 @@ fn each_write_reads_the_clock_when_it_is_made(store: Store) {
     let from = source(&store, &UrlMother::https());
     let before_record = clock.next();
     store
-        .record(&from, Kind::Skill, "deploy", "skills/deploy", None, None)
+        .record(
+            &from,
+            Kind::Skill,
+            "deploy",
+            "skills/deploy",
+            None,
+            &UpstreamMother::at(None),
+        )
         .unwrap();
 
     store.reopen();
