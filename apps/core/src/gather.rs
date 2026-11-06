@@ -174,6 +174,47 @@ impl Request {
         }
     }
 
+    /// Gather what `typed` addresses, as somebody types a source on a
+    /// command line ([`crate::url::address`]): a URL, `owner/repo`,
+    /// `owner/repo@ref`, or a GitHub or GitLab tree URL, with the branch or
+    /// tag `reference` and the folder `subdirectory` given beside it, when
+    /// they are.
+    ///
+    /// What the address names and an option names again has to be the
+    /// same, or it is refused (`gather_ref_contradicted`,
+    /// `gather_path_contradicted`): which of two branches or folders was
+    /// meant is not something to guess. Refused here, before anything is
+    /// registered or fetched, in words that quote neither the address nor
+    /// the option with a credential in it ([`redacted`]); a credential the
+    /// address carries is refused by the gather, as one in any URL is.
+    pub fn addressed(
+        typed: &str,
+        reference: Option<String>,
+        subdirectory: Option<String>,
+    ) -> Result<Self, GatherError> {
+        let address = crate::url::address(typed);
+        let said = |what: &str| redacted(what).into_owned();
+        let reference = agreed(address.reference, reference, |named, given| {
+            GatherError::RefContradicted {
+                address: said(typed),
+                named: said(&named),
+                given: said(&given),
+            }
+        })?;
+        let subdirectory = agreed(address.path, subdirectory, |named, given| {
+            GatherError::PathContradicted {
+                address: said(typed),
+                named: said(&named),
+                given: said(&given),
+            }
+        })?;
+        let request = Request::git(address.url).at(reference);
+        Ok(match subdirectory {
+            Some(folder) => request.from_subdirectory(folder),
+            None => request,
+        })
+    }
+
     /// Gather `source` again as the ledger records it was gathered last:
     /// from its URL, at its branch or tag, out of its folder, at the commit
     /// it is pinned to when it is one, and under the name it has, which a
@@ -233,6 +274,20 @@ impl Request {
     pub fn through(mut self, remote: Arc<dyn Remote>) -> Self {
         self.remote = remote;
         self
+    }
+}
+
+/// What an address `named` and an option `given` beside it come to: one of
+/// them, when only one says anything or both say the same, and what
+/// `contradicted` makes of the two otherwise.
+fn agreed(
+    named: Option<String>,
+    given: Option<String>,
+    contradicted: impl FnOnce(String, String) -> GatherError,
+) -> Result<Option<String>, GatherError> {
+    match (named, given) {
+        (Some(named), Some(given)) if named != given => Err(contradicted(named, given)),
+        (named, given) => Ok(given.or(named)),
     }
 }
 
@@ -1448,6 +1503,22 @@ pub enum GatherError {
     PinInvalid { pin: String },
     #[error("{} cannot be gathered yet", .kind.plural())]
     NotGatherable { kind: Kind },
+    /// The address names one branch or tag (`owner/repo@ref`, a tree URL)
+    /// and `--ref` another ([`Request::addressed`]).
+    #[error("{address} names the branch or tag `{named}`, and --ref names `{given}`: give one")]
+    RefContradicted {
+        address: String,
+        named: String,
+        given: String,
+    },
+    /// The address names one folder (a tree URL) and `--path` another
+    /// ([`Request::addressed`]).
+    #[error("{address} names the folder `{named}`, and --path names `{given}`: give one")]
+    PathContradicted {
+        address: String,
+        named: String,
+        given: String,
+    },
     #[error("{path}: cannot be read: {source}")]
     Read {
         path: PathBuf,
@@ -1464,6 +1535,8 @@ codes!(GatherError {
     Self::NameTaken { .. } => "source_name_taken",
     Self::PinInvalid { .. } => "gather_pin_invalid",
     Self::NotGatherable { .. } => "kind_not_gatherable",
+    Self::RefContradicted { .. } => "gather_ref_contradicted",
+    Self::PathContradicted { .. } => "gather_path_contradicted",
     Self::Read { .. } => "gather_read_failed",
 } carried {
     Self::Git(error) => error,

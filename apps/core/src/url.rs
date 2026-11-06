@@ -184,6 +184,92 @@ pub fn fetched(url: &str) -> Cow<'_, str> {
     }
 }
 
+/// What somebody typed to name a source, read as the repository it names
+/// and the branch or tag and the folder that can be typed with it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Address {
+    /// The repository, as it was typed: `owner/repo` stays that, which
+    /// [`fetched`] reads as GitHub's, and a tree URL's repository keeps
+    /// whatever its address carried, a credential included, for a gather to
+    /// refuse as it refuses one in any URL.
+    pub url: String,
+    /// The branch or tag the address named, if it named one.
+    pub reference: Option<String>,
+    /// The folder inside the repository the address named, if it named one.
+    pub path: Option<String>,
+}
+
+/// What `typed` addresses: `owner/repo@ref`, `owner/repo` at `ref`; a
+/// GitHub tree URL, `https://github.com/<owner>/<repo>/tree/<ref>/<path>`,
+/// or a GitLab one, `https://gitlab.com/<group>/<repo>/-/tree/<ref>/<path>`,
+/// the repository at `ref` with its folder `path`, which may be left out;
+/// and anything else the URL it is, with nothing beside it.
+///
+/// A tree URL's branch is its one segment after `tree`, as `gh` and `npx
+/// skills` read it: a branch with a `/` in it cannot be told from the
+/// folder after it there, and is typed with `--ref` instead. On GitHub the
+/// repository is the two segments before `tree`; on GitLab, whose groups
+/// nest, every segment before the `-` that stands before `tree`, which is
+/// how GitLab spells one. Only on those two forges ([`FORGES`]): elsewhere
+/// a path with `tree` in it is somebody's repository's path.
+pub fn address(typed: &str) -> Address {
+    shorthand(typed)
+        .or_else(|| tree(typed))
+        .unwrap_or_else(|| Address {
+            url: typed.to_owned(),
+            reference: None,
+            path: None,
+        })
+}
+
+/// `owner/repo@ref` as the repository `owner/repo` at `ref`, when what
+/// comes before the first `@` is an `owner/repo` [`fetched`] reads as
+/// GitHub's and something comes after it.
+fn shorthand(typed: &str) -> Option<Address> {
+    let (repository, reference) = typed.split_once('@')?;
+    let github = matches!(fetched(repository), Cow::Owned(_));
+    (github && !reference.is_empty()).then(|| Address {
+        url: repository.to_owned(),
+        reference: Some(reference.to_owned()),
+        path: None,
+    })
+}
+
+/// A forge's tree URL as its repository, its branch and its folder.
+fn tree(typed: &str) -> Option<Address> {
+    let (scheme, rest) = typed.split_once("://")?;
+    if !(scheme.eq_ignore_ascii_case("https") || scheme.eq_ignore_ascii_case("http")) {
+        return None;
+    }
+    let (authority, path) = rest.split_once('/')?;
+    let host = authority
+        .rsplit_once('@')
+        .map_or(authority, |(_, host)| host);
+    let segments: Vec<&str> = path.split('/').collect();
+    // The repository, and where the `tree` after it is.
+    let (repository, tree) = if forge(&host.to_ascii_lowercase())? == "gitlab.com" {
+        let dash = segments.windows(2).position(|pair| pair == ["-", "tree"])?;
+        (&segments[..dash], dash + 1)
+    } else {
+        (segments.get(..2)?, 2)
+    };
+    let named = repository.len() >= 2 && repository.iter().all(|segment| !segment.is_empty());
+    if !named || segments.get(tree) != Some(&"tree") {
+        return None;
+    }
+    let (reference, folder) = segments.get(tree + 1..)?.split_first()?;
+    if reference.is_empty() {
+        return None;
+    }
+    let folder = folder.join("/");
+    let folder = folder.trim_end_matches('/');
+    Some(Address {
+        url: format!("{scheme}://{authority}/{}", repository.join("/")),
+        reference: Some((*reference).to_owned()),
+        path: (!folder.is_empty()).then(|| folder.to_owned()),
+    })
+}
+
 /// The name of the repository `url` names: the last folder of its path in
 /// the URL every spelling of it is ([`canonical`]), `.git` left off, so
 /// `acme/pdf-skill`, `git@github.com:Acme/PDF-Skill.git` and

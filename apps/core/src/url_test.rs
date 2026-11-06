@@ -331,3 +331,138 @@ fn a_url_whose_path_ends_in_no_folder_names_no_repository() {
         assert_eq!(repository(url), None, "{url}");
     }
 }
+
+/// An address holding `url`, at `reference`, in `path`.
+fn addressed(url: &str, reference: Option<&str>, path: Option<&str>) -> Address {
+    Address {
+        url: url.to_owned(),
+        reference: reference.map(str::to_owned),
+        path: path.map(str::to_owned),
+    }
+}
+
+#[test]
+fn owner_and_repo_at_a_ref_is_the_repository_at_that_ref() {
+    for (typed, url, reference) in [
+        ("acme/skills@v2", "acme/skills", "v2"),
+        ("acme/skills@main", "acme/skills", "main"),
+        (
+            "Acme/Skills.git@release/2.0",
+            "Acme/Skills.git",
+            "release/2.0",
+        ),
+        ("acme/skills@4f9c2a7", "acme/skills", "4f9c2a7"),
+    ] {
+        assert_eq!(
+            address(typed),
+            addressed(url, Some(reference), None),
+            "{typed}"
+        );
+    }
+    assert_eq!(address("acme/skills"), addressed("acme/skills", None, None));
+}
+
+#[test]
+fn a_github_tree_url_is_its_repository_its_branch_and_its_folder() {
+    for (typed, url, reference, path) in [
+        (
+            "https://github.com/acme/skills/tree/main/skills/pdf",
+            "https://github.com/acme/skills",
+            "main",
+            Some("skills/pdf"),
+        ),
+        (
+            "https://github.com/acme/skills/tree/v2/plugins/ops/skills/",
+            "https://github.com/acme/skills",
+            "v2",
+            Some("plugins/ops/skills"),
+        ),
+        (
+            "https://github.com/acme/skills/tree/main",
+            "https://github.com/acme/skills",
+            "main",
+            None,
+        ),
+        (
+            "https://github.com/acme/skills/tree/main/",
+            "https://github.com/acme/skills",
+            "main",
+            None,
+        ),
+        (
+            "HTTPS://GitHub.com/Acme/Skills/tree/dev/x",
+            "HTTPS://GitHub.com/Acme/Skills",
+            "dev",
+            Some("x"),
+        ),
+    ] {
+        assert_eq!(
+            address(typed),
+            addressed(url, Some(reference), path),
+            "{typed}"
+        );
+    }
+}
+
+#[test]
+fn a_gitlab_tree_url_is_its_repository_however_deep_its_groups_go() {
+    for (typed, url, reference, path) in [
+        (
+            "https://gitlab.com/acme/skills/-/tree/main/skills/pdf",
+            "https://gitlab.com/acme/skills",
+            "main",
+            Some("skills/pdf"),
+        ),
+        (
+            "https://gitlab.com/acme/team/skills/-/tree/v2",
+            "https://gitlab.com/acme/team/skills",
+            "v2",
+            None,
+        ),
+    ] {
+        assert_eq!(
+            address(typed),
+            addressed(url, Some(reference), path),
+            "{typed}"
+        );
+    }
+}
+
+#[test]
+fn a_tree_url_keeps_the_credential_it_carries_for_a_gather_to_refuse() {
+    let typed = format!(
+        "https://{}@github.com/acme/private/tree/main/skills",
+        token()
+    );
+
+    let read = address(&typed);
+
+    assert_eq!(
+        read.url,
+        format!("https://{}@github.com/acme/private", token())
+    );
+    assert!(carries_credentials(&read.url));
+}
+
+#[test]
+fn anything_else_is_the_url_it_is_with_nothing_beside_it() {
+    for typed in [
+        "https://github.com/acme/skills",
+        "https://github.com/acme/skills.git",
+        "git@github.com:acme/skills.git",
+        "ssh://git@github.com/acme/skills",
+        "https://github.com/acme/skills/blob/main/README.md",
+        "https://github.com/acme/skills/tree",
+        "https://github.com/acme/skills/tree/",
+        "https://github.com/acme/tree/main",
+        "https://gitlab.com/acme/skills/tree/main",
+        "https://git.example.com/acme/skills/tree/main/x",
+        "ssh://git@github.com/acme/skills/tree/main/x",
+        "./acme/skills@v2",
+        "acme/skills@",
+        "me@host:skills",
+        "/srv/git/skills",
+    ] {
+        assert_eq!(address(typed), addressed(typed, None, None), "{typed}");
+    }
+}

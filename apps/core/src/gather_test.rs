@@ -84,6 +84,132 @@ fn a_request_for_a_git_source_searches_the_whole_repository_at_its_head() {
 }
 
 #[test]
+fn a_request_for_an_address_takes_the_repository_branch_and_folder_it_names() {
+    let tree = "https://github.com/acme/skills/tree/main/plugins/ops";
+    for (typed, reference, folder, url, at, searched) in [
+        (
+            "acme/skills",
+            None,
+            None,
+            "acme/skills",
+            None,
+            DEFAULT_SUBDIRECTORY,
+        ),
+        ("acme/skills@v2", None, None, "acme/skills", Some("v2"), ""),
+        (
+            "acme/skills@v2",
+            Some("v2"),
+            None,
+            "acme/skills",
+            Some("v2"),
+            "",
+        ),
+        (
+            "acme/skills",
+            Some("v2"),
+            Some("agents"),
+            "acme/skills",
+            Some("v2"),
+            "agents",
+        ),
+        (
+            tree,
+            None,
+            None,
+            "https://github.com/acme/skills",
+            Some("main"),
+            "plugins/ops",
+        ),
+        (
+            tree,
+            Some("main"),
+            Some("plugins/ops"),
+            "https://github.com/acme/skills",
+            Some("main"),
+            "plugins/ops",
+        ),
+        (
+            "https://github.com/acme/skills/tree/main",
+            None,
+            Some("skills"),
+            "https://github.com/acme/skills",
+            Some("main"),
+            "skills",
+        ),
+    ] {
+        let request = Request::addressed(
+            typed,
+            reference.map(str::to_owned),
+            folder.map(str::to_owned),
+        )
+        .unwrap();
+
+        assert_eq!(request.source.url(), url, "{typed}");
+        assert_eq!(request.source.reference(), at, "{typed}");
+        assert_eq!(request.subdirectory, searched, "{typed}");
+    }
+}
+
+#[test]
+fn an_address_naming_another_branch_or_folder_than_its_option_is_refused() {
+    let tree = "https://github.com/acme/skills/tree/main/skills";
+
+    let branch = Request::addressed("acme/skills@v2", Some(String::from("v3")), None).unwrap_err();
+    let tree_branch = Request::addressed(tree, Some(String::from("dev")), None).unwrap_err();
+    let folder = Request::addressed(tree, None, Some(String::from("agents"))).unwrap_err();
+
+    assert_eq!(branch.code(), "gather_ref_contradicted");
+    assert_eq!(
+        branch.to_string(),
+        "acme/skills@v2 names the branch or tag `v2`, and --ref names `v3`: give one"
+    );
+    assert_eq!(tree_branch.code(), "gather_ref_contradicted");
+    assert_eq!(folder.code(), "gather_path_contradicted");
+    assert_eq!(
+        folder.to_string(),
+        "https://github.com/acme/skills/tree/main/skills names the folder `skills`, and --path \
+         names `agents`: give one"
+    );
+}
+
+#[test]
+fn a_contradiction_is_said_without_the_credentials_either_side_carries() {
+    let secret = UrlMother::secret();
+    let typed = format!("https://{secret}@github.com/acme/private/tree/main/skills");
+    let given = format!("https://me:{secret}@example.com/x");
+
+    for refused in [
+        Request::addressed(&typed, Some(given.clone()), None).unwrap_err(),
+        Request::addressed(&typed, None, Some(given.clone())).unwrap_err(),
+    ] {
+        let said = refused.to_string();
+        assert!(!said.contains(&secret), "{said}");
+    }
+}
+
+#[test]
+fn a_credential_a_tree_url_carries_is_refused_before_the_remote_is_asked() {
+    let (_dir, workspace) = WorkspaceMother::empty();
+    let ledger = workspace.ledger().unwrap();
+    let remote = Arc::new(Unreached::default());
+    let typed = format!(
+        "https://{}@github.com/acme/private/tree/main/skills",
+        UrlMother::secret()
+    );
+
+    let request = Request::addressed(&typed, None, None)
+        .unwrap()
+        .through(remote.clone());
+    let refused = gather(&workspace, &ledger, &request).unwrap_err();
+
+    assert!(
+        matches!(&refused, GatherError::CredentialsInUrl { url } if url == "https://github.com/acme/private"),
+        "{refused:?}"
+    );
+    assert_eq!(*remote.asked.lock().unwrap(), 0);
+}
+
+#[test]
 fn a_request_takes_the_folder_and_the_branch_it_is_told() {
     for _ in 0..DRAWS {
         let (folder, branch) = (random::word(), random::word());
@@ -1066,6 +1192,22 @@ fn each_gather_error_of_its_own_gives_its_own_code() {
         (
             GatherError::NotGatherable { kind: Kind::Rule },
             "kind_not_gatherable",
+        ),
+        (
+            GatherError::RefContradicted {
+                address: String::from("acme/skills@v2"),
+                named: String::from("v2"),
+                given: String::from("v3"),
+            },
+            "gather_ref_contradicted",
+        ),
+        (
+            GatherError::PathContradicted {
+                address: String::from("https://github.com/acme/skills/tree/main/skills"),
+                named: String::from("skills"),
+                given: String::from("agents"),
+            },
+            "gather_path_contradicted",
         ),
         (
             GatherError::Read {

@@ -622,6 +622,8 @@
           "source_name_taken",
           "gather_pin_invalid",
           "kind_not_gatherable",
+          "gather_ref_contradicted",
+          "gather_path_contradicted",
           "gather_read_failed",
           "source_leftover",
           "clone_unscrubbed",
