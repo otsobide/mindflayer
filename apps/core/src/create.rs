@@ -358,22 +358,7 @@ fn plan_mcp(
             })?
         }
         Start::Server(given) => {
-            // The file would keep whatever the address was typed with, so
-            // a credential in it is refused before a byte is written, as a
-            // gather refuses one, and said without it.
-            if let Given::Address(address) = given {
-                if carries_credentials(&address.url) {
-                    return Err(CreateError::UrlUserinfo {
-                        url: Redacted::new(&address.url),
-                    });
-                }
-            }
-            if let Some(repeated) = given.repeated() {
-                return Err(CreateError::KeyRepeated {
-                    table: repeated.table,
-                    key: repeated.key,
-                });
-            }
+            writable(given)?;
             given.text(name, description)
         }
     };
@@ -400,6 +385,33 @@ fn plan_mcp(
         file,
         text,
     })
+}
+
+/// Refuse what a command line told of a server's transport that no
+/// definition can be written from as given: an address typed with
+/// something before its host, which the file would keep, so a credential
+/// in it is refused before a byte is written, as a gather refuses one, and
+/// said without it; and a key of `env` or `headers` given twice, which no
+/// TOML file holds.
+///
+/// What `add` asks before it writes a definition from the options, and
+/// `edit` before it writes a definition's transport again from them
+/// ([`crate::lifecycle::retransport`]), so the two refuse alike.
+pub(crate) fn writable(given: &Given) -> Result<(), CreateError> {
+    if let Given::Address(address) = given {
+        if carries_credentials(&address.url) {
+            return Err(CreateError::UrlUserinfo {
+                url: Redacted::new(&address.url),
+            });
+        }
+    }
+    if let Some(repeated) = given.repeated() {
+        return Err(CreateError::KeyRepeated {
+            table: repeated.table,
+            key: repeated.key,
+        });
+    }
+    Ok(())
 }
 
 /// A skill: its own directory, holding a manifest with front matter.

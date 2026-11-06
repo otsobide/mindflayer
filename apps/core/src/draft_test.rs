@@ -7,6 +7,7 @@ use tempfile::TempDir;
 
 use super::*;
 use crate::create::Start;
+use crate::mother::McpMother;
 use crate::template::TEMPLATES_DIR;
 use crate::MIND_DIR;
 
@@ -77,7 +78,14 @@ fn a_skill_add_would_write_is_judged_fit_and_nothing_is_written() {
     let (dir, project) = fixture();
     let before = files(dir.path());
 
-    let judged = added(None, &project, Kind::Skill, "review", "Read it", None);
+    let judged = added(
+        None,
+        &project,
+        Kind::Skill,
+        ("review", "Read it"),
+        None,
+        None,
+    );
 
     assert_eq!(
         judged,
@@ -123,7 +131,7 @@ fn what_add_would_refuse_is_said_by_its_code_and_in_its_words() {
             "template_name_invalid",
         ),
     ] {
-        let judged = added(None, &project, kind, name, description, template);
+        let judged = added(None, &project, kind, (name, description), template, None);
         let written = match template {
             None => lifecycle::add(None, &project, kind, name, description, Start::Scratch)
                 .map(|_| ())
@@ -148,7 +156,14 @@ fn what_add_would_refuse_is_said_by_its_code_and_in_its_words() {
 fn a_name_add_refuses_is_said_in_the_words_validate_says_it_in() {
     let (_dir, project) = fixture();
 
-    let judged = added(None, &project, Kind::Skill, "Bad--Name", "Read it", None);
+    let judged = added(
+        None,
+        &project,
+        Kind::Skill,
+        ("Bad--Name", "Read it"),
+        None,
+        None,
+    );
 
     let issue = ValidationIssue::NameNotKebabCase {
         segment: String::from("Bad--Name"),
@@ -174,9 +189,9 @@ fn what_validate_would_warn_of_in_what_add_writes_is_said_as_it_then_says_it() {
         None,
         &project,
         Kind::Skill,
-        "review",
-        "Read it",
+        ("review", "Read it"),
         Some("loose"),
+        None,
     );
 
     assert_eq!(judged.refused, None);
@@ -201,7 +216,14 @@ fn what_validate_would_warn_of_in_what_add_writes_is_said_as_it_then_says_it() {
 fn a_rule_add_would_write_is_judged_fit() {
     let (_dir, project) = fixture();
 
-    let judged = added(None, &project, Kind::Rule, "style/comments", "Why", None);
+    let judged = added(
+        None,
+        &project,
+        Kind::Rule,
+        ("style/comments", "Why"),
+        None,
+        None,
+    );
 
     assert_eq!(judged.refused, None);
     assert_eq!(judged.issues, Vec::new());
@@ -324,7 +346,14 @@ fn the_workspaces_own_are_judged_in_its_library() {
         &Reference::parse("deploy"),
         "---\nname: deploy\ndescription: Ship it now\n---\n",
     );
-    let taken = added(Some(&workspace), &own, Kind::Skill, "deploy", "Again", None);
+    let taken = added(
+        Some(&workspace),
+        &own,
+        Kind::Skill,
+        ("deploy", "Again"),
+        None,
+        None,
+    );
 
     assert_eq!(fit.refused, None);
     assert_eq!(refusal(&taken), Some("add_exists"));
@@ -352,4 +381,91 @@ fn a_judgement_is_its_issues_and_why_it_is_refused_by_name() {
     let mut keys: Vec<&String> = json["refused"].as_object().unwrap().keys().collect();
     keys.sort_unstable();
     assert_eq!(keys, ["code", "message"]);
+}
+
+/// A workspace whose library holds the MCP server `github`, written by
+/// `add` from what `given` says.
+fn serving(given: &Given) -> (TempDir, WeaverWorkspace) {
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
+    lifecycle::add(
+        Some(&workspace),
+        &workspace.own(),
+        Kind::Mcp,
+        "github",
+        "GitHub",
+        Start::Server(given),
+    )
+    .unwrap();
+    (dir, workspace)
+}
+
+#[test]
+fn a_server_add_is_told_how_to_start_is_judged_as_add_would_write_it() {
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
+    let own = workspace.own();
+    let given = McpMother::given_program();
+    let before = files(dir.path());
+
+    let fit = added(
+        Some(&workspace),
+        &own,
+        Kind::Mcp,
+        ("github", "GitHub"),
+        None,
+        Some(&given),
+    );
+    let (unfit, told, _) = McpMother::given_unfit().remove(0);
+    let refused = added(
+        Some(&workspace),
+        &own,
+        Kind::Mcp,
+        ("github", "GitHub"),
+        None,
+        Some(&told),
+    );
+    let untold = added(
+        Some(&workspace),
+        &own,
+        Kind::Mcp,
+        ("github", "GitHub"),
+        None,
+        None,
+    );
+
+    assert_eq!(fit.refused, None);
+    assert_eq!(fit.issues, Vec::new());
+    assert_eq!(refusal(&refused), Some("add_mcp_unfit"), "{unfit}");
+    assert_eq!(refusal(&untold), Some("add_mcp_unscaffolded"));
+    assert_eq!(files(dir.path()), before);
+}
+
+#[test]
+fn a_servers_transport_given_again_is_judged_as_the_edit_would_write_it() {
+    let (dir, workspace) = serving(&McpMother::given_program());
+    let own = workspace.own();
+    let before = files(dir.path());
+    let github = Reference::parse("mcp:github");
+
+    let fit = retransported(
+        Some(&workspace),
+        &own,
+        &github,
+        &McpMother::given_address(false),
+    );
+    let (_, literal, _) = McpMother::given_unfit().remove(0);
+    let unfit = retransported(Some(&workspace), &own, &github, &literal);
+    let nowhere = retransported(
+        Some(&workspace),
+        &own,
+        &Reference::parse("mcp:gitlab"),
+        &literal,
+    );
+
+    assert_eq!(fit.refused, None);
+    assert_eq!(fit.issues, Vec::new());
+    assert_eq!(refusal(&unfit), Some("edit_contents_unfit"));
+    assert_eq!(refusal(&nowhere), Some("not_found"));
+    assert_eq!(files(dir.path()), before);
 }

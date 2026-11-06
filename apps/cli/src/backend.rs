@@ -816,9 +816,9 @@ impl Backend for PanelBackend {
                         Some(&workspace),
                         &holder,
                         kind,
-                        &name,
-                        &description,
+                        (&name, &description),
                         template.as_deref(),
+                        None,
                     ),
                     Draft::Edit { reference, text } => draft::edited(
                         Some(&workspace),
@@ -1253,6 +1253,9 @@ impl Absence for LifecycleError {
             | LifecycleError::Stale { .. }
             | LifecycleError::LeadsOut { .. }
             | LifecycleError::Io { .. }
+            | LifecycleError::TransportNotMcp { .. }
+            | LifecycleError::ServerUnreadable { .. }
+            | LifecycleError::Server(_)
             | LifecycleError::Artifact(_) => false,
         }
     }

@@ -273,6 +273,8 @@ export type CoreCode =
   | "edit_stale"
   | "edit_leads_outside"
   | "change_failed"
+  | "edit_transport_not_mcp"
+  | "edit_server_unreadable"
   | "workspace_busy"
   | "lock_open_failed"
   | "mcp_unparsed"

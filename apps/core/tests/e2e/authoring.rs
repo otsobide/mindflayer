@@ -110,8 +110,8 @@ fn a_draft_is_judged_as_the_add_would_refuse_it_with_nothing_written() {
         Some(&workspace),
         &workspace.own(),
         Kind::Skill,
-        "Review",
-        REVIEW,
+        ("Review", REVIEW),
+        None,
         None,
     );
 

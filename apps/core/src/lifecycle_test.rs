@@ -646,9 +646,11 @@ fn every_lifecycle_error_of_its_own_has_a_code_and_they_are_all_listed() {
     unique.dedup();
 
     assert_eq!(unique.len(), codes.len(), "{codes:?}");
-    assert_eq!(codes.len(), 25, "{codes:?}");
+    assert_eq!(codes.len(), 27, "{codes:?}");
     for code in [
         "not_found",
+        "edit_transport_not_mcp",
+        "edit_server_unreadable",
         "change_received_mcp",
         "change_outside",
         "edit_stale",

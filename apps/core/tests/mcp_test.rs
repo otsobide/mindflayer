@@ -792,9 +792,9 @@ fn add_from_a_template_holds_what_it_writes_to_what_validate_would_say() {
             None,
             &project,
             Kind::Mcp,
-            "ours",
-            "Ours",
+            ("ours", "Ours"),
             Some(template),
+            None,
         );
         assert_eq!(
             judged.refused.map(|said| said.code),
@@ -803,7 +803,7 @@ fn add_from_a_template_holds_what_it_writes_to_what_validate_would_say() {
         );
     }
     let unscaffolded =
-        mindweaver_core::draft::added(None, &project, Kind::Mcp, "ours", "Ours", None);
+        mindweaver_core::draft::added(None, &project, Kind::Mcp, ("ours", "Ours"), None, None);
     assert_eq!(
         unscaffolded.refused.map(|said| said.code),
         Some("add_mcp_unscaffolded")
