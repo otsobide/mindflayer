@@ -627,8 +627,10 @@ These are easy to break from a single file without noticing.
   install leaves out of every copy (`install::left_out_names`). What is
   typed for a source is read by `url::address`, a contradicting `--ref` or
   `--path` refused (`Request::addressed`), and `gather::preview` is the dry
-  run, which registers, shelves, records and logs nothing, takes no lock,
-  and leaves no clone.
+  run, which registers, shelves, records and logs nothing, takes no lock of
+  the workspace's, and leaves no clone, but for the folder of one a Ctrl-C
+  ends, which the next dry run or gather takes away once no run holds its
+  lock (`gather::DryRun`).
 - **Output is built, then printed.** Commands return an `Outcome` (stdout
   text, stderr lines, ok), so tests assert on the exact text a user sees.
   The two that run until they are stopped write as they run, the TUI its

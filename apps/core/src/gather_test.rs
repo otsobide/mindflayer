@@ -1163,6 +1163,40 @@ fn a_dry_run_s_failure_is_said_by_where_it_is_in_the_repository_and_only_there()
     );
 }
 
+/// A Ctrl-C ends a dry run without its taking its folder away: the next
+/// dry run or gather does, once no run holds its lock, and never one a run
+/// going on holds, nor one being made.
+#[test]
+fn a_dry_run_or_a_gather_takes_away_what_an_interrupted_dry_run_left_and_only_that() {
+    let (_dir, workspace) = WorkspaceMother::empty();
+    let ledger = workspace.ledger().unwrap();
+    let cache = workspace.cache_dir();
+    let going = DryRun::open(&cache).unwrap();
+    let left = |name: &str, locked: bool| {
+        let folder = cache.join(format!("{DRY_RUN}{name}"));
+        write(&folder.join("clone/skills/deploy/SKILL.md"), "x");
+        if locked {
+            write(&folder.join(DRY_RUN_LOCK), "");
+        }
+        folder
+    };
+    let request = Request::git(UrlMother::https()).through(Arc::new(Unreached::default()));
+    let made = left("1-0", false);
+
+    let before_a_dry_run = left("2-0", true);
+    let _ = preview(&workspace, &ledger, &request);
+    let before_a_gather = left("3-0", true);
+    let _ = gather(&workspace, &ledger, &request);
+
+    assert!(!before_a_dry_run.exists());
+    assert!(!before_a_gather.exists());
+    assert!(made.exists(), "no lock in it yet");
+    assert!(going.folder.join(DRY_RUN_LOCK).is_file());
+    let folder = going.folder.clone();
+    drop(going);
+    assert!(!folder.exists());
+}
+
 /// What a gather cannot copy, a link out of the repository or to nothing,
 /// a dry run cannot either, and says as the gather does, so its exit is
 /// the gather's.

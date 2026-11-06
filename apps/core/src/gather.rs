@@ -476,22 +476,113 @@ pub struct Previewed {
 /// so it is never one.
 const DRY_RUN: &str = "+dry-run-";
 
+/// The file in a dry run's folder its run holds a lock on for as long as it
+/// lives ([`DryRun`]).
+const DRY_RUN_LOCK: &str = ".lock";
+
+/// A dry run's own folder in the cache ([`DRY_RUN`]), taken away when it is
+/// dropped, whatever came of the run.
+///
+/// Held, for as long as it lives, by a lock on a file in it
+/// ([`DRY_RUN_LOCK`]), which a run a Ctrl-C ends lets go of with its
+/// process: the binaries install no signal handler (see the open
+/// questions), so such a run takes nothing away, and the next dry run or
+/// gather takes away each folder whose lock nobody holds
+/// ([`sweep_dry_runs`]). A lock rather than the process id in the name, for
+/// the reason a [`copy::Stage`] is held by one: whether a process is still
+/// running is a question each platform answers differently, and a lock let
+/// go of when its process dies answers it on all of them.
+struct DryRun {
+    folder: PathBuf,
+    // Only ever dropped, before the folder is taken away.
+    lock: Option<fs::File>,
+}
+
+impl DryRun {
+    /// Take a folder of one's own in `cache`, making `cache` first, and
+    /// taking away first what interrupted runs left there.
+    fn open(cache: &Path) -> io::Result<DryRun> {
+        fs::create_dir_all(cache)?;
+        sweep_dry_runs(cache);
+        let folder = cache.join(format!("{DRY_RUN}{}", copy::unique_name()));
+        fs::create_dir(&folder)?;
+        // Locked under another name, and given the one a sweep looks for
+        // only once held, so no sweep finds this run's lock before it is
+        // held and takes the folder from under it.
+        let locking = folder.join(format!("{DRY_RUN_LOCK}.new"));
+        let file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&locking)?;
+        // None on a filesystem without locks, where no sweep can tell a run
+        // going on from a leftover either, so none takes one away.
+        let lock = file.try_lock().is_ok().then_some(file);
+        fs::rename(&locking, folder.join(DRY_RUN_LOCK))?;
+        Ok(DryRun { folder, lock })
+    }
+}
+
+impl Drop for DryRun {
+    fn drop(&mut self) {
+        // Let go of first, as a file held open is not removed on every
+        // platform: a sweep that takes the folder in between takes what
+        // this would.
+        drop(self.lock.take());
+        let _ = fs::remove_dir_all(&self.folder);
+    }
+}
+
+/// Take away each dry run's folder in `cache` whose lock nobody holds,
+/// which an interrupted run left ([`DryRun`]): what a dry run and a gather
+/// do before they fetch.
+///
+/// Said nowhere, since nothing in it was anybody's but the run's, and one
+/// that will not go is tried again by the next. A folder with no lock in
+/// it yet is a run's that is being made, and is left.
+fn sweep_dry_runs(cache: &Path) {
+    let Ok(entries) = fs::read_dir(cache) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let named = entry
+            .file_name()
+            .to_str()
+            .is_some_and(|name| name.starts_with(DRY_RUN));
+        if !named || !entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+            continue;
+        }
+        let folder = entry.path();
+        let Ok(lock) = fs::OpenOptions::new()
+            .write(true)
+            .open(folder.join(DRY_RUN_LOCK))
+        else {
+            continue;
+        };
+        if lock.try_lock().is_ok() {
+            drop(lock);
+            let _ = fs::remove_dir_all(&folder);
+        }
+    }
+}
+
 /// What a gather of `request` would take, a dry run of it: the source
 /// fetched and searched as a gather fetches and searches it, refused for
 /// what a gather refuses before it fetches, and nothing else done.
 ///
 /// Nothing registered, nothing put on the shelf, nothing recorded, nothing
-/// logged, and no lock taken, since none of what writers take turns at is
-/// written: `ledger` is only read, for a `--name` another source has, so
-/// one read without being made ([`WeaverWorkspace::ledger_for_reading`]) is
-/// the one to hand it. The clone it needs, and the copies of what it would
-/// take ([`look`]), are made in a folder of its own under the workspace's
-/// cache ([`DRY_RUN`]) and taken away once read, whatever came of reading
-/// them, with the cache and the
-/// workspace's folder when it was the dry run that made them. So it leaves
-/// no clone: not in the folder a source's clone is kept in, which would then
-/// hold another commit than the one its shelf came from, nor in a folder of
-/// its own, which nothing would ever take away.
+/// logged, and the workspace's lock not taken, since none of what writers
+/// take turns at is written: `ledger` is only read, for a `--name` another
+/// source has, so one read without being made
+/// ([`WeaverWorkspace::ledger_for_reading`]) is the one to hand it. The
+/// clone it needs, and the copies of what it would take ([`look`]), are
+/// made in a folder of its own under the workspace's cache ([`DryRun`]) and
+/// taken away once read, whatever came of reading them, with the cache and
+/// the workspace's folder when it was the dry run that made them. So it
+/// leaves no clone: not in the folder a source's clone is kept in, which
+/// would then hold another commit than the one its shelf came from, nor in
+/// a folder of its own, which nothing would take away. A Ctrl-C ends the
+/// process without that, and the next dry run or gather takes the folder
+/// away.
 pub fn preview(
     workspace: &WeaverWorkspace,
     ledger: &Ledger,
@@ -508,11 +599,14 @@ pub fn preview(
         .into_iter()
         .filter(|folder| !folder.exists())
         .collect();
-    let into = workspace
-        .cache_dir()
-        .join(format!("{DRY_RUN}{}", copy::unique_name()));
-    let outcome = look(request, &url, manifest, pinned.as_ref(), &into);
-    let _ = fs::remove_dir_all(&into);
+    let cache = workspace.cache_dir();
+    let outcome = DryRun::open(&cache)
+        .map_err(|source| GitError::Cache {
+            path: cache.clone(),
+            source,
+        })
+        .map_err(GatherError::from)
+        .and_then(|run| look(request, &url, manifest, pinned.as_ref(), &run.folder));
     // Only while each is empty, so nothing another command put there since
     // goes with it.
     for folder in made.iter().rev() {
@@ -985,6 +1079,7 @@ fn take(
     pin: Option<&Revision>,
 ) -> Result<Report, GatherError> {
     let watch = &request.watch;
+    sweep_dry_runs(&workspace.cache_dir());
     let cache = workspace.cache_dir().join(&source.directory);
     watch.report(Progress::Connecting);
     let clone = match &request.source {

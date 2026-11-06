@@ -3252,13 +3252,20 @@ the gather says it (`gathered_copy_failed`) rather than listed; holding each
 to the copy's bounds without copying would be a second walk of its tree,
 which could come to disagree with the copy's. It registers no source,
 writes nothing to the shelf or the ledger,
-logs nothing and takes no lock, since nothing writers take turns at is
-written; resolved as a read, it makes no workspace, and reads the ledger
+logs nothing and takes no lock of the workspace's, since nothing writers
+take turns at is written; resolved as a read, it makes no workspace, and reads the ledger
 without making it. It leaves no clone: the one it needs, and those copies,
 are made in a folder of its own under the cache, named with a `+`, which no
 folder a source is given holds, and taken away once read, whatever came of
 reading them, with
 the cache and the workspace's folder when it was the dry run that made them.
+A Ctrl-C ends it without that, as the CLI installs no signal handler (see
+the open questions), so the folder is held by a lock on a file in it
+(`gather::DryRun`) for as long as its run lives, and the next dry run or
+gather takes away each such folder whose lock nobody holds, as an install
+sweeps the stages an interrupted one left (`copy::Stage`). The lock is
+taken under another name and given the one a sweep looks for once held, so
+no sweep takes a folder from a run that is starting.
 Fetching into the source's own clone was the other way, and is rejected:
 that clone is the commit the shelf holds, kept so a gather can be looked at
 afterwards ([the clone is kept, and re-made](#the-clone-is-kept-and-re-made));
@@ -13421,6 +13428,9 @@ it once as it closes.
   gather has got to. Ended before it places anything, it costs the clone and
   can leave registered a source nothing came from; ended while it places, it
   can leave the shelf between two revisions, and the ledger behind it. A
+  dry run so ended leaves its folder in the cache until the next dry run or
+  gather takes it away, and the cache and the workspace's folder it made
+  where no workspace was made yet, empty once that folder goes. A
   handler that cancels the watch would make the command line stop where the
   TUI's `esc` does.
 - **Gathering rules.** Only skills are gatherable. A rule is a loose file at any

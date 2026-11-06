@@ -853,7 +853,9 @@ error: acme/skills@v2 names the branch or tag `v2`, and --ref names `v3`: give o
 it is in the repository, with what the gather would warn of and the exit it
 would give, and gathers nothing: no source is recorded, nothing is put on
 the shelf, and the clone made to look is taken away again, so it leaves none
-in the workspace's cache, nor a workspace where none is made yet.
+in the workspace's cache, nor a workspace where none is made yet. Stopped
+with Ctrl-C, it leaves that clone until the next dry run or gather takes it
+away, and the empty folders it made to hold it.
 
 ```
 $ mindweaver gather git https://github.com/acme/skills/tree/main/plugins/ops --dry-run
