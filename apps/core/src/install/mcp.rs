@@ -341,6 +341,11 @@ pub(crate) fn install_held(
                 continue;
             }
             Err(error) => {
+                // Its own file is as it was, a write taking away what it
+                // made, but for the folder it made on the way.
+                if let Some(folder) = &was.folder {
+                    let _ = fs::remove_dir(folder);
+                }
                 put_back(&written);
                 unexclude(&[]);
                 return Err(config(error));
