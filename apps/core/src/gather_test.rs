@@ -325,7 +325,8 @@ fn a_report_counts_everything_now_on_the_shelf_because_of_it() {
         path: PathBuf::from("/w"),
     };
     for _ in 0..50 {
-        let (added, updated, unchanged) = (
+        let (added, updated, unchanged, removed) = (
+            random::between(0, 4),
             random::between(0, 4),
             random::between(0, 4),
             random::between(0, 4),
@@ -341,6 +342,8 @@ fn a_report_counts_everything_now_on_the_shelf_because_of_it() {
                 path: PathBuf::from("/w/x"),
             }],
             warnings: Vec::new(),
+            // Off the shelf, so counted nowhere.
+            removed: (0..removed).map(|_| harvested()).collect(),
         };
 
         assert_eq!(report.total(), added + updated + unchanged);
@@ -731,12 +734,24 @@ fn each_gather_failure_names_its_path_and_gives_its_code() {
         "/w/.mindweaver/skills/s/deploy: cannot be copied into the workspace: full"
     );
     assert_eq!(unusable.path(), Path::new("/w/.mindweaver/cache/s/x"));
+    let unremoved = Failure::Unremoved {
+        path: PathBuf::from("/w/.mindweaver/skills/s/gone"),
+        source: io::Error::other("busy"),
+    };
+    assert_eq!(unremoved.code(), "gathered_unremoved");
+    assert_eq!(unremoved.path(), Path::new("/w/.mindweaver/skills/s/gone"));
+    assert_eq!(
+        unremoved.to_string(),
+        "/w/.mindweaver/skills/s/gone: no longer in its source, but cannot be taken off the \
+         shelf, so it is kept, and still offered: busy"
+    );
     assert_eq!(
         Failure::CODES,
         [
             "gathered_name_not_utf8",
             "gathered_copy_failed",
-            "gathered_unhashed"
+            "gathered_unhashed",
+            "gathered_unremoved"
         ]
     );
 }

@@ -235,8 +235,9 @@ pub struct Harvested {
 
 /// What one gather did.
 ///
-/// Split three ways rather than counted once, because "3 skills" hides the
-/// only question worth asking after a second gather: what changed.
+/// Split by what happened rather than counted once, because "3 skills"
+/// hides the only question worth asking after a second gather: what
+/// changed.
 ///
 /// What it serializes to is a contract, as a status report's is: each field
 /// by its name.
@@ -262,6 +263,10 @@ pub struct Report {
     /// What the source is called, which `--from` takes for what it
     /// supplied: added after the rest (#98).
     pub name: SourceName,
+    /// What the source supplied before and holds no more at the commit
+    /// taken, now off the shelf, each where it was: added after the rest
+    /// (#100), and on the shelf no longer, so not in [`total`](Self::total).
+    pub removed: Vec<Harvested>,
 }
 
 impl Report {
@@ -301,8 +306,14 @@ pub fn gather(
     // is the more useful of the two.
     match &outcome {
         Ok(report) => {
+            // What was removed only when something was, so the line every
+            // gather before removals wrote reads as it did.
+            let removed = match report.removed.len() {
+                0 => String::new(),
+                count => format!("{count} removed, "),
+            };
             let detail = format!(
-                "{} added, {} updated, {} unchanged, {} failed",
+                "{} added, {} updated, {} unchanged, {removed}{} failed",
                 report.added.len(),
                 report.updated.len(),
                 report.unchanged.len(),
@@ -685,11 +696,18 @@ fn take(
         failures: Vec::new(),
         warnings: Vec::new(),
         name: source.name.clone(),
+        removed: Vec::new(),
     };
 
     // Everything is read before anything is placed, rather than each
     // artifact read and placed in turn, so that the shelf only starts to
-    // change once all of it is known.
+    // change once all of it is known: what the source supplied before
+    // among it, to tell what its commit no longer holds.
+    let supplied: Vec<Gathered> = ledger
+        .gathered()?
+        .into_iter()
+        .filter(|gathered| gathered.source.id == source.id && gathered.kind == request.kind)
+        .collect();
     let found = candidates(&harvested_from, manifest)?;
     let mut taken = Vec::with_capacity(found.len());
     watch.report(Progress::Harvesting {
@@ -795,10 +813,105 @@ fn take(
         }
     }
 
+    take_off(
+        workspace,
+        ledger,
+        source,
+        &shelf,
+        &found,
+        supplied,
+        &mut report,
+    )?;
+
     report.failures.sort_by(|a, b| a.path().cmp(b.path()));
     // Stable, so one file's warnings stay in the order `validate` gives them.
     report.warnings.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(report)
+}
+
+/// Take off the shelf what `source` supplied before (`supplied`) and does
+/// not hold at the commit this gather took, which found the folders
+/// `found` there and put what it could take of them on `shelf`: each said
+/// in `report` as removed.
+///
+/// By its folder, as the shelf files it: one the commit has no folder for
+/// any more goes, its copy and its record, and one whose folder another
+/// name now holds, a skill that renamed itself, loses its record and
+/// keeps the folder, which holds that other name. One whose folder is
+/// still there but could not be taken this time, as it no longer reads, is
+/// kept as it was, the failure said beside it: one broken skill must not
+/// take the copy that worked off the shelf. A record whose path is not a
+/// folder of this source's shelf, which no gather writes, loses its record
+/// and nothing else, as no folder it names is the gather's to remove.
+///
+/// The copy goes before its record, and one that will not go keeps its
+/// record, said as a failure: a record dropped first would leave a folder
+/// the shelf still holds and nothing offers, which the next gather would
+/// not know to remove.
+fn take_off(
+    workspace: &WeaverWorkspace,
+    ledger: &Ledger,
+    source: &ledger::Source,
+    shelf: &Path,
+    found: &[PathBuf],
+    supplied: Vec<Gathered>,
+    report: &mut Report,
+) -> Result<(), GatherError> {
+    let held: Vec<&str> = found
+        .iter()
+        .filter_map(|directory| directory.file_name().and_then(|name| name.to_str()))
+        .collect();
+    let taken: Vec<(&str, String)> = [&report.added, &report.updated, &report.unchanged]
+        .into_iter()
+        .flatten()
+        .map(|harvested| {
+            (
+                harvested.name.as_str(),
+                relative(workspace, &harvested.path),
+            )
+        })
+        .collect();
+    for gathered in supplied {
+        if taken
+            .iter()
+            .any(|(name, _)| *name == gathered.name.as_str())
+        {
+            continue;
+        }
+        let at = workspace.root().join(&gathered.path);
+        let folder = at
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or_default()
+            .to_owned();
+        let placed = taken.iter().any(|(_, path)| *path == gathered.path);
+        if !placed && held.contains(&folder.as_str()) {
+            continue;
+        }
+        let shelved = crate::install::is_folder_name(&folder)
+            && relative(workspace, &shelf.join(&folder)) == gathered.path;
+        if shelved && !placed {
+            match fs::remove_dir_all(&at) {
+                Ok(()) => {}
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Err(error) => {
+                    report.failures.push(Failure::Unremoved {
+                        path: at,
+                        source: error,
+                    });
+                    continue;
+                }
+            }
+        }
+        ledger.ungathered(source.id, gathered.kind, &gathered.name)?;
+        report.removed.push(Harvested {
+            name: gathered.name,
+            directory: folder,
+            summary: gathered.summary,
+            path: at,
+        });
+    }
+    Ok(())
 }
 
 /// One candidate folder, loaded to learn its name and its summary: the
@@ -958,12 +1071,22 @@ pub enum Failure {
         #[source]
         source: io::Error,
     },
+    /// No longer in its source at the commit gathered, but its copy on the
+    /// shelf will not go, so it is kept, still recorded and offered, for
+    /// the next gather to take off.
+    #[error("{path}: no longer in its source, but cannot be taken off the shelf, so it is kept, and still offered: {source}")]
+    Unremoved {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
 }
 
 codes!(Failure {
     Self::UnusableName { .. } => "gathered_name_not_utf8",
     Self::Copy { .. } => "gathered_copy_failed",
     Self::Unhashed { .. } => "gathered_unhashed",
+    Self::Unremoved { .. } => "gathered_unremoved",
 } carried {
     Self::Artifact(error) => error,
 });
@@ -975,7 +1098,8 @@ impl Failure {
             Failure::Artifact(error) => error.path(),
             Failure::UnusableName { path }
             | Failure::Copy { path, .. }
-            | Failure::Unhashed { path, .. } => path,
+            | Failure::Unhashed { path, .. }
+            | Failure::Unremoved { path, .. } => path,
         }
     }
 }

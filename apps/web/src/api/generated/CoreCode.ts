@@ -187,6 +187,7 @@ export type CoreCode =
   | "gathered_name_not_utf8"
   | "gathered_copy_failed"
   | "gathered_unhashed"
+  | "gathered_unremoved"
   | "gather_cancelled"
   | "credentials_in_url"
   | "gather_no_such_folder"

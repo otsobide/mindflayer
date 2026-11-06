@@ -3185,13 +3185,53 @@ itself is not held to the branch named, which only that branch's whole
 history could say (see the open questions).
 
 A pinned gather places what its commit holds and, as every gather, takes
-nothing off the shelf, so a skill an earlier gather took at another commit,
-which the pin's lacks, stays there under the `revision` it was taken at.
-`gather list` says the pin only on a row whose `revision` is the pin
+off what that commit lacks ([what a source no longer
+holds](#what-a-source-no-longer-holds)), but keeps a skill whose folder the
+commit holds and that no longer reads, under the `revision` it was taken
+at. `gather list` says the pin only on a row whose `revision` is the pin
 (`pinned_at`), and leaves the cell of such a skill empty, since saying it is
 pinned would claim the pin holds it; `--json` gives each row's `revision`
 beside its source's `pin`, for a reader to tell the same (see the open
 questions).
+
+### What a source no longer holds
+
+A gather takes off the shelf what its source supplied before and does not
+hold at the commit it took (#100): the shelf is what the commit holds, and
+the report says each as `removed`, beside what was added, updated and left
+unchanged. It placed what it found and nothing more until #99's review
+found the gap: `take` recorded only what it found, so a skill the source
+dropped stayed on the shelf, still listed and offered, its installs read
+as current forever, and a report of what an update removed would have
+named what was still there.
+
+It is told by folder, as the shelf files a skill by the folder its source
+gave it. A skill whose folder the commit no longer holds goes, its copy on
+the shelf and its row, which `LedgerStore::ungathered` drops alone. One
+whose folder another name now holds, a skill that renamed itself in its
+`SKILL.md`, loses its row and keeps the folder, which holds that other
+name now. One whose folder is still there and could not be taken this
+time, as its front matter broke, is kept as it was, beside the warning
+that says why: one broken skill must not take off the shelf the copy that
+worked, as it must not cost the forty beside it. The copy goes before its
+row, and one that will not go keeps its row, said with a failure of its
+own (`gathered_unremoved`), so a folder left on the shelf is still one the
+next gather knows to take off; a row dropped first would leave a folder
+nothing offers and `validate` still reads. A row whose path is not a
+folder of the source's own shelf, which no gather writes, loses the row
+and nothing else.
+
+All of it after the last cancel ([following a gather, and stopping
+it](#following-a-gather-and-stopping-it)), with the rest of what changes
+the shelf, so a gather cancelled in time takes nothing off; and none of it
+when the gather fails before that, as a source whose folder has gone
+(`gather_no_such_folder`) is refused and its shelf left whole. What was
+installed from a skill taken off keeps its record, origin and source
+included, and reads as `orphaned`, since nothing offers it where it came
+from any more: an uninstall takes it out, and `uninstall --orphaned` all
+of them. The action log's line for the gather counts what it removed
+beside the rest, and only when it removed something, so the line every
+gather before wrote reads as it did.
 
 ### What each artifact is recorded with
 
@@ -13185,14 +13225,15 @@ it once as it closes.
   and a later gather without one goes back to the branch. Checking every
   pin would cost every pinned gather the whole history; whether it should
   is the owner's to say.
-- **A gather leaves what its source stopped offering.** A skill the
-  commit a gather took no longer holds, at a pin or at the branch's tip,
-  keeps its folder on the shelf and its row in the ledger, and is offered
-  as before, under the commit it was taken at; a pinned source's shelf is
-  then more than its pin holds. Taking such a skill off would change what a
-  gather does to every source, an installed copy's offer included, which
-  would read as orphaned; whether a gather should, or a command of its own,
-  is the owner's to say.
+- **A skill that stops reading keeps the copy that read.** A gather takes
+  off what its commit no longer holds (#100, [what a source no longer
+  holds](#what-a-source-no-longer-holds)), but a skill whose folder is
+  still there and no longer reads keeps its copy and its row, offered as
+  before under the commit it was taken at, with a warning each gather; a
+  pinned source's shelf is then more than its pin holds. Taking it off
+  would orphan every copy installed from it over a typo upstream; whether
+  a warning repeated is enough, or such a skill should go after some
+  gathers, is the owner's to say.
 - **A pin is a SHA-1.** `--pin` takes 40 hexadecimal digits, a SHA-1 commit's
   id. A repository of SHA-256 objects names a commit by 64, which it
   refuses, as the `gix` this build has, without its `sha256` feature,

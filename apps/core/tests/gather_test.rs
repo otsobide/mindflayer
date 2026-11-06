@@ -105,6 +105,153 @@ fn a_skill_that_changed_upstream_is_reported_as_updated() {
     );
 }
 
+#[test]
+fn a_skill_its_source_no_longer_holds_is_taken_off_the_shelf_and_said_removed() {
+    let source = repository(&[
+        ("skills/deploy/SKILL.md", &skill("deploy", "Ship it")),
+        ("skills/review/SKILL.md", &skill("review", "Read a change")),
+    ]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    let request = Request::git(url(&source));
+    let first = gather::gather(&workspace, &ledger, &request).unwrap();
+    let review = workspace
+        .gathered_dir(Kind::Skill)
+        .join(&first.directory)
+        .join("review");
+    assert!(review.join("SKILL.md").is_file());
+
+    fs::remove_dir_all(source.path().join("skills").join("review")).unwrap();
+    commit(source.path());
+    let again = gather::gather(&workspace, &ledger, &request).unwrap();
+
+    let removed: Vec<&str> = again.removed.iter().map(|h| h.name.as_str()).collect();
+    assert_eq!(removed, ["review"], "{again:?}");
+    assert_eq!(again.removed[0].path, review);
+    assert_eq!(again.removed[0].summary.as_deref(), Some("Read a change"));
+    assert_eq!(again.unchanged.len(), 1, "{again:?}");
+    assert_eq!(
+        again.total(),
+        1,
+        "what is removed is on the shelf no longer"
+    );
+    assert!(!review.exists(), "its copy is off the shelf");
+    let names: Vec<String> = ledger
+        .gathered()
+        .unwrap()
+        .into_iter()
+        .map(|gathered| gathered.name.to_string())
+        .collect();
+    assert_eq!(names, ["deploy"]);
+    assert_eq!(
+        ledger.history(1).unwrap()[0].detail.as_deref(),
+        Some("0 added, 0 updated, 1 unchanged, 1 removed, 0 failed")
+    );
+}
+
+#[test]
+fn a_skill_whose_folder_no_longer_reads_is_kept_as_it_was_and_said() {
+    let source = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    let request = Request::git(url(&source));
+    let first = gather::gather(&workspace, &ledger, &request).unwrap();
+
+    write_files(
+        source.path(),
+        &[("skills/deploy/SKILL.md", "no front matter\n")],
+    );
+    commit(source.path());
+    let again = gather::gather(&workspace, &ledger, &request).unwrap();
+
+    assert!(again.removed.is_empty(), "{again:?}");
+    assert_eq!(again.failures.len(), 1, "{again:?}");
+    let copy = workspace
+        .gathered_dir(Kind::Skill)
+        .join(&first.directory)
+        .join("deploy")
+        .join("SKILL.md");
+    assert_eq!(
+        fs::read_to_string(copy).unwrap(),
+        skill("deploy", "Ship it")
+    );
+    let gathered = ledger.gathered().unwrap();
+    assert_eq!(gathered.len(), 1);
+    assert_eq!(gathered[0].revision, first.revision, "taken when it read");
+}
+
+#[test]
+fn a_skill_that_renamed_itself_is_removed_by_its_old_name_and_keeps_its_folder() {
+    let source = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    let request = Request::git(url(&source));
+    let first = gather::gather(&workspace, &ledger, &request).unwrap();
+
+    write_files(
+        source.path(),
+        &[("skills/deploy/SKILL.md", &skill("ship", "Ship it"))],
+    );
+    commit(source.path());
+    let again = gather::gather(&workspace, &ledger, &request).unwrap();
+
+    // Updated, as its folder is, which is what the shelf files it by.
+    let updated: Vec<&str> = again.updated.iter().map(|h| h.name.as_str()).collect();
+    let removed: Vec<&str> = again.removed.iter().map(|h| h.name.as_str()).collect();
+    assert_eq!(
+        (updated, removed),
+        (vec!["ship"], vec!["deploy"]),
+        "{again:?}"
+    );
+    let folder = workspace
+        .gathered_dir(Kind::Skill)
+        .join(&first.directory)
+        .join("deploy");
+    assert_eq!(
+        fs::read_to_string(folder.join("SKILL.md")).unwrap(),
+        skill("ship", "Ship it"),
+        "the folder holds the name it took"
+    );
+    let names: Vec<String> = ledger
+        .gathered()
+        .unwrap()
+        .into_iter()
+        .map(|gathered| gathered.name.to_string())
+        .collect();
+    assert_eq!(names, ["ship"]);
+}
+
+#[test]
+fn a_cancelled_gather_takes_nothing_off_the_shelf() {
+    let source = repository(&[
+        ("skills/deploy/SKILL.md", &skill("deploy", "Ship it")),
+        ("skills/review/SKILL.md", &skill("review", "Read a change")),
+    ]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    let first = gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap();
+    fs::remove_dir_all(source.path().join("skills").join("review")).unwrap();
+    commit(source.path());
+    // As late as a cancel is honoured: every folder read, nothing placed.
+    let watch = cancelled_at(
+        |progress| matches!(progress, Progress::Harvesting { done, total } if done == total),
+    );
+
+    let cancelled = gather::gather(
+        &workspace,
+        &ledger,
+        &Request::git(url(&source)).watched_by(watch),
+    );
+
+    assert!(
+        matches!(cancelled, Err(GatherError::Cancelled)),
+        "{cancelled:?}"
+    );
+    assert_eq!(ledger.gathered().unwrap().len(), 2);
+    let shelf = workspace.gathered_dir(Kind::Skill).join(&first.directory);
+    assert!(shelf.join("review").join("SKILL.md").is_file());
+}
+
 /// The commit `repository`'s HEAD is at.
 fn head_of(repository: &TempDir) -> String {
     gix::open(repository.path())
@@ -1313,6 +1460,7 @@ fn a_gather_report_serializes_what_changed_and_leaves_its_failures_to_the_warnin
             issue: ValidationIssue::MetadataNotAMap,
         }],
         name: SourceName::parse("acme-skills").unwrap(),
+        removed: vec![harvested("ship")],
     };
 
     let serialized = serde_json::to_string(&report).unwrap();
@@ -1326,7 +1474,9 @@ fn a_gather_report_serializes_what_changed_and_leaves_its_failures_to_the_warnin
             r#""updated":[],"#,
             r#""unchanged":[{"name":"review","directory":"review","summary":"About review","#,
             r#""path":"/work/.mindweaver/skills/github.com-acme-skills/review"}],"#,
-            r#""name":"acme-skills"}"#,
+            r#""name":"acme-skills","#,
+            r#""removed":[{"name":"ship","directory":"ship","summary":"About ship","#,
+            r#""path":"/work/.mindweaver/skills/github.com-acme-skills/ship"}]}"#,
         )
     );
 }

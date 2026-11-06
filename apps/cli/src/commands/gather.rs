@@ -207,12 +207,14 @@ fn gathered(url: &str, report: &Report) -> Outcome {
         .map_or_else(String::new, |revision| format!(" at {revision}"));
     let _ = writeln!(stdout, "{}: {url}{at}", printable(&report.name));
 
-    // Added first, then updated, then unchanged: a second gather is run to
-    // find out what moved, and what moved should not be at the bottom.
+    // Added first, then updated, then removed, then unchanged: a second
+    // gather is run to find out what moved, and what moved should not be at
+    // the bottom.
     let mut rows: Vec<Vec<String>> = Vec::new();
     for (label, harvested) in [
         ("added", &report.added),
         ("updated", &report.updated),
+        ("removed", &report.removed),
         ("unchanged", &report.unchanged),
     ] {
         for artifact in harvested {
@@ -227,9 +229,15 @@ fn gathered(url: &str, report: &Report) -> Outcome {
         stdout.push_str("  nothing to gather there\n");
     } else {
         stdout.push_str(&indent(&table(&rows)));
+        // What was taken off only when something was: what is on the shelf
+        // is counted first, and nothing removed is nothing to say.
+        let removed = match report.removed.len() {
+            0 => String::new(),
+            count => format!(", {count} removed"),
+        };
         let _ = writeln!(
             stdout,
-            "\n{}: {} added, {} updated, {} unchanged",
+            "\n{}: {} added, {} updated, {} unchanged{removed}",
             plural(report.total(), "skill"),
             report.added.len(),
             report.updated.len(),
@@ -337,12 +345,12 @@ fn shelved(entry: &Offer) -> Option<&Gathered> {
 /// The commit `gathered`'s source is pinned to, when `gathered` was taken
 /// at it.
 ///
-/// A gather places what the commit it took holds and drops nothing, so a
-/// skill an earlier gather took at another commit stays on the shelf
-/// beside a pin whose commit lacks it, under its own `revision`; saying it
-/// is pinned would claim the pin holds it. Its cell is left empty rather
-/// than given its own commit, which `--json` holds: a column of pins and
-/// commits would read as pins.
+/// A gather takes off what the commit it took lacks, but keeps a skill
+/// whose folder is there and no longer reads, as an earlier gather took it
+/// at another commit, so it stays on the shelf beside a pin, under its own
+/// `revision`; saying it is pinned would claim the pin holds it. Its cell
+/// is left empty rather than given its own commit, which `--json` holds: a
+/// column of pins and commits would read as pins.
 fn pinned_at(gathered: &Gathered) -> Option<&str> {
     let pin = gathered.source.pin.as_ref()?;
     (gathered.revision.as_ref() == Some(pin)).then_some(pin.as_str())

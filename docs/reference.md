@@ -885,10 +885,11 @@ A pin is a commit's full id, 40 hexadecimal digits: an abbreviation, a
 branch or a tag is refused before anything is fetched, since only the full
 id names one commit for good.
 
-A gather takes what the commit holds and removes nothing from the shelf, so
-a skill an earlier gather took that the pinned commit lacks stays there,
-listed without the pin, and its `revision` in `--json` says the commit it
-was taken at.
+A gather takes what the commit holds, and takes off the shelf what an
+earlier gather took that the commit lacks, saying each as `removed`. A
+skill whose folder the pinned commit holds and that does not read there
+stays as an earlier gather took it, with a warning, listed without the
+pin, and its `revision` in `--json` says the commit it was taken at.
 
 One repository is one source however its URL is spelled. On GitHub and
 GitLab, `https://github.com/acme/skills`, `https://github.com/Acme/Skills.git`,

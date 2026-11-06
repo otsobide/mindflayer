@@ -184,7 +184,7 @@ fn gather_list_says_each_skills_licence_and_the_commit_its_source_is_pinned_to()
 }
 
 #[test]
-fn gather_list_says_a_pin_only_of_a_skill_taken_at_it() {
+fn a_pinned_gather_takes_off_the_shelf_what_its_commit_lacks() {
     let scenario = Scenario::projects(&["collapse"]);
     scenario.source(
         SOURCE,
@@ -205,13 +205,62 @@ fn gather_list_says_a_pin_only_of_a_skill_taken_at_it() {
         )],
     );
     // Gathered at the branch first, so the shelf holds a skill the pinned
-    // commit does not, which the pinned gather leaves where it is.
+    // commit does not.
+    scenario.given("~/Projects", "mindweaver gather git ../src/acme-skills");
+
     scenario
-        .given("~/Projects", "mindweaver gather git ../src/acme-skills")
-        .given(
+        .run(
             "~/Projects",
             &format!("mindweaver gather git ../src/acme-skills --pin {pinned}"),
-        );
+        )
+        .succeeds()
+        .prints(&format!(
+            "src-acme-skills: ../src/acme-skills at {}\n\
+             \x20 removed    ddd-reviewer  Review a change against the DDD layering rules\n\
+             \x20 unchanged  commit-style  How this repo writes commit messages\n\
+             \n\
+             1 skill: 0 added, 0 updated, 1 unchanged, 1 removed\n",
+            &pinned[..7]
+        ))
+        .quiet();
+
+    assert!(!scenario.exists("~/Projects/.mindweaver/skills/..-src-acme-skills/ddd-reviewer"));
+}
+
+#[test]
+fn gather_list_says_a_pin_only_of_a_skill_taken_at_it() {
+    let scenario = Scenario::projects(&["collapse"]);
+    scenario.source(
+        SOURCE,
+        &[
+            (
+                "skills/commit-style/SKILL.md",
+                &skill("commit-style", "How this repo writes commit messages"),
+            ),
+            ("skills/ddd-reviewer/SKILL.md", "no front matter yet\n"),
+        ],
+    );
+    let pinned = scenario.commit(SOURCE);
+    scenario.change(
+        SOURCE,
+        &[(
+            "skills/ddd-reviewer/SKILL.md",
+            &skill(
+                "ddd-reviewer",
+                "Review a change against the DDD layering rules",
+            ),
+        )],
+    );
+    // Gathered at the branch first, so the shelf holds a skill whose folder
+    // the pinned commit holds and cannot be read from, which the pinned
+    // gather leaves as it was taken.
+    scenario.given("~/Projects", "mindweaver gather git ../src/acme-skills");
+    scenario
+        .run(
+            "~/Projects",
+            &format!("mindweaver gather git ../src/acme-skills --pin {pinned}"),
+        )
+        .exits(1);
 
     let short = &pinned[..7];
     scenario
