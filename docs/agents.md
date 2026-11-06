@@ -568,6 +568,18 @@ developers.openai.com/codex to learn.chatgpt.com.
 | `CODEX_HOME` moves `~/.codex`. | docs-only | [config-reference](https://learn.chatgpt.com/docs/config-file/config-reference). Fallback: `--codex-home` names the folder outright. |
 | How an empty `CODEX_HOME` is read. | docs-only | The docs are silent. The source requires a set `CODEX_HOME` to name an existing folder ([home-dir](https://github.com/openai/codex/blob/main/codex-rs/utils/home-dir/src/lib.rs)), so an empty one may be refused rather than taken for unset; not run. Fallback: Mindweaver reads an empty variable as no folder, as it reads an empty `$MINDWEAVER_HOME`, so if the agent takes it for unset and reads its default folder, a check leaves that folder out; `--codex-home` names it outright. An [open question](architecture.md#open-questions). |
 
+### Plugins
+
+Neither run nor read in Codex's documentation or source: these are
+openai/plugins as #104 describes it (65 entries, 47 of them carrying
+skills), which a gather of a Codex marketplace is modelled on.
+
+| Fact | Mark | Source, and the fallback |
+|---|---|---|
+| A repository's plugin marketplace is `.agents/plugins/marketplace.json`, its paths read from the folder `.agents` is in. | docs-only | openai/plugins, as #104 describes it. Fallback: the place is one constant in core (`marketplace::CODEX_CATALOG`), and a repository with no catalog at either place is said to be no marketplace, never read as one. |
+| Each entry is `{"source": "local", "path": "./x"}`, beside a `policy` and a `category`, and an entry Codex cannot resolve is skipped. | docs-only | openai/plugins, as #104 describes it. Fallback: an entry Mindweaver does not resolve is skipped with a warning (`marketplace_entry_unresolved`), and the rest are gathered. |
+| A plugin's manifest is `.codex-plugin/plugin.json`, naming its skills' folder (`skills`), its MCP servers' file (`mcpServers`) and its app connectors' (`apps`). | docs-only | openai/plugins, as #104 describes it. Fallback: `skills/` is searched beside whatever the manifest names, so a manifest read wrong loses none of the plugin's skills there; MCP files are named and never imported, and app connectors are not looked at. |
+
 ## OpenCode
 
 Nothing here was run, neither the installed V2 nor V1 through

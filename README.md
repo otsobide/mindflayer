@@ -336,14 +336,17 @@ from an older Mindweaver.
 
 ## Plugin marketplaces
 
-A Claude Code plugin marketplace, a repository whose
-`.claude-plugin/marketplace.json` lists plugins, is gathered a plugin at a
-time: the catalog is all that is fetched until you pick one.
+A plugin marketplace, a repository whose catalog lists plugins, is
+gathered a plugin at a time: the catalog is all that is fetched until you
+pick one. Claude Code's catalog, `.claude-plugin/marketplace.json`, and
+Codex's, `.agents/plugins/marketplace.json` as openai/plugins keeps one,
+are both read, each by where it is and how its entries are written.
 
 ```bash
 mindweaver gather marketplace anthropics/skills --list    # its plugins, gathering none
 mindweaver gather marketplace anthropics/skills --plugin document-skills
 mindweaver gather marketplace anthropics/skills --all     # every one; past 25, only with --yes
+mindweaver gather marketplace openai/plugins --list       # a Codex marketplace
 ```
 
 The marketplace is a source called by its catalog's name, and each plugin
@@ -351,12 +354,17 @@ gathered a source of its own under it, `anthropic-agent-skills.document-skills`,
 which `gather sources` lists beneath it and `--from` takes; `gather update`
 and `gather remove` of the marketplace take every plugin of it along. A
 plugin is taken from the marketplace's own repository or cloned from its
-own, at the commit its entry pins, and only its skills are: its hooks,
-agents and MCP servers are said and left, an npm package or an archive is
-not gathered, and a plugin made by running a command is refused, never run.
-In the TUI, `m` on the shelf lists a marketplace's plugins to tick.
-[The reference](docs/reference.md#from-a-claude-code-marketplace) has the
-rest.
+own, at the commit its entry pins, and only its skills are, where its
+manifest (`.codex-plugin/plugin.json`, `.claude-plugin/plugin.json`, or an
+Agent Plugins `plugin.json`) says they are: a package in the Agent Plugins
+format offers its `skills/<child>` alone, gathered with `gather git` too.
+Its hooks, agents and MCP servers are said and left: a plugin's MCP files,
+`.mcp.json` or `mcp.json`, are reported by name and never imported. An npm
+package or an archive is not gathered, a plugin made by running a command
+is refused, never run, and a Codex entry Codex would not resolve is skipped
+with a warning. In the TUI, `m` on the shelf lists a marketplace's plugins
+to tick. [The reference](docs/reference.md#from-a-plugin-marketplace) has
+the rest.
 
 ## MCP servers
 

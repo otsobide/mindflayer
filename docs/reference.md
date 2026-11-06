@@ -524,9 +524,9 @@ mindweaver gather git <URL> [--name NAME] [--pin SHA]
                            # under a name --from takes, at one commit when
                            # pinned
 mindweaver gather marketplace <SOURCE> --list|--plugin NAME...|--all [--yes]
-                           # list a Claude Code marketplace's plugins, or
-                           # gather the ones named, each into a source of
-                           # its own
+                           # list a Claude Code or Codex marketplace's
+                           # plugins, or gather the ones named, each into
+                           # a source of its own
 mindweaver gather list [--json]
                            # what is on the shelf or loaded, and where from
 mindweaver gather sources [--json]
@@ -916,8 +916,9 @@ Each is listed by the name of its source, then by its licence as the skill
 says it: its `license`, else what a `LICENSE` or `LICENCE` file beside its
 `SKILL.md` names (the identifier a line tags with
 `SPDX-License-Identifier:`, else the file's first line, its title, which
-names no version), else, for a plugin [a marketplace](#from-a-claude-code-marketplace)
-lists, the licence its catalog gives the plugin, else `unknown`. Nothing reads a licence out of the
+names no version), else, for a plugin [a marketplace](#from-a-plugin-marketplace)
+lists, the licence its own manifest gives it, then its catalog, else
+`unknown`. Nothing reads a licence out of the
 whole text, nor the repository's own licence at its root. The name of its
 source is what `--from` takes when two sources offer one name:
 
@@ -1093,14 +1094,15 @@ note: https://github.com/acme/skills: the same repository as the source `acme-sk
 `--from https://github.com/acme/skills` still names it, with the warning
 above.
 
-### From a Claude Code marketplace
+### From a plugin marketplace
 
-A Claude Code plugin marketplace is a repository whose
-`.claude-plugin/marketplace.json` lists plugins, each in a folder of the
-repository or in a repository of its own. `gather marketplace` takes the
-skills its plugins hold, and nothing but the catalog is fetched until you
-pick a plugin: `--list` records the marketplace as a source and lists what
-it offers.
+A plugin marketplace is a repository whose catalog lists plugins, each in
+a folder of the repository or in a repository of its own: Claude Code's
+catalog is `.claude-plugin/marketplace.json`, and Codex's
+`.agents/plugins/marketplace.json`. `gather marketplace` takes the skills
+its plugins hold, and nothing but the catalog is fetched until you pick a
+plugin: `--list` records the marketplace as a source and lists what it
+offers.
 
 ```
 $ mindweaver gather marketplace anthropics/skills --list
@@ -1114,11 +1116,12 @@ anthropic-agent-skills: https://github.com/anthropics/skills at 3e1b2c4
 The marketplace is called by the name its catalog gives it, unless `--name`
 gives another, and `--ref` and `--path` say a branch and the folder the
 catalog is in, as `gather git` takes them, or a tree URL does. Each plugin
-is listed by its name, the kind of source it is (`relative` for a folder of
-the marketplace's repository, `github`, `url` or `git-subdir` for one of its
-own) and where it is, with the branch and the commit its entry pins it to.
-`--plugin` gathers the ones it names, once for each, each into a source of
-its own, called after the marketplace:
+is listed by its name, the kind of source it is (`relative`, or `local` in
+a Codex catalog, for a folder of the marketplace's repository, `github`,
+`url` or `git-subdir` for one of its own) and where it is, with the branch
+and the commit its entry pins it to. `--plugin` gathers the ones it names,
+once for each, each into a source of its own, called after the
+marketplace:
 
 ```
 $ mindweaver gather marketplace anthropics/skills --plugin document-skills
@@ -1134,14 +1137,56 @@ anthropic-agent-skills.document-skills: https://github.com/anthropics/skills at 
 ```
 
 A plugin's skills are the ones its entry names, as anthropics/skills names
-them; with none named, its `skills/` folder and a `SKILL.md` at its root. A
-plugin in the marketplace's own repository is taken from the clone its
-catalog was read from, and one in a repository of its own is cloned, at the
-branch and the commit its entry names: a `sha` there is a pin, as `gather
-git --pin` takes one. A skill that says no licence of its own, in its
-`SKILL.md` or a licence file, is recorded with the plugin's. What a plugin
-holds beside its skills, hooks, agents and MCP servers, is said in a note
-and never taken.
+them; with none named, its `skills/` folder, the folders its manifest
+names under `skills`, and a `SKILL.md` at its root. Its manifest is
+`.codex-plugin/plugin.json`, `.claude-plugin/plugin.json`, or a
+`plugin.json` at its root whose `$schema` names the Agent Plugins format,
+the one of the agent its catalog is for looked for first; one that cannot
+be read is a warning, and its plugin is searched as if it had none. A
+package in the Agent Plugins format offers its `skills/<child>` alone,
+nothing deeper and no `SKILL.md` at its root, as that format says, and so
+does one `gather git` gathers. A plugin in the marketplace's own repository
+is taken from the clone its catalog was read from, and one in a repository
+of its own is cloned, at the branch and the commit its entry names: a `sha`
+there is a pin, as `gather git --pin` takes one. A skill that says no
+licence of its own, in its `SKILL.md` or a licence file, is recorded with
+the plugin's, as its manifest gives it, else as its catalog does. What a
+plugin holds beside its skills, hooks, agents and MCP servers, as its entry
+or its manifest declares them or its folder keeps them, is said in a note
+and never taken, and the files its MCP servers are in, `.mcp.json` or
+`mcp.json`, are named there, never imported:
+
+```
+note: acme-codex.linear: its plugin holds MCP servers in `.mcp.json` too, which are not gathered
+```
+
+A Codex catalog lists each plugin as a `local` source, a folder below the
+marketplace's, with the `policy` and the `category` Codex requires, which
+are read past:
+
+```
+$ mindweaver gather marketplace acme/codex-plugins --list
+acme-codex: https://github.com/acme/codex-plugins at 08f1832
+  linear  local  plugins/linear
+  figma   local  plugins/figma
+  notion  local  plugins/notion
+
+4 plugins listed; nothing gathered: gather some with --plugin <name>, or every one with --all
+warning: acme-codex: `retired`: its path `plugins/retired` does not start with `./`, so Codex does not resolve it, and it is skipped
+```
+
+An entry Codex would not resolve, one whose `source` is no `local` one, or
+whose path does not start with `./` or names no folder below the
+marketplace's, is skipped with a warning, as Codex skips it, and the rest
+are listed and gathered as a Claude Code catalog's are. Which catalog a
+marketplace has is told by where it is and how its entries are written,
+both: a folder holding both is read as Claude Code reads it, and a catalog
+whose entries are all written as the other's are is not read at all, since
+neither agent would read it:
+
+```
+error: .claude-plugin/marketplace.json: lists its plugins as a Codex catalog does, not as a Claude Code one, so it is not read: a Codex catalog is .agents/plugins/marketplace.json
+```
 
 `--all` gathers every plugin the catalog lists. A catalog listing more than
 25 waits for `--yes`: without it, `--all` says what it would gather and

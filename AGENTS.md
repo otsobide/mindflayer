@@ -177,9 +177,12 @@ under `apps/` with its own `Makefile`:
   `edit` told the options does), the
   agents and where each kind goes for them (`agent`), the catalog, gathering
   (through `port::Remote`), and what a gather would take, nothing written
-  (`gather::preview`), a Claude Code plugin marketplace's catalog, read an
-  entry at a time, recorded as a parent source and each plugin picked of it
-  gathered into a child of its own (`marketplace`), a gathered source's own
+  (`gather::preview`), a Claude Code or Codex plugin marketplace's catalog,
+  told apart by its place and its shape, read an entry at a time, recorded
+  as a parent source and each plugin picked of it gathered into a child of
+  its own (`marketplace`), a plugin's own manifest, in Codex's, Claude
+  Code's or the Agent Plugins format, and what makes a folder an Agent
+  Plugins package (`plugin`), a gathered source's own
   changes, renaming one,
   gathering some again and removing one with what it put on the shelf, a
   marketplace's plugins along with it (`sources`), the ledger (through `port::LedgerStore`), installing, keeping installs out of git
@@ -1161,9 +1164,16 @@ These are easy to break from a single file without noticing.
     marketplace's own repository is held to it lexically and through links,
     a `github` one to `owner/repo`, a `url` or `git-subdir` one to another
     machine's repository (`url::is_remote`), and the skills an entry names
-    to the repository they are in (`gathered_listed_outside`). What a
-    catalog says reaches a terminal through `printable`, as a gather's
-    failures do.
+    to the repository they are in (`gathered_listed_outside`). A Codex
+    catalog's entry is a `local` folder below the marketplace's, and one
+    Codex would not resolve is skipped (`marketplace_entry_unresolved`); a
+    catalog written in the other dialect's shape is read as neither
+    (`marketplace_catalog_other_dialect`). A plugin's manifest
+    (`plugin::Manifest`) is read as a catalog is, to `plugin::MANIFEST_CAP`,
+    the folders it names held to the repository
+    (`gathered_manifest_outside`), and its MCP files are named, never
+    imported. What a catalog says reaches a terminal through `printable`,
+    as a gather's failures do.
   - Symlinks are followed only inside the source (`copy::tree`'s `within`),
     and a rule offered for install that leads out of the workspace offering
     it is refused (`InstallError::Outside`). A gathered skill's licence
