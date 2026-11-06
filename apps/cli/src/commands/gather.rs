@@ -4,7 +4,7 @@
 use std::fmt::Write as _;
 use std::path::Path;
 
-use mindweaver_core::gather::{self, Report, Request, Scrub, Watch};
+use mindweaver_core::gather::{self, Gathered, Report, Request, Scrub, Watch};
 use mindweaver_core::install::{offered_by_loads, Offer};
 use mindweaver_core::url::redacted;
 use mindweaver_core::{Kind, WeaverWorkspace};
@@ -259,7 +259,14 @@ fn gathered(url: &str, report: &Report) -> Outcome {
 
 /// Everything that can be installed from elsewhere, with where each thing
 /// comes from, spelled as `--from` takes it: a source by its name
-/// ([`Offer::listed_from`]).
+/// ([`Offer::listed_from`]), then the commit it is pinned to, in a column
+/// that earns its place only once a source shown is pinned, and what was
+/// gathered's licence as it says it, `unknown` when nothing does, in one
+/// that earns it once the shelf offers anything.
+///
+/// A loaded workspace's own has no licence cell: nothing gathered it, and
+/// a licence is what a gather records of where a skill came from, which an
+/// `unknown` there would claim was looked for.
 ///
 /// Empty, it says how to fill it, and suggests loading only when nothing is
 /// loaded yet; `mindweaver load` on its own lists what is.
@@ -284,21 +291,46 @@ fn shelf_listing(shelf: &[Offer], nothing_loaded: bool) -> String {
     kinds.sort();
     kinds.dedup();
     let name_kind = kinds.len() > 1;
+    // As the kind column: a licence only once the shelf offers something,
+    // a pin only once a source shown is pinned.
+    let name_license = shelf.iter().any(|entry| shelved(entry).is_some());
+    let name_pin = shelf
+        .iter()
+        .filter_map(shelved)
+        .any(|gathered| gathered.source.pin.is_some());
 
     let rows: Vec<Vec<String>> = shelf
         .iter()
         .map(|entry| {
+            let gathered = shelved(entry);
             let mut row = Vec::new();
             if name_kind {
                 row.push(entry.kind().slug().to_owned());
             }
             row.push(printable(entry.name()));
             row.push(printable(&entry.listed_from()));
+            if name_pin {
+                let pin = gathered.and_then(|gathered| gathered.source.pin.as_ref());
+                row.push(pin.map_or_else(String::new, |pin| format!("pinned {}", short(pin))));
+            }
+            if name_license {
+                row.push(gathered.map_or_else(String::new, |gathered| {
+                    printable(gathered.license.as_deref().unwrap_or("unknown"))
+                }));
+            }
             row.push(printable(entry.summary().unwrap_or("")));
             row
         })
         .collect();
     table(&rows)
+}
+
+/// What was gathered of `entry`, when the shelf offers it.
+fn shelved(entry: &Offer) -> Option<&Gathered> {
+    match entry {
+        Offer::Shelf(gathered) => Some(gathered),
+        Offer::Workspace { .. } | Offer::Loaded { .. } => None,
+    }
 }
 
 /// A revision as a person refers to it.

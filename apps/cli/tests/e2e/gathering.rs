@@ -123,8 +123,62 @@ fn gather_list_says_what_the_shelf_holds_and_from_where() {
         .run("~/Projects", "mindweaver gather list")
         .succeeds()
         .prints(concat!(
-            "commit-style  src-acme-skills  How this repo writes commit messages\n",
-            "ddd-reviewer  src-acme-skills  Review a change against the DDD layering rules\n",
+            "commit-style  src-acme-skills  unknown  How this repo writes commit messages\n",
+            "ddd-reviewer  src-acme-skills  unknown  Review a change against the DDD layering rules\n",
+        ))
+        .quiet();
+}
+
+#[test]
+fn gather_list_says_each_skills_licence_and_the_commit_its_source_is_pinned_to() {
+    let scenario = Scenario::projects(&["collapse"]);
+    scenario.source(
+        SOURCE,
+        &[
+            (
+                "skills/commit-style/SKILL.md",
+                &skill("commit-style", "How this repo writes commit messages"),
+            ),
+            (
+                "skills/ddd-reviewer/SKILL.md",
+                "---\nname: ddd-reviewer\ndescription: Review a change against the DDD layering \
+                 rules\nlicense: Apache-2.0\n---\n",
+            ),
+        ],
+    );
+    let pinned = scenario.commit(SOURCE);
+    // A licence file the pinned commit does not hold yet.
+    scenario.source(SOURCE, &[("skills/commit-style/LICENSE", "MIT License\n")]);
+    scenario.source(
+        "~/src/other-rules",
+        &[
+            (
+                "skills/pdf-forms/SKILL.md",
+                &skill("pdf-forms", "Fill in PDF forms"),
+            ),
+            (
+                "skills/pdf-forms/LICENSE.md",
+                "# Licence\n\nSPDX-License-Identifier: MIT\n",
+            ),
+        ],
+    );
+    scenario
+        .given(
+            "~/Projects",
+            &format!("mindweaver gather git ../src/acme-skills --pin {pinned}"),
+        )
+        .given("~/Projects", "mindweaver gather git ../src/other-rules");
+
+    let short = &pinned[..7];
+    scenario
+        .run("~/Projects", "mindweaver gather list")
+        .succeeds()
+        .prints(&format!(
+            "commit-style  src-acme-skills  pinned {short}  unknown     How this repo writes \
+             commit messages\n\
+             ddd-reviewer  src-acme-skills  pinned {short}  Apache-2.0  Review a change against \
+             the DDD layering rules\n\
+             pdf-forms     src-other-rules                  MIT         Fill in PDF forms\n"
         ))
         .quiet();
 }
