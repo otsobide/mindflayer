@@ -490,6 +490,95 @@ fn a_gathered_folder_is_where_it_is_in_the_repository_from_its_root() {
     assert_eq!(upstream(&clone.join("lint"), clone, "lint"), "lint");
 }
 
+#[test]
+fn a_licence_the_manifest_states_is_the_licence_whatever_a_file_beside_it_says() {
+    let folder = TempDir::new().unwrap();
+    write(&folder.path().join("LICENSE"), "MIT License\n");
+
+    for stated in ["Apache-2.0", "Complete terms in LICENSE.txt", "  MIT  "] {
+        assert_eq!(
+            license_of(Some(stated), folder.path()).as_deref(),
+            Some(stated.trim()),
+            "{stated:?}"
+        );
+    }
+}
+
+#[test]
+fn a_licence_file_names_the_licence_by_its_spdx_identifier_else_by_its_first_line() {
+    for (text, named) in [
+        ("MIT License\n\nCopyright (c) Acme\n", "MIT License"),
+        ("\n\n   Apache License\n   Version 2.0\n", "Apache License"),
+        (
+            "Copyright Acme\nSPDX-License-Identifier: MIT OR Apache-2.0\n",
+            "MIT OR Apache-2.0",
+        ),
+        (
+            "<!-- SPDX-License-Identifier: GPL-3.0-only -->\n# The GPL\n",
+            "GPL-3.0-only",
+        ),
+        (
+            "/* SPDX-License-Identifier: BSD-3-Clause */\n",
+            "BSD-3-Clause",
+        ),
+        // A tag naming nothing is no identifier, and the first line stands.
+        ("ISC License\nSPDX-License-Identifier:  \n", "ISC License"),
+    ] {
+        let folder = TempDir::new().unwrap();
+        write(&folder.path().join("LICENSE"), text);
+
+        assert_eq!(
+            license_of(None, folder.path()).as_deref(),
+            Some(named),
+            "{text:?}"
+        );
+    }
+}
+
+#[test]
+fn a_licence_file_is_found_by_either_spelling_in_any_case_and_a_stated_blank_says_nothing() {
+    for name in LICENSE_FILES
+        .iter()
+        .map(|name| name.to_string())
+        .chain(["license.md".to_owned(), "Licence.TXT".to_owned()])
+    {
+        let folder = TempDir::new().unwrap();
+        write(&folder.path().join(&name), "ISC License\n");
+
+        assert_eq!(
+            license_of(Some("  "), folder.path()).as_deref(),
+            Some("ISC License"),
+            "{name}"
+        );
+    }
+    // Of two, the bare one first.
+    let folder = TempDir::new().unwrap();
+    write(&folder.path().join("LICENSE.md"), "From the Markdown\n");
+    write(&folder.path().join("LICENSE"), "From the bare one\n");
+    assert_eq!(
+        license_of(None, folder.path()).as_deref(),
+        Some("From the bare one")
+    );
+}
+
+#[test]
+fn a_licence_is_unknown_when_nothing_names_one() {
+    let none = TempDir::new().unwrap();
+    write(&none.path().join("SKILL.md"), "---\nname: x\n---\n");
+    let empty = TempDir::new().unwrap();
+    write(&empty.path().join("LICENSE"), "\n  \n");
+    // A folder of that name is not a file.
+    let folder = TempDir::new().unwrap();
+    write(&folder.path().join("LICENSE").join("MIT"), "MIT License\n");
+    let elsewhere = TempDir::new().unwrap();
+    write(&elsewhere.path().join("COPYING.LESSER"), "GNU LGPL\n");
+
+    for unknown in [&none, &empty, &folder, &elsewhere] {
+        assert_eq!(license_of(None, unknown.path()), None, "{unknown:?}");
+    }
+    assert_eq!(license_of(None, &none.path().join("gone")), None);
+}
+
 #[cfg(unix)]
 #[test]
 fn a_skill_whose_folder_is_not_utf_8_cannot_be_filed() {

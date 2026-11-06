@@ -43,6 +43,26 @@ pub use watch::{Progress, Watch};
 /// The folder inside a source that is harvested unless another is named.
 pub const DEFAULT_SUBDIRECTORY: &str = "skills";
 
+/// The names a licence file beside a skill's manifest goes by, compared
+/// without case, in the order one is looked for when a folder holds more
+/// than one: both spellings, bare, as Markdown or as text.
+pub const LICENSE_FILES: [&str; 6] = [
+    "LICENSE",
+    "LICENSE.md",
+    "LICENSE.txt",
+    "LICENCE",
+    "LICENCE.md",
+    "LICENCE.txt",
+];
+
+/// The tag a file names its licence after, as SPDX spells it.
+const SPDX_TAG: &str = "SPDX-License-Identifier:";
+
+/// How much of a licence file is read for the line that names it: the head
+/// of it, where both the tag and a title are, and never a file somebody
+/// made large enough to be a reason not to finish.
+const LICENSE_READ: u64 = 64 * 1024;
+
 /// Where to gather from.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Source {
@@ -701,6 +721,9 @@ fn take(
                 None
             }
         };
+        let stated = artifact
+            .manifest()
+            .and_then(|manifest| manifest.license.as_deref());
         let recorded = relative(workspace, &destination);
         ledger.record(
             source,
@@ -712,7 +735,7 @@ fn take(
                 revision: clone.revision.clone(),
                 path: upstream(directory, &clone.root, folder),
                 content_hash,
-                license: None,
+                license: license_of(stated, &destination),
             },
         )?;
 
@@ -765,6 +788,62 @@ fn read(
         return None;
     };
     Some((directory.to_path_buf(), folder.to_owned(), artifact))
+}
+
+/// What the skill at `folder`, its copy on the shelf, says its licence is,
+/// as written: `stated`, its manifest's `license`, else what a licence file
+/// beside the manifest names ([`LICENSE_FILES`]), else nothing, which is
+/// unknown.
+///
+/// Of a file, the identifier a line of it tags with
+/// `SPDX-License-Identifier:` when one does, since that is the licence
+/// named in the one spelling every tool reads, put there to be found; and
+/// otherwise its first line that is not blank, which is how a licence's
+/// text opens (`MIT License`, `Apache License`), its title as the file
+/// writes it. Telling a licence from the whole of its text, as GitHub's
+/// licensee does, would be a guess this records as a fact, and is left to
+/// whoever reads the file. A first line names no version (`Apache License`
+/// is followed by `Version 2.0` on the next), which an identifier does.
+///
+/// Read from the shelf rather than the clone, so a licence file that is a
+/// link is read as the copy resolved it, within the clone, and never
+/// followed anywhere else. A file that cannot be read names nothing, as one
+/// that is not there: the hash, which reads every file of the copy, has
+/// said already that one cannot be.
+pub fn license_of(stated: Option<&str>, folder: &Path) -> Option<String> {
+    if let Some(stated) = stated.map(str::trim).filter(|stated| !stated.is_empty()) {
+        return Some(stated.to_owned());
+    }
+    let entries: Vec<(String, PathBuf)> = fs::read_dir(folder)
+        .ok()?
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_file()))
+        .filter_map(|entry| Some((entry.file_name().into_string().ok()?, entry.path())))
+        .collect();
+    let file = LICENSE_FILES.iter().find_map(|wanted| {
+        entries
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case(wanted))
+            .map(|(_, path)| path)
+    })?;
+    let mut head = Vec::new();
+    let opened = fs::File::open(file).ok()?;
+    io::Read::read_to_end(&mut io::Read::take(opened, LICENSE_READ), &mut head).ok()?;
+    let text = String::from_utf8_lossy(&head);
+    let tagged = text.lines().find_map(|line| {
+        let (_, after) = line.split_once(SPDX_TAG)?;
+        // What closes the comment the tag is in, in the files that put it in
+        // one, is no part of the identifier.
+        let after = after.trim();
+        let after = after
+            .strip_suffix("-->")
+            .or_else(|| after.strip_suffix("*/"))
+            .unwrap_or(after);
+        Some(after.trim()).filter(|identifier| !identifier.is_empty())
+    });
+    tagged
+        .or_else(|| text.lines().map(str::trim).find(|line| !line.is_empty()))
+        .map(str::to_owned)
 }
 
 /// The directories under `root` that hold a `manifest`.

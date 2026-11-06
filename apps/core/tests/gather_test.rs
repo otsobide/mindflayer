@@ -321,6 +321,53 @@ fn each_gathered_skill_records_its_folder_upstream_its_commit_and_the_hash_insta
 }
 
 #[test]
+fn a_gathered_skills_licence_is_its_manifests_else_its_licence_files_else_unknown() {
+    let source = repository(&[
+        (
+            "skills/stated/SKILL.md",
+            "---\nname: stated\ndescription: Says it\nlicense: Apache-2.0\n---\n",
+        ),
+        ("skills/stated/LICENSE", "MIT License\n"),
+        ("skills/filed/SKILL.md", &skill("filed", "Keeps a file")),
+        (
+            "skills/filed/LICENSE.txt",
+            "MIT License\n\nCopyright (c) Acme\n",
+        ),
+        ("skills/tagged/SKILL.md", &skill("tagged", "Tags a file")),
+        (
+            "skills/tagged/LICENSE.md",
+            "# Licence\n\nSPDX-License-Identifier: MIT OR Apache-2.0\n",
+        ),
+        ("skills/unknown/SKILL.md", &skill("unknown", "Says nothing")),
+        // The repository's licence is its own, not the skill's folder's.
+        ("LICENSE", "GNU GENERAL PUBLIC LICENSE\n"),
+    ]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap();
+
+    let licenses: Vec<(String, Option<String>)> = ledger
+        .gathered()
+        .unwrap()
+        .into_iter()
+        .map(|artifact| (artifact.name.to_string(), artifact.license))
+        .collect();
+    assert_eq!(
+        licenses,
+        [
+            (String::from("filed"), Some(String::from("MIT License"))),
+            (String::from("stated"), Some(String::from("Apache-2.0"))),
+            (
+                String::from("tagged"),
+                Some(String::from("MIT OR Apache-2.0"))
+            ),
+            (String::from("unknown"), None),
+        ]
+    );
+}
+
+#[test]
 fn a_folder_the_source_does_not_have_is_named_in_the_error() {
     let source = repository(&[("README.md", "nothing to gather\n")]);
     let (_dir, workspace) = workspace();
