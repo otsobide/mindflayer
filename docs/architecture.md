@@ -13701,9 +13701,11 @@ it once as it closes.
   marketplace's own repository has no clone but its marketplace's; for a
   plugin in a repository of its own that is one fetch more than its own.
 - **What a plugin holds beyond its skills.** Hooks, agents and MCP servers
-  are said and never taken, and so are a plugin's commands, which no
-  agent but Claude reads; npm packages and archives are not gathered
-  (#103's out of scope), nor is a plugin installed whole.
+  are said and never taken. A plugin's commands, which no agent but Claude
+  reads, are not said, and are taken only from a plugin that is one skill,
+  whose copy keeps its `commands` folder as it keeps any folder of the
+  skill. npm packages and archives are not gathered (#103's out of scope),
+  nor is a plugin installed whole.
 - **A skill that stops reading keeps the copy that read.** A gather takes
   off what its commit no longer holds (#100, [what a source no longer
   holds](#what-a-source-no-longer-holds)), but a skill whose folder is

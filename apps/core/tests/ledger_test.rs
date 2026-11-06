@@ -88,8 +88,8 @@ const SOURCES_AS_WRITTEN: &str = "SELECT id, kind, url, reference, subdirectory,
                                          directory, first_seen, last_seen
                                     FROM sources ORDER BY id";
 
-/// Every column of `sources` a version before 9 had, which schema 9 adds
-/// to as it makes the table again: what it keeps of each row.
+/// Every column of `sources` a version before 9 had, which schema 9 adds a
+/// column to and leaves as they were: what it keeps of each row.
 const SOURCES_OF_SCHEMA_8: &str = "SELECT id, kind, url, reference, subdirectory, revision,
                                           directory, first_seen, last_seen, name,
                                           canonical_url, reference_key, pin, parent_id
@@ -1367,8 +1367,9 @@ fn a_source_of_a_version_8_ledger_forgotten_takes_what_it_brought_and_leaves_its
 
     assert!(ledger.forget_source(acme.id).unwrap());
 
-    // What it gathered went with it, by the cascade copied into the new
-    // table's references, and what was installed from it points at none.
+    // What it gathered went with it, by the cascade its references have
+    // had since they were made, which schema 9 leaves as they are, and what
+    // was installed from it points at none.
     let after = Connection::open(&path).unwrap();
     assert_eq!(
         rows(&after, "SELECT source_id FROM artifacts ORDER BY id"),
