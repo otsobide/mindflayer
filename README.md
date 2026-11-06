@@ -292,6 +292,7 @@ yet, such as gathering:
 cd ~/Projects/blog && mind init          # make a repository a project
 cd ~/Projects && mindweaver link blog    # and link it to the workspace
 mindweaver gather git acme/skills        # put a repository's skills on the shelf
+mindweaver gather update --all           # gather every source again, saying what moved
 mindweaver install -p blog commit-style  # install one into a project
 mindweaver status                        # what every project holds, and how it stands
 mindweaver update --all --yes            # bring every project up to date
@@ -309,7 +310,12 @@ none, moves it. Each gathered skill is recorded with its folder in the
 repository, the commit, the hash of what was put on the shelf and its
 licence as it says it, and `gather list` shows the licence, `unknown` when
 nothing says one, and the commit a source is pinned to on each skill taken
-at it.
+at it. `gather sources` lists the sources by name, with when each was last
+gathered; `gather rename` calls one another name; `gather update` gathers
+some again, or every one, and takes off the shelf what a source no longer
+holds, so `status` says a copy of it `orphaned`; and `gather remove` removes
+one, its clone and what it put on the shelf, saying first, without `--yes`,
+what it would leave orphaned.
 
 To try it with nothing gathered, this repository's `examples/` is a
 workspace of two skills and two rules: `mindweaver load <your clone>/examples`

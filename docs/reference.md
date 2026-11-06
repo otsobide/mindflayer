@@ -525,6 +525,17 @@ mindweaver gather git <URL> [--name NAME] [--pin SHA]
                            # pinned
 mindweaver gather list [--json]
                            # what is on the shelf or loaded, and where from
+mindweaver gather sources [--json]
+                           # the sources the shelf is filled from, each by
+                           # its name, with when it was last gathered
+mindweaver gather rename <OLD> <NEW>
+                           # call a source another name
+mindweaver gather update <NAME>...|--all
+                           # gather sources again, saying what each added,
+                           # updated and removed
+mindweaver gather remove <NAME> [--yes]
+                           # remove a source and what it put on the shelf;
+                           # without --yes, say what would go
 mindweaver install         # a screen for putting skills, rules and MCP
                            # servers into its projects
 mindweaver install (-p PROJECT)...|--all-projects <NAME> [--from ORIGIN] [--force] [--yes]
@@ -1014,6 +1025,80 @@ note: https://github.com/acme/skills: the same repository as the source `acme-sk
 
 `--from https://github.com/acme/skills` still names it, with the warning
 above.
+
+### Keeping the sources
+
+`gather sources` lists the sources the shelf is filled from, each by its
+name, with its URL, the branch it was asked at and the commit it is pinned
+to, when it has either, how many skills it holds and when a gather last took
+it, in UTC:
+
+```
+$ mindweaver gather sources
+acme-skills  https://github.com/acme/skills  pinned a1b2c3d  2 skills  gathered 2026-11-06 14:02 UTC
+other-rules  https://github.com/other/rules                  2 skills  gathered 2026-11-06 14:05 UTC
+```
+
+A source whose first gather failed is listed as `never gathered`, and
+`--json` gives each in [the envelope](#machine-readable-output). `gather
+rename` calls one another name, held to what `--name` takes, and `gather
+list` and `--from` use it from then on; what was installed from it still
+records its URL:
+
+```
+$ mindweaver gather rename other-rules strict-rules
+renamed source other-rules to strict-rules, gathered from https://github.com/other/rules
+```
+
+`gather update` gathers each source it names again, or every one with
+`--all`, as each was gathered last: from its URL, at its branch, and at its
+pin when it has one, which only `gather git --pin` moves. Each says what it
+added, updated and removed: what the source no longer holds at the commit
+it took is taken off the shelf, its copy and its record.
+
+```
+$ mindweaver gather update --all
+acme-skills: https://github.com/acme/skills at a1b2c3d
+  unchanged  commit-style  How this repo writes commit messages
+  unchanged  ddd-reviewer  Review a change against the DDD layering rules
+
+2 skills: 0 added, 0 updated, 2 unchanged
+
+strict-rules: https://github.com/other/rules at 7e8f9a0
+  updated  commit-style  Conventional commits, strictly
+  removed  pdf--forms    Fill in PDF forms
+
+1 skill: 0 added, 1 updated, 0 unchanged, 1 removed
+```
+
+A source that cannot be gathered is a warning beside the rest. Afterwards
+`status` says each copy a project has of what moved `outdated`, which
+[`update`](#keeping-projects-up-to-date) brings up to date, and of what went
+`orphaned`.
+
+`gather remove` removes a source: its clone, its folder on the shelf and
+what the workspace records of it, and nothing else, as no folder but the two
+the workspace records as the source's own is ever deleted. Without `--yes`
+it says what would go, and every copy a project the workspace links
+installed from it, which stays there, recorded and orphaned:
+
+```
+$ mindweaver gather remove strict-rules
+would remove the source strict-rules, gathered from https://github.com/other/rules, and the 1 skill it holds on the shelf
+would delete /home/you/Projects/.mindweaver/cache/github.com-other-rules
+would delete /home/you/Projects/.mindweaver/skills/github.com-other-rules
+would leave commit-style in collapse, installed from it, orphaned
+nothing removed: add --yes to go ahead
+$ mindweaver gather remove strict-rules --yes
+removed the source strict-rules, gathered from https://github.com/other/rules, and the 1 skill it held on the shelf
+deleted /home/you/Projects/.mindweaver/cache/github.com-other-rules
+deleted /home/you/Projects/.mindweaver/skills/github.com-other-rules
+left commit-style in collapse, installed from it, orphaned
+note: nothing offers what was installed from it any more; `mindweaver uninstall --orphaned --all-projects` takes out what nothing offers
+```
+
+In [the TUI](#the-tui), `s` shows the shelf, where `←→` picks a source, `u`
+gathers it again, `U` every one, and `d` removes it once you say yes.
 
 ### What a workspace keeps
 
@@ -1564,12 +1649,13 @@ with its `code` and `message`.
 
 The commands that report what is there take `--json`, at either level:
 `list`, `show`, `validate`, `templates`, `status` and `doctor`, and `mindweaver
-workspaces`, `mindweaver scan` and `mindweaver gather list`. Each prints what it
+workspaces`, `mindweaver scan`, `mindweaver gather list` and `mindweaver gather
+sources`. Each prints what it
 read in one envelope, the same for every command, so a script or an agent
 reads them all one way, and reads what a workspace holds, its own
 artifacts and each project's, their templates and what it can install from
-elsewhere, as every front end reads them. What it loads, the sources its
-shelf is filled from and its history have no `--json` yet. Say `collapse`
+elsewhere, as every front end reads them. What it loads and its history
+have no `--json` yet. Say `collapse`
 holds the rule `git/no-force-push`, and a skill folder whose `SKILL.md` has
 lost its front matter:
 
@@ -1641,6 +1727,11 @@ warning: /home/you/Projects/collapse/skills/broken/SKILL.md: the file does not s
   was gathered at among the rest, and where it came from: its
   `upstream_path` in the repository, the `content_hash` of what was put on
   the shelf, and its `license`, `null` when unknown.
+- `gather sources`: each source the shelf is filled from, with what a shelf
+  row's `source` holds (its `name`, `url`, `reference`, `pin` and the rest),
+  `gathered_at`, when a gather last took it, in seconds since the Unix
+  epoch, `null` while none has, and `artifacts`, how many it holds on the
+  shelf.
 - `status`, `workspaces` and `scan`: the reports shown in [what each project
   has](#what-each-project-has), [the weavers this machine
   knows](#the-weavers-this-machine-knows) and [commands](#commands).
@@ -1806,7 +1897,8 @@ note: commit-style in collapse is no longer offered by load:../src/mindweaver/ex
 ```
 
 An update copies what the shelf holds now: what a gathered source offers
-moves when it is gathered again.
+moves when it is gathered again, by [`gather
+update`](#keeping-the-sources).
 
 ## A repository that already has .claude/skills
 
@@ -2026,7 +2118,7 @@ Every key runs a command you could have typed, through the same parser:
 | `v` | validate everything | `mindweaver validate` |
 | `g` | gather from a git repository, showing how far it has got; `esc` stops it, until it starts placing | `mindweaver gather git <url>` |
 | `L` | load another workspace's own skills and rules; enter on a loaded one unloads it | `mindweaver load <path>`, `mindweaver unload <path>` |
-| `s` | what is on the shelf | `mindweaver gather list` |
+| `s` | what is on the shelf; there, `←→` picks a source, `u` gathers it again, `U` every one, and `d` removes it once you say yes | `mindweaver gather list`; `mindweaver gather update <source>`, `mindweaver gather update --all` and `mindweaver gather remove --yes <source>` |
 | `w` | the weavers this machine knows, the one in use marked | `mindweaver workspaces` |
 | `i` | install skills, rules and MCP servers from the workspace's own, a loaded workspace, or the shelf; `tab` switches between them, and `v` turns the screen round to every project for one of them | `mindweaver install` opens it; `a` runs `mindweaver install -p <project>... --from <origin> <kind:name>`, with `--yes` for an MCP server from elsewhere than the library once `a` has shown what each agent would run, and `mindweaver uninstall -p <project>... <kind:name>` |
 | `R` | read the disk again | nothing: it changes nothing |

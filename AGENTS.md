@@ -176,7 +176,9 @@ under `apps/` with its own `Makefile`:
   other key kept (`mcp::retransported`, `lifecycle::retransport`, what
   `edit` told the options does), the
   agents and where each kind goes for them (`agent`), the catalog, gathering
-  (through `port::Remote`), the ledger (through `port::LedgerStore`), installing, keeping installs out of git
+  (through `port::Remote`), a gathered source's own changes, renaming one,
+  gathering some again and removing one with what it put on the shelf
+  (`sources`), the ledger (through `port::LedgerStore`), installing, keeping installs out of git
   (`exclude`), a project's rules rendered into the block of its `AGENTS.md`
   (`agents_md`) and into Claude's rules folder (`claude_rules`), whether
   Claude reads that block and the `@AGENTS.md` import in a project's
@@ -258,7 +260,8 @@ under `apps/` with its own `Makefile`:
   relink, scan), `workspace` (load, unload), `activate` (activate, which), `known`
   (workspaces, workspaces forget), `artifact` (add, edit, rename, remove,
   templates), `read` (list, show, validate), `status`, `doctor`, `settings`
-  (agents, share, targets), `gather`, `install`, `update` and `migrate`
+  (agents, share, targets), `gather` (git, list, sources, rename, update,
+  remove), `install`, `update` and `migrate`
   (each at both levels), `adopt` (mindweaver adopt) and `ui` (the panel, at
   both levels).
   `add mcp`'s options for how a server is started or reached are one
@@ -516,7 +519,8 @@ These are easy to break from a single file without noticing.
   is another way to a page's change, never a change of its own: it sends
   the task the page offering it sends (`UPDATE_ALL`, the link form's, one
   box's plan applied with `batchOf`), through the same runner. A gather's lines run on a
-  thread of their own (`Task::runs_apart`), still through the same parsers:
+  thread of their own (`Task::runs_apart`), and so do a source's gathered
+  again from the shelf's page (`Task::UpdateSource`), still through the same parsers:
   the thread changes where they run, not what they are. The install screen applies the same way, in the TUI or
   opened by `mindweaver install` (`install::apply`): its marks are the
   `mindweaver install` and `mindweaver uninstall` lines they amount to
@@ -596,7 +600,21 @@ These are easy to break from a single file without noticing.
   and each artifact is recorded with where it came from
   (`ledger::Upstream`: its folder in the repository, the commit,
   `hash::tree` of the copy on the shelf and its licence,
-  `gather::license_of`), never a hash of a recipe of its own.
+  `gather::license_of`), never a hash of a recipe of its own. A gather
+  takes off the shelf what its source supplied and its commit no longer
+  holds, by folder (`gather::take_off`, `LedgerStore::ungathered`), its
+  report saying each as `removed`, and keeps a skill whose folder is there
+  and no longer reads. A source's own commands name it by its name, found
+  word for word among the ledger's (`sources::named`): `gather sources`
+  lists each (`LedgerStore::source_listing`, `ledger::SourceListing`),
+  `gather rename` renames one (`sources::rename`, refused with `--name`'s
+  codes, which `SourceError` echoes), `gather update` gathers some again
+  as each was gathered last, at its pin (`sources::update`,
+  `Request::again`), and `gather remove` removes one (`sources::remove`, a
+  dry run without `--yes`, `sources::plan_removal`), deleting only its
+  clone and its shelf folder by the folder name the ledger records for it,
+  refused unless that is one folder name, its rows going with them and
+  every installation from it kept, orphaned.
 - **Output is built, then printed.** Commands return an `Outcome` (stdout
   text, stderr lines, ok), so tests assert on the exact text a user sees.
   The two that run until they are stopped write as they run, the TUI its
@@ -612,8 +630,8 @@ These are easy to break from a single file without noticing.
   by hand for a line built from text.
 - **Reading commands print JSON in one envelope, and its names are a
   contract.** A reading command's `--json` (`list`, `show`, `validate`,
-  `templates`, `status` and `doctor` at both levels, `workspaces`, `scan`
-  and `gather list`) prints `render::json`'s `{"version": 2, "data": ..., "warnings":
+  `templates`, `status` and `doctor` at both levels, `workspaces`, `scan`,
+  `gather list` and `gather sources`) prints `render::json`'s `{"version": 2, "data": ..., "warnings":
   [...], "coded_warnings": [...]}`, never a shape of its own, with what its
   text says on stderr as `warning:` lines in `warnings`, the same lines
   with their codes in `coded_warnings`, and the exit status its text has;
@@ -1173,7 +1191,9 @@ These are easy to break from a single file without noticing.
   project's settings until their change and every copy it carries along are
   written, `relink::relink`, from its ledger checks until the entry and the
   records it moves are written, `relink::new_id`, `adopt::apply`, from the
-  plan it makes again until its record is written, and `update::apply`, from the plan it makes again until its last
+  plan it makes again until its record is written, `sources::rename`, from
+  finding the source until it is renamed, `sources::remove`, from the plan
+  it makes again until its rows are gone, and `update::apply`, from the plan it makes again until its last
   installation is written, through `install::install_held` (the body
   `install_with` hands to once it holds the lock) and
   `install::rules::update_held`, which take none of their own. A new
@@ -1183,7 +1203,8 @@ These are easy to break from a single file without noticing.
   `MindProject::change_settings` take none, since
   the writers that call them hold it, and `assign::install` and
   `uninstall` none across their batch, leaving it to each project's
-  install, in the install screen's lines too. A second workspace linking
+  install, in the install screen's lines too, as `sources::update` takes
+  none across its sources, leaving it to each gather. A second workspace linking
   the same project is kept out by neither lock, an open question in
   `docs/architecture.md`.
   Opening the ledger takes no lock: a schema migration keeps itself apart
