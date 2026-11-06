@@ -2275,7 +2275,8 @@ pub struct GatherForm {
     pub field: usize,
     pub error: Option<String>,
     /// Whether it is a marketplace's catalog to list (#103), the folder its
-    /// `.claude-plugin` is in, rather than a repository to gather from.
+    /// `.claude-plugin` or its `.agents` is in (#104), rather than a
+    /// repository to gather from.
     pub marketplace: bool,
 }
 
@@ -2776,8 +2777,8 @@ impl Reader {
             ),
             (
                 "s m",
-                "a Claude Code marketplace's plugins, the one picked or one typed: space ticks \
-                 each, enter gathers the ticked ones",
+                "a Claude Code or Codex marketplace's plugins, the one picked or one typed: space \
+                 ticks each, enter gathers the ticked ones",
                 &[
                     "mindweaver gather marketplace --list <url>",
                     "mindweaver gather marketplace --plugin <name>... <url>",

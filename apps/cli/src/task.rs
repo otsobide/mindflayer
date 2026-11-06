@@ -278,8 +278,9 @@ pub enum Task {
     /// says so and removes nothing.
     RemoveSource { source: String, yes: bool },
     /// `mindweaver gather marketplace --list [--path <folder>] [--ref <ref>]
-    /// <url>`: a Claude Code marketplace's catalog fetched, recorded and
-    /// listed, and no plugin of it gathered, for one to pick from (#103).
+    /// <url>`: a Claude Code or Codex marketplace's catalog fetched,
+    /// recorded and listed, and no plugin of it gathered, for one to pick
+    /// from (#103, #104).
     ListPlugins {
         url: String,
         folder: String,

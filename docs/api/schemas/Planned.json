@@ -1029,7 +1029,7 @@
           ]
         },
         {
-          "description": "`mindweaver gather marketplace --list [--path <folder>] [--ref <ref>]\n<url>`: a Claude Code marketplace's catalog fetched, recorded and\nlisted, and no plugin of it gathered, for one to pick from (#103).",
+          "description": "`mindweaver gather marketplace --list [--path <folder>] [--ref <ref>]\n<url>`: a Claude Code or Codex marketplace's catalog fetched,\nrecorded and listed, and no plugin of it gathered, for one to pick\nfrom (#103, #104).",
           "type": "object",
           "properties": {
             "folder": {

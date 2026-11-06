@@ -1054,7 +1054,7 @@ fn loading(app: &App, form: &LoadForm, frame: &mut Frame, area: Rect) {
 
 fn gathering(form: &GatherForm, frame: &mut Frame, area: Rect) {
     let title = if form.marketplace {
-        "List the plugins of a Claude Code marketplace"
+        "List the plugins of a Claude Code or Codex marketplace"
     } else {
         "Gather skills from a git repository"
     };

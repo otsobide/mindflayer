@@ -1519,8 +1519,9 @@ pub enum GatherCommand {
         dry_run: bool,
     },
 
-    /// Take skills from a Claude Code plugin marketplace: its catalog,
-    /// `.claude-plugin/marketplace.json`, recorded as a source of its own,
+    /// Take skills from a Claude Code or Codex plugin marketplace: its
+    /// catalog, `.claude-plugin/marketplace.json` or
+    /// `.agents/plugins/marketplace.json`, recorded as a source of its own,
     /// and each plugin picked gathered into a source of its own under it.
     ///
     /// Nothing but the catalog is fetched until a plugin is picked: --list
@@ -1538,8 +1539,8 @@ pub enum GatherCommand {
         /// which names a branch and a folder too.
         source: String,
 
-        /// The folder inside the repository its `.claude-plugin` is in,
-        /// instead of its root.
+        /// The folder inside the repository its `.claude-plugin` or its
+        /// `.agents` is in, instead of its root.
         #[arg(long, value_name = "DIR")]
         path: Option<String>,
 

@@ -1451,7 +1451,7 @@ fn a_marketplace_is_typed_on_the_shelf_when_none_is_picked() {
         panic!("{:?}", app.mode);
     };
     assert!(form.marketplace && form.url.text().is_empty());
-    assert!(tui_drawn(&app).contains("List the plugins of a Claude Code marketplace"));
+    assert!(tui_drawn(&app).contains("List the plugins of a Claude Code or Codex marketplace"));
     assert_eq!(press_key(&mut app, KeyCode::Enter), TuiStep::Stay);
 }
 
