@@ -2221,7 +2221,7 @@
             "type": "array"
           },
           "missed": {
-            "description": "Each rule it received that some of its agents read nowhere.",
+            "description": "Each rule it received that some of its agents read nowhere, and\neach MCP server it received that some of them are given no entry\nof, as `status` says them.",
             "items": {
               "$ref": "#/components/schemas/Missed"
             },

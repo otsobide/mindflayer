@@ -301,7 +301,9 @@ pub struct Project {
     /// Each kind it installs only where some of its agents do not read, as
     /// `status` says it.
     pub unreached: Vec<Unreached>,
-    /// Each rule it received that some of its agents read nowhere.
+    /// Each rule it received that some of its agents read nowhere, and
+    /// each MCP server it received that some of them are given no entry
+    /// of, as `status` says them.
     pub missed: Vec<Missed>,
     /// Each folder its settings name in `targets` that no install uses.
     pub misplaced: Vec<Said>,

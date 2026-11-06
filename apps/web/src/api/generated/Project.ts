@@ -101,7 +101,9 @@ templates: Array<Template>,
  */
 unreached: Array<Unreached>, 
 /**
- * Each rule it received that some of its agents read nowhere.
+ * Each rule it received that some of its agents read nowhere, and
+ * each MCP server it received that some of them are given no entry
+ * of, as `status` says them.
  */
 missed: Array<Missed>, 
 /**
