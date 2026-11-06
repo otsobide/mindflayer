@@ -1509,6 +1509,30 @@ github  current  opencode  workspace
     );
 }
 
+/// A project's own server, a definition it keeps, is a row of its own
+/// beside the entries of one of the name it received, as the JSON lists
+/// both.
+#[test]
+fn status_keeps_a_projects_own_server_beside_the_entries_of_one_it_received() {
+    let dir = library();
+    let app = dir.path().join("app");
+    ProjectMother::with_mcp(&app, &Agent::ALL, Share::Shared);
+    weaver(dir.path(), &["link", "app"]).unwrap();
+    mind(&app, &["add", "mcp", "github", GITHUB, "--command", "npx"]).unwrap();
+    weaver(dir.path(), &["install", "-p", "app", "mcp:github"]).unwrap();
+
+    let text = weaver(dir.path(), &["status", "-p", "app"]).unwrap();
+
+    assert_eq!(
+        text.stdout,
+        "\
+github  authored  -
+github  current   claude    workspace
+github  current   opencode  workspace
+"
+    );
+}
+
 /// A server an agent of the project is given no entry of is said of it,
 /// as a rule some of its agents read nowhere is, in `missed`.
 #[test]

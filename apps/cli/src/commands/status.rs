@@ -304,9 +304,12 @@ fn older(status: &Status) -> Vec<Warning> {
 /// Whether `artifact` is an MCP server's installation whose entries the
 /// table lists a row each ([`ProjectStatus::entries`]), in its place: one
 /// an agent, so that Claude's entry edited beside Codex's current says
-/// which, as one row for the installation could not.
+/// which, as one row for the installation could not. Never the project's
+/// own server of the name, a definition it authors, which no entry stands
+/// for.
 fn entered(project: &ProjectStatus, artifact: &ArtifactStatus) -> bool {
     artifact.kind == Kind::Mcp
+        && artifact.state != State::Authored
         && project
             .entries
             .iter()
