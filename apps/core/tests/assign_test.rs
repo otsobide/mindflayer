@@ -197,6 +197,66 @@ fn an_uninstall_takes_it_out_where_it_is_and_says_where_it_is_not() {
     }
 }
 
+/// An MCP server goes into several projects as a skill does, typed bare,
+/// each project's part its own install there: one naming no agent is
+/// refused as it is for a skill, and taking it back out by its bare name
+/// takes out the entries each install wrote.
+#[test]
+fn an_mcp_server_goes_into_every_project_asked_and_comes_back_out_by_its_bare_name() {
+    let (dir, mut workspace, mut projects) = given(&["alpha", "beta"]);
+    projects.push(linked(&mut workspace, &dir.path().join("bare"), &[]));
+    let folder = workspace.own().directory_for(Kind::Mcp).unwrap();
+    fs::create_dir_all(&folder).unwrap();
+    fs::write(
+        folder.join("github.toml"),
+        mindweaver_core::mother::McpMother::plain_program("github"),
+    )
+    .unwrap();
+
+    let parts = installing(&workspace, &projects, "github");
+
+    assert_eq!(
+        installed(&parts),
+        [
+            (String::from("alpha"), String::from("added")),
+            (String::from("beta"), String::from("added")),
+            // Every kind refusing it alike, the first kind's refusal.
+            (
+                String::from("bare"),
+                String::from(
+                    "refused: bare names no agent in its settings that skills are installed \
+                     for, so none can be installed into it"
+                )
+            ),
+        ]
+    );
+    for project in &projects[..2] {
+        for file in [".mcp.json", ".codex/config.toml", "opencode.json"] {
+            let text = fs::read_to_string(project.root().join(file)).unwrap();
+            assert!(text.contains("github"), "{file}: {text}");
+        }
+    }
+
+    let parts = assign::uninstall(
+        &workspace,
+        &projects[..2],
+        &Reference::parse("github"),
+        &AgentHomes::default(),
+        Edits::Kept,
+    )
+    .unwrap()
+    .parts;
+
+    for part in &parts {
+        assert!(
+            matches!(&part.done, Ok((Kind::Mcp, Removed::Removed { .. }))),
+            "{:?}",
+            part.done
+        );
+        assert!(!part.project.root().join(".mcp.json").exists());
+    }
+}
+
 #[test]
 fn a_batch_of_no_project_makes_no_ledger() {
     let (_dir, workspace, _projects) = given(&["alpha"]);

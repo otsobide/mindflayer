@@ -1795,12 +1795,13 @@ fn the_lines_the_install_screen_ran_run_again_on_a_copy_leave_the_same_ledger_an
         KeyCode::Char(' '),
         KeyCode::Tab,
         KeyCode::Char(' '),
-        // tanukeys: git/commits and deploy ticked, lint unticked.
+        // tanukeys: git/commits and deploy ticked, lint unticked, back
+        // past the MCP servers to the skills.
         KeyCode::Left,
         KeyCode::Down,
         KeyCode::Right,
         KeyCode::Char(' '),
-        KeyCode::Tab,
+        KeyCode::BackTab,
         KeyCode::Char(' '),
         KeyCode::Down,
         KeyCode::Char(' '),

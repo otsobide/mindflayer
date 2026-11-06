@@ -1193,13 +1193,15 @@ fn with_a_rule(projects: &[&str]) -> (TempDir, WeaverWorkspace, Ledger) {
 }
 
 #[test]
-fn tab_shows_the_rules_in_the_column_the_skills_were_in_and_back() {
+fn tab_shows_the_rules_then_the_mcp_servers_in_the_column_the_skills_were_in_and_back() {
     let (_dir, workspace, ledger) = with_a_rule(&["collapse"]);
     let mut screen = screen_for(&workspace, &ledger);
 
     let skills = rendered(&screen);
     press(&mut screen, &[KeyCode::Tab]);
     let rules = rendered(&screen);
+    press(&mut screen, &[KeyCode::Tab]);
+    let servers = rendered(&screen);
     press(&mut screen, &[KeyCode::Tab]);
 
     assert!(skills.contains("Skills in collapse"), "{skills}");
@@ -1213,10 +1215,12 @@ fn tab_shows_the_rules_in_the_column_the_skills_were_in_and_back() {
         "{rules}"
     );
     assert!(!rules.contains("deploy"), "{rules}");
-    assert!(rules.contains("tab skills"), "{rules}");
+    assert!(rules.contains("tab MCP servers"), "{rules}");
+    assert!(servers.contains("MCP servers in collapse"), "{servers}");
+    assert!(servers.contains("tab skills"), "{servers}");
     assert_eq!(screen.kind, Kind::Skill, "round again past the last");
     press(&mut screen, &[KeyCode::BackTab]);
-    assert_eq!(screen.kind, Kind::Rule, "shift+tab goes the other way");
+    assert_eq!(screen.kind, Kind::Mcp, "shift+tab goes the other way");
 }
 
 #[test]
@@ -1627,7 +1631,7 @@ fn turned_round_tab_shows_the_rules_and_each_project_for_one() {
     assert!(drawn.contains("> git/commits"), "{drawn}");
     assert!(!drawn.contains("deploy"), "{drawn}");
     assert!(drawn.contains("Projects for rule git/commits"), "{drawn}");
-    assert!(drawn.contains("tab skills"), "{drawn}");
+    assert!(drawn.contains("tab MCP servers"), "{drawn}");
     press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
     assert_eq!(screen.counts(), (1, 0));
     assert!(rendered(&screen).contains("[x] collapse  + install"));

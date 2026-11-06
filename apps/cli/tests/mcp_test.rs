@@ -928,28 +928,33 @@ fn adding_a_server_told_nothing_of_its_transport_is_refused_with_what_to_do() {
     );
 }
 
-/// What the commands say of an MCP server installed is #95's: until then
-/// one is installed by a name qualified as a server's, and said as any
-/// kind is.
+/// A server is found by its bare name wherever a skill is, as much as by
+/// a name qualified as one.
 #[test]
-fn a_server_is_installed_by_a_name_qualified_as_one_and_not_typed_bare() {
+fn a_server_is_installed_by_its_bare_name_as_by_one_qualified() {
     let dir = library();
-    new_project(&dir.path().join("app"));
-    weaver(dir.path(), &["link", "app"]).unwrap();
+    for project in ["app", "web"] {
+        new_project(&dir.path().join(project));
+        weaver(dir.path(), &["link", project]).unwrap();
+    }
 
-    // Typed bare, the name is asked of the kinds a front end steps through.
-    let bare = weaver(dir.path(), &["install", "-p", "app", "github"]).unwrap_err();
-    let installed = weaver(dir.path(), &["install", "-p", "app", "mcp:github"]).unwrap();
+    let bare = weaver(dir.path(), &["install", "-p", "app", "github"]).unwrap();
+    let qualified = weaver(dir.path(), &["install", "-p", "web", "mcp:github"]).unwrap();
 
-    assert_eq!(bare.error.code(), "not_offered");
-    assert_eq!(
-        installed.stdout,
-        "installed mcp github into app, from workspace\n"
-    );
-    let app = dir.path().join("app");
-    assert!(fs::read_to_string(app.join(".mcp.json"))
-        .unwrap()
-        .contains("github"));
+    for (outcome, project) in [(bare, "app"), (qualified, "web")] {
+        assert!(
+            outcome.stdout.starts_with(&format!(
+                "installed mcp github into {project}, from workspace\n"
+            )),
+            "{}",
+            outcome.stdout
+        );
+        assert!(
+            fs::read_to_string(dir.path().join(project).join(".mcp.json"))
+                .unwrap()
+                .contains("github")
+        );
+    }
 }
 
 /// A server a project received is entries in its agents' config files,
@@ -972,21 +977,27 @@ fn a_change_aimed_at_a_server_the_project_received_is_refused_with_what_to_do_in
         let refused = mind(&app, line).unwrap_err();
 
         assert_eq!(refused.error.code(), "change_received_mcp", "{line:?}");
+        // The name bare, the one form an uninstall needs while the project
+        // received nothing else of it.
         assert_eq!(
             refused.error.to_string(),
             "`mcp:github` is an MCP server app received, an entry in its agents' config files \
              written from the definition it was installed from rather than kept in it, so it is \
-             not changed from here: uninstall it as `mcp:github`, or change its definition in \
-             the library it came from and update",
+             not changed from here: uninstall it as `github`, or change its definition in the \
+             library it came from and update",
             "{line:?}"
         );
     }
     assert_eq!(fs::read_to_string(app.join(".mcp.json")).unwrap(), before);
-    // Typed bare, the name is found received as well, and the hint names
-    // the form an uninstall finds it by.
+    // Typed bare, the name is found received as well.
     let bare = mind(&app, &["rename", "github", "octocat"]).unwrap_err();
     assert_eq!(bare.error.code(), "change_received_mcp");
-    assert!(bare
+    // A skill of the name received too, the bare name would be refused as
+    // two, so the hint names the server qualified.
+    weaver(dir.path(), &["add", "skill", "github", "Work with GitHub"]).unwrap();
+    weaver(dir.path(), &["install", "-p", "app", "skill:github"]).unwrap();
+    let both = mind(&app, &["rename", "mcp:github", "octocat"]).unwrap_err();
+    assert!(both
         .error
         .to_string()
         .contains("uninstall it as `mcp:github`"));
@@ -1047,7 +1058,7 @@ fn a_project_mind_init_makes_lists_nothing_of_an_unrelated_mcp_folder() {
 }
 
 #[test]
-fn the_targets_of_servers_are_spoken_of_as_settings_since_none_is_installed() {
+fn the_targets_of_servers_are_each_agents_config_file_and_never_a_folder() {
     let dir = TempDir::new().unwrap();
     new_project(dir.path());
     let name = dir.path().file_name().unwrap().to_str().unwrap().to_owned();
@@ -1058,10 +1069,7 @@ fn the_targets_of_servers_are_spoken_of_as_settings_since_none_is_installed() {
     assert!(reset.ok, "{:?}", reset.stderr);
     assert_eq!(
         reset.stdout,
-        format!(
-            "nothing to change: {name} names no folder for its MCP servers already, and none \
-             is installed into a project yet\n"
-        )
+        format!("nothing to change: {name} installs MCP servers where its agents read already\n")
     );
     assert_eq!(
         set.error.to_string(),

@@ -132,13 +132,7 @@ fn an_installed_skill_reads_as_current_in_every_front_ends_snapshot() {
     assert_eq!(
         at(&snapshot, "/boxes"),
         &json!([{
-            "closed": [{
-                "kind": "mcp",
-                "why": {
-                    "code": "not_installable",
-                    "message": "MCP servers cannot be installed into a project yet",
-                },
-            }],
+            "closed": [],
             "entry": "api",
             "held": [{
                 "kind": "skill", "name": "review", "origin": "workspace",

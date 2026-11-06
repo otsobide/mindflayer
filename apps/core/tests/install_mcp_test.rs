@@ -843,16 +843,17 @@ fn a_change_aimed_at_a_server_the_project_received_is_refused_as_received() {
         "{received:?}"
     );
     assert_eq!(received.code(), "change_received_mcp");
+    // Named bare however it was typed, the ledger recording the name as no
+    // other kind: the form an uninstall finds it by.
     assert!(received.to_string().ends_with(&format!(
-        "uninstall it as `{qualified}`, or change its definition in the library it came from \
-         and update"
+        "uninstall it as `{}`, or change its definition in the library it came from and \
+         update",
+        fixture.name
     )));
-    // Typed bare, the hint names it qualified all the same: the one form an
-    // uninstall finds a server by.
     assert!(matches!(
         find(Some(&fixture.workspace), &fixture.name),
-        LifecycleError::ReceivedServer { typed, qualified: hint, .. }
-            if *typed == fixture.name && *hint == qualified
+        LifecycleError::ReceivedServer { typed, named, .. }
+            if *typed == fixture.name && *named == fixture.name
     ));
     assert!(matches!(
         find(Some(&fixture.workspace), &format!("skill:{}", fixture.name)),

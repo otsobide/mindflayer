@@ -276,8 +276,9 @@ describe('the command palette', () => {
       { group: 'Pages', entries: VIEWS.map(view => view.label) },
       { group: 'Actions', entries: ['Update all', 'Keyboard shortcuts'] },
       // Every offer some project's box of is neither ticked nor closed:
-      // `review`, which every project holds, is not.
-      { group: 'Install', entries: ['Install lint skill', 'Install format skill', 'Install triage skill', 'Install git/commits rule', 'Install style/comments rule'] },
+      // `review`, which every project holds, is not, and the library's MCP
+      // server is, of every kind installed now.
+      { group: 'Install', entries: ['Install lint skill', 'Install format skill', 'Install triage skill', 'Install git/commits rule', 'Install style/comments rule', 'Install github mcp'] },
       { group: 'Projects', entries: snapshot.projects.map(project => `${project.name ?? project.entry} ${project.health}`) },
       { group: 'Library', entries: snapshot.library.artifacts.map(held => `${held.name} ${held.kind}`) },
       { group: 'Shelf', entries: snapshot.shelf.map(shelved => `${shelved.name} ${shelved.kind}`) },

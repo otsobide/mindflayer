@@ -764,15 +764,7 @@ const EXPECTED: &str = r#"{
   "boxes": [
     {
       "entry": "api",
-      "closed": [
-        {
-          "kind": "mcp",
-          "why": {
-            "code": "not_installable",
-            "message": "MCP servers cannot be installed into a project yet"
-          }
-        }
-      ],
+      "closed": [],
       "held": [
         {
           "kind": "skill",

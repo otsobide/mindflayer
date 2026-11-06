@@ -548,6 +548,13 @@ pub fn targets(project: &MindProject, kind: Kind) -> Result<Vec<InstallTarget>, 
     if !installs(kind) {
         return Err(InstallError::NotInstallable { kind });
     }
+    // A server is an entry in each agent's own config file, written by its
+    // renderer ([`mcp`]), never a copy in a folder: matched on the kind, so
+    // a kind added says which it is before it compiles.
+    match kind {
+        Kind::Skill | Kind::Rule => {}
+        Kind::Mcp => return Err(InstallError::NotCopied { kind }),
+    }
     if project.settings().is_none() {
         return Ok(vec![InstallTarget {
             folder: project.required_directory(kind)?,
@@ -793,6 +800,11 @@ pub(crate) fn survey_among(
     kind: Kind,
     offers: &[Offer],
 ) -> Result<Vec<Candidate>, InstallError> {
+    // A server reaches each agent as an entry in its config file, so how
+    // one stands is told by the ledger and those files ([`mcp::survey`]).
+    if kind == Kind::Mcp {
+        return mcp::survey(workspace, ledger, project, offers);
+    }
     // A rule reaches a project marked by its settings through the block of
     // its `AGENTS.md` rather than as a copy in a folder (D-03), so how one
     // stands there is told by the ledger and that block.
@@ -1183,26 +1195,8 @@ pub fn offered(
     name: &str,
     from: Option<&str>,
 ) -> Result<Candidate, InstallError> {
-    // Matched on the kind, so a third one says how it is offered by name.
-    let candidates = match kind {
-        Kind::Skill | Kind::Rule => {
-            receives(project, kind)?;
-            survey(workspace, ledger, project, kind)?
-        }
-        // Named one at a time, by a name qualified as a server's
-        // (`mcp:github`), while no front end steps through what a project
-        // can be given of them ([`installs`]): what installing one will run
-        // is the front ends' to say first (#95).
-        Kind::Mcp => {
-            mcp::receives(project)?;
-            mcp::survey(
-                workspace,
-                ledger,
-                project,
-                &offers(workspace, ledger, kind)?,
-            )?
-        }
-    };
+    receives(project, kind)?;
+    let candidates = survey(workspace, ledger, project, kind)?;
     let mut matching: Vec<Candidate> = candidates
         .into_iter()
         .filter(|candidate| candidate.name() == name)
@@ -1402,18 +1396,15 @@ fn filed_as(name: &str) -> Vec<Kind> {
 }
 
 /// Whether a front end steps through `kind` to install, and a name typed
-/// bare is asked of it: a skill, copied into a folder, and a rule, a section
-/// of a block or a file. Not yet an MCP server, though an install writes one
-/// as an entry in each agent's own config file (D-10, [`mcp`]): it is named
-/// by a name qualified as one (`mcp:github`, [`offered`]) until the front
-/// ends say what installing one will run (#95), and [`survey`], what they
-/// step through, and [`receives`] leave it out till then. Matched on the
-/// kind, so a kind added says whether it is stepped through before it
-/// compiles.
+/// bare is asked of it: a skill, copied into a folder, a rule, a section of
+/// a block or a file, and an MCP server, an entry in each agent's own
+/// config file (D-10, [`mcp`]), which the commands say what it will run of
+/// before they write it, and write from elsewhere than the library only
+/// once somebody says yes ([`asks_first`], #95). Matched on the kind, so a
+/// kind added says whether it is stepped through before it compiles.
 pub const fn installs(kind: Kind) -> bool {
     match kind {
-        Kind::Skill | Kind::Rule => true,
-        Kind::Mcp => false,
+        Kind::Skill | Kind::Rule | Kind::Mcp => true,
     }
 }
 
@@ -1433,15 +1424,17 @@ pub fn asks_first(kind: Kind, origin: &str) -> bool {
 }
 
 /// Refuse `project` when an install of `kind` has nowhere to go in it: no
-/// [`targets`] for a kind copied into a folder, and for a rule into a
-/// project marked by its settings, which goes into its `AGENTS.md`, no agent
-/// to read it ([`rules::receives`]). What a front end says in place of the
+/// [`targets`] for a kind copied into a folder, for a rule into a project
+/// marked by its settings, which goes into its `AGENTS.md`, no agent to
+/// read it ([`rules::receives`]), and for an MCP server no agent to give an
+/// entry ([`mcp::receives`]). What a front end says in place of the
 /// offers of `kind`, which [`survey`] leaves empty for such a project.
 pub fn receives(project: &MindProject, kind: Kind) -> Result<(), InstallError> {
-    if kind == Kind::Rule && project.settings().is_some() {
-        return rules::receives(project);
+    match kind {
+        Kind::Rule if project.settings().is_some() => rules::receives(project),
+        Kind::Mcp => mcp::receives(project),
+        Kind::Skill | Kind::Rule => targets(project, kind).map(drop),
     }
-    targets(project, kind).map(drop)
 }
 
 /// Copy one shelf entry into a project: a copy in each of its [`targets`],
@@ -2787,12 +2780,12 @@ pub fn is_current(
     // Matched on the kind, so a third one has to say how it is told.
     match candidate.kind() {
         Kind::Skill => {}
-        // Nothing of one is in a project for it to be current there.
-        Kind::Mcp => return false,
-        Kind::Rule => {
+        // Each of a server's records says where it came from, as a rule's
+        // does, and its entries hold no bytes of the definition to compare.
+        Kind::Rule | Kind::Mcp => {
             let entry = project_entry(workspace, project);
             return ledger
-                .installation(&entry, Kind::Rule, candidate.name())
+                .installation(&entry, candidate.kind(), candidate.name())
                 .ok()
                 .flatten()
                 .and_then(|record| record.origin)
@@ -2870,6 +2863,10 @@ pub enum InstallError {
     ClaudeRules(#[from] ClaudeRulesError),
     #[error("{} cannot be installed into a project yet", .kind.plural())]
     NotInstallable { kind: Kind },
+    /// Where a copy of `kind` would go, asked of one installed as an entry
+    /// in each agent's config file instead ([`targets`]).
+    #[error("{} are installed as an entry in each agent's config file, never copied into a folder", .kind.plural())]
+    NotCopied { kind: Kind },
     /// An agent's config file an MCP server's entry is written into, or
     /// taken out of, that its renderer refuses or cannot write: what the
     /// renderer says, by its code. Boxed, being far larger than the rest.
@@ -2951,6 +2948,7 @@ codes!(InstallError {
     Self::Withheld { .. } => "rules_block_unedited",
     Self::EntryWithheld { .. } => "mcp_entry_unedited",
     Self::NotInstallable { .. } => "not_installable",
+    Self::NotCopied { .. } => "not_copied",
     Self::Unreached { .. } => "mcp_unreached",
     Self::Unfit { .. } => "install_unfit",
     Self::Overlaps { .. } => "install_overlaps",
