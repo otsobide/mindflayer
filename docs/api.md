@@ -210,8 +210,11 @@ and its `health`, one word for the whole project: `ok`, `attention`,
 
 ### The library
 
-`GET /library` is the workspace's own skills and rules, and which projects
-hold a copy of each:
+`GET /library` is the workspace's own skills, rules and MCP servers, and
+which projects hold a copy of each; under `servers`, each MCP server as
+each agent would be given it, what it would run or reach and what it asks
+before it starts one, and `given`, how it is started as `add mcp`'s
+options say it:
 
 ```console
 $ curl -s -H "Authorization: Bearer $token" "$api/library" | jq .artifacts
@@ -477,6 +480,17 @@ parser as the ones you type, so the API changes nothing the command line
 cannot. `POST /tasks/preview` answers the lines a task is, with nothing
 run, and `POST /tasks` runs them. Each line names the workspace with `-W`,
 as you could type it in the workspace's folder.
+
+An MCP server is added by an `add` task of the kind `mcp` whose `server`
+says how an agent starts it or reaches it, `{"type": "program", "command":
+..., "args": [...], "env": [[key, value]], "secret_env": [...], "arg_env":
+[...]}` or `{"type": "address", "url": ..., "events": false, "headers":
+[...], "secret_headers": [[header, variable]], "bearer": ..., "url_vars":
+[[name, variable]]}`, each secret the name of the variable it is read
+from; an `edit_server` task, `{"type": "edit_server", "holder": ...,
+"name": ..., "server": ...}`, writes how one is started again. Each is the
+line `add mcp` or `edit` takes with those options, and a `validate` draft of
+either is judged as that line would judge it.
 
 ### Linking a project
 

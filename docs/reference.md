@@ -2061,7 +2061,8 @@ its code. The panel links projects, from the folder you type or browse to
 above the projects table or from what **Discover** finds, relinks one
 that moved, unlinks one from its page, changes a project's agents and
 share mode, migrates a project an older Mindweaver made, installs and
-uninstalls skills and rules from **Assign**, brings what is installed up to date and
+uninstalls skills, rules and MCP servers from **Assign**, adds MCP servers
+and changes how one is started from its **MCP servers** page, brings what is installed up to date and
 takes out what nothing offers from **Updates**, removes one of the
 library's own everywhere, its dry run first, edits, adds and renames the
 library's own, adopts a skill somebody keeps in a project's agents'
@@ -2185,7 +2186,7 @@ learned is named with the `mindweaver relink` that would follow it once you know
 where it went. Below are the projects it found linked already. The folders
 and the depth stay in the address, so a reload scans the same again.
 
-**The library** has a page for each kind, `skill` and `rule`, listing the
+**The library** has a page for each kind, `skill`, `rule` and `mcp`, listing the
 workspace's own with what each is for, which projects hold a copy of it and
 how each copy stands, and what `validate` says of it; type to filter by name
 or summary. A kind it holds none of names `mindweaver add`.
@@ -2195,6 +2196,45 @@ kind's templates ([from a template](#from-a-template)), judged as you type by wh
 `mindweaver add` would refuse, in its words, and by what `validate` would say
 of it once written. **Add** runs `mindweaver add [--template <template>] <kind>
 <name> <description>`, shown first, and opens what it added.
+
+**MCP servers**, beside the library in the sidebar, is a page of the
+library's MCP servers ([what an MCP server looks
+like](#what-an-mcp-server-looks-like)). Each says, for Claude, Codex and
+OpenCode, whether the agent is given it, `given whole`, `given in part`
+when its entry is written without something, or `refused`, with each
+reason by its code and in the words `show` says it in; the command it
+would run or the address it would reach, as that agent's own config file
+would spell it; and what the agent asks before it starts one: Claude asks
+to approve it in a session, Codex starts it only in a project its user's
+config marks trusted, and OpenCode asks nothing. Under each, every project
+holding it, how its entry stands, and what `mindweaver doctor` finds there,
+each by its code with what fixes it: a Codex project nothing trusts, a
+variable not set where the agents run.
+
+Below them, a form adds a server: its name and description, then how an
+agent gets to it, a program it starts (the command, each argument, each
+setting of its environment, each secret passed to it and each argument
+read from a variable) or an address it reaches (the URL, server-sent
+events or not, each header, each secret header, a bearer token and each
+part of the address read from a variable). Every field is a value of an
+option of `mindweaver add mcp`, and a secret only ever the name of the
+environment variable an agent reads it from, which the form says no value
+is stored for: it has no field a secret's value could go in. As you type,
+core judges it as `mindweaver add mcp` would, and says why it would refuse
+it, in its words. **Add the server** runs the line, shown first:
+
+```
+$ mindweaver -W /home/you/Projects add --command npx --arg=-y --arg @acme/server --secret-env ACME_TOKEN mcp acme 'Acme tools'
+created mcp acme at /home/you/Projects/.mindweaver/library/mcp/acme.toml
+```
+
+**Change how it starts**, on a server, opens the same form on how it is
+started now, as core reads its definition back, and runs `mindweaver edit
+mcp:<name>` with the options, which writes its transport and its inputs
+again and keeps everything else its definition holds. A definition the
+options cannot say all of (an input described or required, a program's
+folder, a secret under a name of its own) is changed in its file instead,
+which the server's **Edit its file** opens.
 
 **One of the library's own** opens from its name. It shows what its front
 matter declares, as a table, every key in the order written; its body,
@@ -2298,7 +2338,7 @@ ledger logged, newest first, with every URL in them shown without
 credentials. An empty shelf names `mindweaver gather git`.
 
 **Assign** is a matrix of everything there is to install against every
-project: a row for each skill and rule the library, a loaded workspace or
+project: a row for each skill, rule and MCP server the library, a loaded workspace or
 the shelf offers, under a heading for where it comes from, its origin as
 `--from` takes it, and a column for each project, or turned round, **by
 project**, with the origins over the columns. A box is ticked where the
@@ -2324,7 +2364,14 @@ somebody's copy (`foreign`) or one changed since it was installed
 (`edited`), which only `--force` on the command line reaches, and one name
 asked of a project from two places (`wanted_twice`). **Apply** shows the
 lines, a confirmation when one uninstalls, and runs them as one batch, the
-install screen's; **Clear the marks** forgets them. A matrix of hundreds
+install screen's; **Clear the marks** forgets them. An MCP server from a
+workspace this one loads, or from the shelf, waits for a yes, as
+`mindweaver install` does without `--yes`: the plan shows, under the lines,
+what each agent of each project would run or reach, as the install
+screen's confirmation does, and a box to say yes once you have read it.
+Until it is ticked, the line installs nothing and says what it would;
+ticked, the line carries `--yes`, and is shown before it runs like every
+other. One of the library's own asks nothing first. A matrix of hundreds
 of offers and projects draws only what fits on screen.
 
 **Updates** is what `mindweaver update --all` would do, before it is told

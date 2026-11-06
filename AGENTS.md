@@ -171,7 +171,10 @@ under `apps/` with its own `Makefile`:
   agent runs or reaches of one, as its entry spells it (`mcp::Runs`,
   `mcp/runs.rs`), and what `add` is told of
   how one is started or reached, a program or an address, and the
-  definition it writes from it (`mcp::Given`), the
+  definition it writes from it (`mcp::Given`), read back from one as the
+  options would say it (`Given::of`) and written again into one, every
+  other key kept (`mcp::retransported`, `lifecycle::retransport`, what
+  `edit` told the options does), the
   agents and where each kind goes for them (`agent`), the catalog, gathering
   (through `port::Remote`), the ledger (through `port::LedgerStore`), installing, keeping installs out of git
   (`exclude`), a project's rules rendered into the block of its `AGENTS.md`
@@ -211,9 +214,10 @@ under `apps/` with its own `Makefile`:
   the names of the variables set (`doctor`, `doctor::Machine`), the stable
   code each of its errors gives (`code`), the
   snapshot every front end reads a workspace through, with what it counts,
-  each project's health, every offer with each project's box of it and
-  what doctor finds of each, and the part of it `list --json` prints
-  (`view`), every path a snapshot reads that a front end watches for a
+  each project's health, every offer with each project's box of it,
+  what doctor finds of each and each of the library's MCP servers as each
+  agent would be given it (`view::LibraryServer`), and the part of it
+  `list --json` prints (`view`), every path a snapshot reads that a front end watches for a
   change, each with the holder it is of (`watch`), one file of an artifact
   read as text for
   the panel, cut at its front matter when it is the one the artifact is
@@ -258,8 +262,9 @@ under `apps/` with its own `Makefile`:
   (each at both levels), `adopt` (mindweaver adopt) and `ui` (the panel, at
   both levels).
   `add mcp`'s options for how a server is started or reached are one
-  struct both binaries flatten (`ServerOptions`), which hands core a
-  `mcp::Given`. `src/render.rs` holds `Outcome`,
+  struct both binaries' `add` and `edit` flatten (`ServerOptions`), which
+  hands core a `mcp::Given`, and which a template, an editor and contents
+  each conflict with by the group clap gives it. `src/render.rs` holds `Outcome`,
   `Failure` and `Warning` (a stderr line, with its code beside it), the
   table helpers and the envelope every `--json` prints (`json`, and
   `as_json`, which lays a text outcome out in it),
@@ -332,7 +337,8 @@ under `apps/` with its own `Makefile`:
   by hand, `src/api/plan.ts` the queries of a plan of the boxes marked
   on the matrix and of the lines it runs (`usePlan`, `usePreview`), of one
   box once, for the command palette (`usePlanOnce`), and the batch a plan
-  applies (`batchOf`), and
+  applies (`batchOf`, each install said yes to as the task its
+  confirmation carries), and
   `src/api/updates.ts` the query of what an update of every project would
   do (`useUpdates`) and the task of updating them all (`UPDATE_ALL`),
   `src/api/folders.ts` the query of the folders inside one, read again
@@ -350,7 +356,9 @@ under `apps/` with its own `Makefile`:
   (`library`), one of its own
   (`artifact`, named by its kind and name in the query), its editor
   (`edit`, named the same way), the page adding one (`new`, its kind in
-  the query), the workspaces it loads and those this machine knows
+  the query), the library's MCP servers, each as each agent would be
+  given it, and the form adding one or changing how the one the query
+  names is started (`mcp`), the workspaces it loads and those this machine knows
   (`loads`), the shelf (`shelf`) and the sources (`sources`). `src/address.ts` reads and changes
   the query a page keeps its state in, `src/library.ts` finds the projects
   holding one of the library's own, `src/boxes.ts` a box of the matrix in
@@ -377,7 +385,9 @@ under `apps/` with its own `Makefile`:
   removal of one of the library's own everywhere, dry run first
   (`RemoveOffer`), its rename (`RenameForm`), the editor, CodeMirror in a
   shadow root of its own (`MarkdownEditor`), what core says of a draft
-  (`DraftVerdict`), the
+  (`DraftVerdict`), the form of an MCP server's transport, each of its
+  fields an option's value and a secret a variable's name
+  (`ServerForm`), the
   matrix's grid, drawn a screen at a time (`AssignGrid`), and
   what the runner draws beside the pages:
   `CommandRunner`, which makes it and says how each task ended in a toast,
@@ -516,9 +526,18 @@ These are easy to break from a single file without noticing.
   that comes from elsewhere than the library is previewed when the screen
   is built (`install::mcp::preview`), each agent's line shown in the
   confirmation before the screen applies (`Screen::previews`), and only
-  its line carries `--yes` (`Task::confirmed`); a task in JSON never says
-  yes (`Task::Install`'s `yes` is no field of it), since the panel shows no
-  agent's line yet. A batch a screen builds
+  its line carries `--yes` (`Task::confirmed`). The panel's matrix confirms
+  one the same way: a plan hands, beside its tasks, each install that
+  waits for a yes with the same lines (`Planned::asks`, laid out by
+  `install::foreseen` under `install::heading`, which the screen uses too)
+  and the task carrying the yes (`Task::confirmed`), which the page sends
+  in the place of the plan's own only once those lines are ticked as read
+  (`batchOf`); `Task::Install`'s `yes` is JSON for that alone, the panel
+  setting it on no task of its own, and the path policy refuses one sent
+  with any other install (`policy::confirmed`, `install_yes_unasked`). The
+  MCP page's form sends `Task::Add` with a `server` and `Task::EditServer`,
+  `add mcp`'s and `edit`'s options as an `mcp::Given`, for the task module
+  to spell. A batch a screen builds
   from its marks or its toggles is built in the task module, from what was
   marked (`Task::minds`, from each folder's `MindsChange`) or what the
   settings and the toggles say (`Task::settings`, from two `Toggles`), and
@@ -1042,7 +1061,10 @@ These are easy to break from a single file without noticing.
     (`policy::switched`): another spelling, a path never listed or one
     starting with a dash is refused (`switch_unlisted`), a listed one that
     does not open is refused with why, never made, and a refusal switches
-    nothing. A refused task runs nothing, and every refusal has a code.
+    nothing. A yes an install carries is one to an MCP server that asks
+    first (`policy::confirmed`), held by `Admission::task` as every value
+    is, and refused otherwise. A refused task runs nothing, and every
+    refusal has a code.
   - A file reaches the browser only as text inside JSON, no larger than
     `contents::CAP`, binary or larger reported by its size alone, and never
     served as itself (`contents::Contents`); its links are judged by
@@ -1807,7 +1829,12 @@ These are easy to break from a single file without noticing.
   what `mindweaver validate` says once one is written, which the editor's
   verdict is held to word for word (`validated.json`), and each change
   authoring sends, previewed and run each on the workspace as built
-  (`authored.json`). `tests/panel.ts` reads them and
+  (`authored.json`), and, of a workspace built to keep MCP servers
+  (`serving.json`), what its MCP page and its matrix ask of it, drafts of
+  a server judged and plans of one that asks first and one that does not
+  (`servers.json`), and each change they send, previewed and run each on
+  the workspace as built (`served.json`), none of them holding a token.
+  `tests/panel.ts` reads them and
   mounts the panel at an address, answering its queries with them, and a
   task with its preview and its run, told finished on the stream before
   it is answered, as the server tells it (`commanding`); a test about
@@ -1849,10 +1876,13 @@ These are easy to break from a single file without noticing.
   to seeing one. No spec changes the shared workspace: a test that changes
   something takes a workspace and a `mindweaver ui` of its own (`own`, built by
   `changeable`, or what the spec's `building` names, `assignable` for the
-  matrix's, `updatable` for updating and removing or `authorable` for
-  editing, adding and renaming in the library, beside a copy of it
+  matrix's, `updatable` for updating and removing, `authorable` for
+  editing, adding and renaming in the library or `serveable` for adding
+  an MCP server and assigning it, beside a copy of it
   and served by `serve`, through
-  `environment.ts` as every process is), and holds what the panel left to
+  `environment.ts` as every process is, with what the spec's `variables`
+  set in its environment alone, an MCP server's secret drawn as the run
+  starts among them), and holds what the panel left to
   what the same command leaves in the copy. That `mindweaver ui` runs with
   `--log`, and a test that fails keeps what it said beside its trace
   (`close`, in `panel.ts`), which `log.spec.ts` holds to saying a run and
