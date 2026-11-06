@@ -33,6 +33,7 @@ use serde::Serialize;
 use thiserror::Error;
 
 use crate::agent::{Agent, AgentHomes};
+use crate::agents_md::{self, CODEX_BUDGET};
 use crate::code::{codes, Said};
 use crate::codex_mcp::{self, CodexMcpError, Trust, UserConfig};
 use crate::paths;
@@ -161,6 +162,7 @@ impl Examined {
     ) -> Examined {
         let mut exam = Exam::new(project, machine);
         exam.codex_trust();
+        exam.codex_reads();
         Examined {
             entry,
             name: Some(project.name().to_owned()),
@@ -218,18 +220,43 @@ pub enum Symptom {
     /// neither its `AGENTS.md` nor its `.codex/config.toml`.
     #[error("{config}: marks {project} `untrusted`, so Codex reads neither its AGENTS.md nor its .codex/config.toml")]
     CodexDistrusted { config: PathBuf, project: PathBuf },
+    /// An `AGENTS.override.md` beside the project's `AGENTS.md`, which
+    /// Codex reads in its place.
+    #[error("{file}: Codex reads it in place of the {hidden} beside it, so nothing in that AGENTS.md reaches Codex, the rules Mindweaver gives it included")]
+    CodexOverridden { file: PathBuf, hidden: PathBuf },
+    /// No git work tree holds the project, so Codex, finding no root to
+    /// read down from, reads only the folder it starts in.
+    #[error("{project}: in no git work tree, so Codex reads its AGENTS.md only when started in that folder itself")]
+    CodexNoGitRoot { project: PathBuf },
+    /// What Codex reads from the git root down comes close to its budget.
+    /// `file` is the last it reads, the project's own when there is one.
+    #[error("{file}: the AGENTS.md files Codex reads down to it come to {bytes} bytes, close to the {CODEX_BUDGET} it reads before cutting off the rest")]
+    CodexNearBudget { file: PathBuf, bytes: u64 },
+    /// What Codex reads from the git root down comes to more than its
+    /// budget, so it cuts off the end, where `file` is.
+    #[error("{file}: the AGENTS.md files Codex reads down to it come to {bytes} bytes, past the {CODEX_BUDGET} it reads, so it cuts off the end, where this one is")]
+    CodexOverBudget { file: PathBuf, bytes: u64 },
 }
 
 codes!(Symptom {
     Self::CodexUntrusted { .. } => "doctor_codex_untrusted",
     Self::CodexDistrusted { .. } => "doctor_codex_distrusted",
+    Self::CodexOverridden { .. } => "doctor_codex_overridden",
+    Self::CodexNoGitRoot { .. } => "doctor_codex_no_git_root",
+    Self::CodexNearBudget { .. } => "doctor_codex_near_budget",
+    Self::CodexOverBudget { .. } => "doctor_codex_over_budget",
 });
 
 impl Symptom {
     /// The agents it keeps something from, in report order.
     pub fn agents(&self) -> Vec<Agent> {
         match self {
-            Symptom::CodexUntrusted { .. } | Symptom::CodexDistrusted { .. } => vec![Agent::Codex],
+            Symptom::CodexUntrusted { .. }
+            | Symptom::CodexDistrusted { .. }
+            | Symptom::CodexOverridden { .. }
+            | Symptom::CodexNoGitRoot { .. }
+            | Symptom::CodexNearBudget { .. }
+            | Symptom::CodexOverBudget { .. } => vec![Agent::Codex],
         }
     }
 
@@ -244,6 +271,10 @@ impl Symptom {
                 ..
             } => config,
             Symptom::CodexDistrusted { config, .. } => config,
+            Symptom::CodexOverridden { file, .. }
+            | Symptom::CodexNearBudget { file, .. }
+            | Symptom::CodexOverBudget { file, .. } => file,
+            Symptom::CodexNoGitRoot { project } => project,
         }
     }
 
@@ -269,6 +300,17 @@ impl Symptom {
                  work in the project",
                 project.display()
             ),
+            Symptom::CodexOverridden { hidden, .. } => format!(
+                "move what Codex is to read into {} and remove this one",
+                hidden.display()
+            ),
+            Symptom::CodexNoGitRoot { .. } => String::from(
+                "make the project a git repository (`git init`), or start Codex in that folder",
+            ),
+            Symptom::CodexNearBudget { .. } | Symptom::CodexOverBudget { .. } => format!(
+                "keep what those files say under {CODEX_BUDGET} bytes, or raise \
+                 `project_doc_max_bytes` in Codex's config.toml"
+            ),
         }
     }
 
@@ -291,10 +333,16 @@ pub enum DoctorFailure {
     /// trusts the project.
     #[error(transparent)]
     CodexConfig(CodexMcpError),
+    /// The repository, or a file Codex would read, which says how much of
+    /// the `AGENTS.md` chain Codex reads: always the render's own
+    /// [`agents_md::Warning::Unmeasured`].
+    #[error(transparent)]
+    Unmeasured(agents_md::Warning),
 }
 
 codes!(DoctorFailure {} carried {
     Self::CodexConfig(error) => error,
+    Self::Unmeasured(warning) => warning,
 });
 
 /// One project's examination as it goes: what it has found and what it
@@ -386,6 +434,47 @@ impl<'a> Exam<'a> {
                     });
                 }
             }
+        }
+    }
+
+    /// What keeps the project's `AGENTS.md` from Codex, as a render reads
+    /// it ([`agents_md`]): an `AGENTS.override.md` beside it, no git root to
+    /// read down from, and a chain near or past Codex's budget, each
+    /// worked out for Codex started at the project's root. The override
+    /// only while there is an `AGENTS.md` for it to hide.
+    fn codex_reads(&mut self) {
+        if !self.names(Agent::Codex) {
+            return;
+        }
+        let hidden = self.root().join(agents_md::FILE);
+        for warning in agents_md::codex_warnings(self.root()) {
+            // Matched with no wildcard, so a warning added says here
+            // whether doctor finds it.
+            let symptom = match warning {
+                agents_md::Warning::Overridden { file } => {
+                    if !hidden.is_file() {
+                        continue;
+                    }
+                    Symptom::CodexOverridden {
+                        file,
+                        hidden: hidden.clone(),
+                    }
+                }
+                agents_md::Warning::NoGitRoot { project } => Symptom::CodexNoGitRoot { project },
+                agents_md::Warning::NearBudget { bytes, files, .. } => Symptom::CodexNearBudget {
+                    file: files.last().cloned().unwrap_or_else(|| hidden.clone()),
+                    bytes,
+                },
+                agents_md::Warning::OverBudget { bytes, files, .. } => Symptom::CodexOverBudget {
+                    file: files.last().cloned().unwrap_or_else(|| hidden.clone()),
+                    bytes,
+                },
+                unmeasured @ agents_md::Warning::Unmeasured { .. } => {
+                    self.failures.push(DoctorFailure::Unmeasured(unmeasured));
+                    continue;
+                }
+            };
+            self.symptoms.push(symptom);
         }
     }
 }

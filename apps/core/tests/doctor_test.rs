@@ -215,3 +215,70 @@ fn every_project_a_workspace_links_is_examined_once_and_a_stale_one_says_why() {
     assert_eq!(report.projects[1].name, None);
     assert_eq!(report.projects[1].failures.len(), 1);
 }
+
+#[test]
+fn an_agents_override_hiding_agents_md_from_codex_is_found() {
+    let fixture = fixture(&[Agent::Codex]);
+    fixture.write(&fixture.root().join("AGENTS.md"), "# Working here\n");
+    fixture.write(&fixture.root().join("AGENTS.override.md"), "# Mine\n");
+
+    let examined = fixture.examined();
+
+    assert_eq!(codes(&examined), vec!["doctor_codex_overridden"]);
+    let finding = &examined.findings[0];
+    assert_eq!(finding.path, fixture.root().join("AGENTS.override.md"));
+    assert!(
+        finding
+            .fix
+            .contains(&fixture.root().join("AGENTS.md").display().to_string()),
+        "{}",
+        finding.fix
+    );
+}
+
+#[test]
+fn an_agents_override_with_no_agents_md_to_hide_is_not_found() {
+    let fixture = fixture(&[Agent::Codex]);
+    fixture.write(&fixture.root().join("AGENTS.override.md"), "# Mine\n");
+
+    assert!(codes(&fixture.examined()).is_empty());
+}
+
+#[test]
+fn a_codex_project_in_no_git_work_tree_is_found() {
+    let fixture = fixture_in(&[Agent::Codex], false);
+
+    let examined = fixture.examined();
+
+    assert_eq!(codes(&examined), vec!["doctor_codex_no_git_root"]);
+    assert_eq!(examined.findings[0].path, fixture.root());
+}
+
+#[test]
+fn no_git_root_is_not_said_of_a_project_codex_does_not_work_in() {
+    let fixture = fixture_in(&[Agent::Claude, Agent::OpenCode], false);
+
+    assert!(codes(&fixture.examined()).is_empty());
+}
+
+#[test]
+fn agents_md_files_near_and_past_codex_s_budget_are_found() {
+    let fixture = fixture(&[Agent::Codex]);
+    let agents_md = fixture.root().join("AGENTS.md");
+    // Above the project, at the git root, a file Codex reads first.
+    fixture.write(
+        &fixture.dir.path().join("AGENTS.md"),
+        &"a".repeat(20 * 1024),
+    );
+    fixture.write(&agents_md, &"b".repeat(9 * 1024));
+
+    let near = fixture.examined();
+    assert_eq!(codes(&near), vec!["doctor_codex_near_budget"]);
+    assert_eq!(near.findings[0].path, agents_md);
+    assert!(near.findings[0].message.contains("29696 bytes"));
+
+    fixture.write(&agents_md, &"b".repeat(13 * 1024));
+    let past = fixture.examined();
+    assert_eq!(codes(&past), vec!["doctor_codex_over_budget"]);
+    assert!(past.findings[0].fix.contains("project_doc_max_bytes"));
+}

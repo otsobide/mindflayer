@@ -471,8 +471,9 @@ codes!(Warning {
 });
 
 /// What [`Warning`]s the `AGENTS.md` at `project`'s root, as it is on disk,
-/// calls for.
-fn codex_warnings(project: &Path) -> Vec<Warning> {
+/// calls for: what a render says, and what doctor finds of the project as
+/// it stands (`crate::doctor`), one reading of what Codex reads for both.
+pub(crate) fn codex_warnings(project: &Path) -> Vec<Warning> {
     let mut warnings = Vec::new();
     let beside = project.join(OVERRIDE);
     if beside.is_file() {
