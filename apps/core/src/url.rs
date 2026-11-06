@@ -113,18 +113,22 @@ const FORGES: [&str; 2] = ["github.com", "gitlab.com"];
 /// `ssh://git@github.com/acme/skills` and `https://github.com/acme/skills/`
 /// are `https://github.com/acme/skills`, and so is `acme/skills`, the
 /// `owner/repo` a person types for a GitHub repository ([`fetched`]).
-/// Elsewhere only what cannot tell two repositories apart goes: the user
-/// name and any credential, the case of the scheme and the host, a trailing
-/// `/`, and `file://` in front of a path, which names the same folder
-/// without it. A relative path stays as it was typed, its own identity,
-/// since which folder it names depends on where it was typed, which a rule
-/// of text cannot know.
+/// Elsewhere only what cannot tell two repositories apart goes: any
+/// credential, the case of the scheme and the host, a trailing `/`, and
+/// `file://` in front of a path, which names the same folder without it. A
+/// relative path stays as it was typed, its own identity, since which
+/// folder it names depends on where it was typed, which a rule of text
+/// cannot know.
 ///
 /// [`redacted`] first, so a credential is out of it however oddly it was
-/// typed, and then the user ssh logs in as, which is who reaches the
-/// repository and not which one it is. Parsing with `gix::url` was the
-/// other way, rejected for the reasons [`redacted`] gives, and because what
-/// is kept here is a rule of Mindweaver's, not how one library reads a URL.
+/// typed. The user ssh logs in as goes only on a forge, where it is always
+/// `git` and names no repository: elsewhere it stays, as [`redacted`] keeps
+/// it, since `alice@host:skills` and `bob@host:skills` are folders in two
+/// homes, and one repository two logins reach is two sources, as it was
+/// before identities, rather than two repositories one. Parsing with
+/// `gix::url` was the other way, rejected for the reasons [`redacted`]
+/// gives, and because what is kept here is a rule of Mindweaver's, not how
+/// one library reads a URL.
 pub fn canonical(url: &str) -> String {
     let url = fetched(&redacted(url)).into_owned();
     if let Some((scheme, rest)) = url.split_once("://") {
@@ -138,26 +142,23 @@ pub fn canonical(url: &str) -> String {
             return format!("file://{}", trimmed(rest));
         }
         let (authority, path) = rest.split_once('/').unwrap_or((rest, ""));
-        let host = authority
-            .rsplit_once('@')
-            .map_or(authority, |(_, host)| host)
-            .to_ascii_lowercase();
+        let (login, host) = logged_in(authority);
         if let Some(forge) = forge(&host) {
             return forged(forge, path);
         }
         let path = trimmed(path);
         return if path.is_empty() {
-            format!("{scheme}://{host}")
+            format!("{scheme}://{login}{host}")
         } else {
-            format!("{scheme}://{host}/{path}")
+            format!("{scheme}://{login}{host}/{path}")
         };
     }
-    if let Some((host, path)) = scp_like(&url) {
-        let host = host.to_ascii_lowercase();
+    if let Some((before, path)) = scp_like(&url) {
+        let (login, host) = logged_in(before);
         if let Some(forge) = forge(&host) {
             return forged(forge, path);
         }
-        return format!("{host}:{}", trimmed(path));
+        return format!("{login}{host}:{}", trimmed(path));
     }
     trimmed(&url).to_owned()
 }
@@ -213,16 +214,26 @@ fn trimmed(path: &str) -> &str {
     }
 }
 
-/// The host and the path of an scp-like address, `[user@]host:path`, with
-/// the user left out: what `gix` reads as one when the `:` comes before any
-/// `/`. A single letter before it is a Windows drive, not a host.
+/// The login, `user@` or nothing, and the host in lowercase, of the text
+/// before an address's path: after [`redacted`], the only userinfo left is
+/// the user ssh logs in as.
+fn logged_in(authority: &str) -> (&str, String) {
+    match authority.rsplit_once('@') {
+        Some((user, host)) => (&authority[..=user.len()], host.to_ascii_lowercase()),
+        None => ("", authority.to_ascii_lowercase()),
+    }
+}
+
+/// The text before the path, `[user@]host`, and the path of an scp-like
+/// address: what `gix` reads as one when the `:` comes before any `/`. A
+/// single letter before it is a Windows drive, not a host.
 fn scp_like(url: &str) -> Option<(&str, &str)> {
     let (before, path) = url.split_once(':')?;
     if before.contains('/') || before.contains('\\') {
         return None;
     }
     let host = before.rsplit_once('@').map_or(before, |(_, host)| host);
-    (host.len() > 1).then_some((host, path))
+    (host.len() > 1).then_some((before, path))
 }
 
 /// Whether `authority`, a URL's text from its `://` to its first `/`, is a

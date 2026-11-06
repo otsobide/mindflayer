@@ -3074,11 +3074,14 @@ SQLite never finds equal to another. A source is now found by the URL every
 spelling of it is (`url::canonical`): on GitHub and GitLab the https, ssh and
 scp-like spellings, and `owner/repo`, are `https://<host>/<owner>/<repo>` in
 lowercase without `.git`, since both forges read them as one repository;
-elsewhere only what names no other repository goes (the user, a credential,
-the case of the scheme and the host, a trailing `/`, `file://` before a
-path), since on a host of somebody's own `host:path` starts at the login's
-home where `ssh://host/path` starts at the root, and `x.git` may be another
-`x`. A relative path is an identity of its own, as typed: which folder it
+elsewhere only what names no other repository goes (a credential, the case
+of the scheme and the host, a trailing `/`, `file://` before a path), since
+on a host of somebody's own `host:path` starts at the login's home where
+`ssh://host/path` starts at the root, and `x.git` may be another `x`. So the
+user ssh logs in as stays there, as `url::redacted` keeps it:
+`alice@host:skills` and `bob@host:skills` are two homes' folders, and one
+repository two logins reach being two sources is the way to be wrong that
+loses nothing. A relative path is an identity of its own, as typed: which folder it
 names depends on where it was typed, which a rule of text cannot know. With the branch, empty for the remote's HEAD, and the folder, that is
 the identity a unique index holds, so a second spelling gathers into the
 source the first registered, from the URL typed this time: the spelling

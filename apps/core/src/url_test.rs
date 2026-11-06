@@ -203,6 +203,13 @@ fn two_repositories_stay_two_identities() {
             "https://example.com/acme/skills.git",
         ),
         ("/srv/git/skills", "/srv/git/skills-2"),
+        // Off a forge the login is part of where the repository is:
+        // `skills` in alice's home and in bob's.
+        ("alice@example.com:skills", "bob@example.com:skills"),
+        (
+            "ssh://alice@example.com/~/skills",
+            "ssh://bob@example.com/~/skills",
+        ),
     ] {
         assert_ne!(canonical(one), canonical(other), "{one} and {other}");
     }
@@ -217,12 +224,16 @@ fn elsewhere_only_what_names_no_other_repository_goes() {
             "https://example.com/Acme/Skills.git",
         ),
         (
-            String::from("SSH://alice@example.com:2222/acme/skills.git"),
-            "ssh://example.com:2222/acme/skills.git",
+            String::from("SSH://alice@Example.com:2222/acme/skills.git"),
+            "ssh://alice@example.com:2222/acme/skills.git",
+        ),
+        (
+            format!("ssh://alice:{token}@example.com/acme/skills.git"),
+            "ssh://alice@example.com/acme/skills.git",
         ),
         (
             String::from("git@Example.com:acme/skills.git"),
-            "example.com:acme/skills.git",
+            "git@example.com:acme/skills.git",
         ),
         (
             format!("https://me:p/{token}@example.invalid/acme/skills"),
@@ -256,7 +267,11 @@ fn no_identity_carries_a_credential() {
     ] {
         let identity = canonical(&url);
         assert!(!identity.contains(&token), "{url} gave {identity}");
-        assert!(!identity.contains('@'), "{url} gave {identity}");
+        // What userinfo is left is the user ssh logs in as off a forge.
+        assert!(
+            !identity.contains('@') || identity.starts_with("ssh://git@example.com/"),
+            "{url} gave {identity}"
+        );
         assert!(!carries_credentials(&identity), "{url} gave {identity}");
     }
 }

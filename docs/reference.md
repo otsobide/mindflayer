@@ -851,11 +851,13 @@ GitLab, `https://github.com/acme/skills`, `https://github.com/Acme/Skills.git`,
 `acme/skills` are the same repository, so gathering it by another of them
 brings the source it already is up to date, fetched by the spelling you gave
 this time. `acme/skills` alone is GitHub's: a folder on this machine is a
-path, `./acme/skills` when it is relative. Elsewhere only the user name, the
+path, `./acme/skills` when it is relative. Elsewhere only a credential, the
 case of the scheme and the host, a trailing `/` and `file://` before a path
 make no other source, since another host may serve a different repository at
-`host:path` than at `ssh://host/path`, or at `x.git` than at `x`; a relative
-path is one source of its own, whatever folder it names. Another spelling of
+`host:path` than at `ssh://host/path`, or at `x.git` than at `x`, and at
+`alice@host:skills` than at `bob@host:skills`, so the user ssh logs in as is
+kept there; a relative path is one source of its own, whatever folder it
+names. Another spelling of
 a source's URL still works as `--from`, with a warning that it is not the
 name, and the install goes ahead:
 
