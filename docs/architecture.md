@@ -3289,10 +3289,11 @@ afterwards an installed copy of what moved reads `outdated` and of what
 went `orphaned`, and `update` brings the first up to date.
 
 `gather remove NAME` is a dry run without `--yes`, as every command that
-deletes is: it says the source, what it holds, each folder it would delete
-and every copy a project the workspace links installed from it, which it
-would leave orphaned (`sources::plan_removal`), and exits as a dry run of
-`remove --everywhere` does. With it, `sources::remove` holds the workspace's
+deletes is, resolved as a read that makes no workspace, the default one in
+home included: it says the source, what it holds, each folder it would
+delete and every copy a project the workspace links installed from it,
+which it would leave orphaned (`sources::plan_removal`), and exits as a dry
+run of `remove --everywhere` does. With it, `sources::remove` holds the workspace's
 lock from planning again until the rows are gone, and deletes the folders
 the ledger records as the source's own and nothing else: its clone under
 the cache and its folder on each kind's shelf a gather fills, matched on

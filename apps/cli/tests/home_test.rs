@@ -187,6 +187,18 @@ fn weaver_gather_list_reads_the_default_workspace_without_making_it() {
 }
 
 #[test]
+fn weaver_gather_remove_without_yes_names_no_source_and_makes_nothing() {
+    let (home, elsewhere) = unmade_home();
+
+    let failure =
+        weaver_at_home(elsewhere.path(), home.path(), &["gather", "remove", "acme"]).unwrap_err();
+
+    assert_eq!(failure.error.code(), "source_not_found");
+    assert_eq!(failure.warnings, vec![hint(home.path())]);
+    assert!(!made(home.path()));
+}
+
+#[test]
 fn weaver_load_on_its_own_reads_the_default_workspace_without_making_it() {
     let (home, elsewhere) = unmade_home();
 

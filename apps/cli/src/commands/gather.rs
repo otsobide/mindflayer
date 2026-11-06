@@ -84,14 +84,19 @@ pub(crate) fn run_gather(
                 }),
             }
         }
+        // Without --yes it deletes nothing, so it is resolved as a read and
+        // makes no workspace, as `remove` without it is: a dry run that
+        // wrote the default one's marker into home would not be one.
         GatherCommand::Remove { name, yes } => {
-            let workspace = workspace_here(directory, lookup)?;
             if !*yes {
-                let ledger = workspace.ledger_for_reading().map_err(CliError::from)?;
-                let removal =
-                    sources::plan_removal(&workspace, &ledger, name).map_err(CliError::from)?;
-                return Ok(removing(&removal, false));
+                return reading_workspace(directory, lookup, |workspace| {
+                    let ledger = workspace.ledger_for_reading().map_err(CliError::from)?;
+                    let removal =
+                        sources::plan_removal(workspace, &ledger, name).map_err(CliError::from)?;
+                    Ok(removing(&removal, false))
+                });
             }
+            let workspace = workspace_here(directory, lookup)?;
             let (ledger, said) = ledger_to_change(&workspace)?;
             match sources::remove(&workspace, &ledger, name) {
                 Ok(removal) => Ok(said.before(removing(&removal, true))),
