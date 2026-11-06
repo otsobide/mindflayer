@@ -3320,7 +3320,7 @@ installed mcp github into collapse, from workspace
   set GITHUB_PERSONAL_ACCESS_TOKEN (a secret) where the agents run: each reads it there, and no file holds it
   claude asks to approve it before it starts it in a session, though a run with `-p` starts it unasked
   opencode starts it without asking
-warning: `github` is written into /home/you/Projects/collapse/.codex/config.toml, which Codex reads only in a project it trusts, and /home/you/.codex/config.toml does not mark /home/you/Projects/collapse `trusted`
+warning: Codex reads `github` from /home/you/Projects/collapse/.codex/config.toml only in a project it trusts, and /home/you/.codex/config.toml does not mark /home/you/Projects/collapse `trusted`
 ```
 
 Codex reads a project's servers only once its own config marks the project

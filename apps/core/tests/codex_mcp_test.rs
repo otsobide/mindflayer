@@ -657,8 +657,7 @@ fn a_project_codex_is_not_told_it_trusts_is_written_and_said_to_be_read_only_onc
     let file = root.path().join(FILE);
     let said = |rest: String| {
         format!(
-            "`{name}` is written into {}, which Codex reads only in a project it trusts, and \
-             {rest}",
+            "Codex reads `{name}` from {} only in a project it trusts, and {rest}",
             file.display()
         )
     };

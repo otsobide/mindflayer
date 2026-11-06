@@ -637,7 +637,9 @@ pub enum Warning {
     /// same, since trusting a project is the user's to do, and Codex asks
     /// them. `config` is the user's config looked in, none when no Codex
     /// home was given.
-    #[error("`{name}` is written into {file}, which Codex reads only in a project it trusts, and {}", unmarked(.project, .config.as_deref()))]
+    // Said alike of an entry written and of one a preview says would be,
+    // which nothing is written for yet.
+    #[error("Codex reads `{name}` from {file} only in a project it trusts, and {}", unmarked(.project, .config.as_deref()))]
     Untrusted {
         name: String,
         file: PathBuf,

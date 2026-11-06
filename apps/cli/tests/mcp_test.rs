@@ -1187,8 +1187,8 @@ fn an_agent_not_reached_is_said_by_its_refusal_and_codex_untrusted_as_the_warnin
         [(
             Some("codex_mcp_untrusted"),
             format!(
-                "warning: `github` is written into {}, which Codex reads only in a project it \
-                 trusts, and no Codex home was given to say whether it trusts {}",
+                "warning: Codex reads `github` from {} only in a project it trusts, and no \
+                 Codex home was given to say whether it trusts {}",
                 app.join(".codex/config.toml").display(),
                 app.display()
             )
