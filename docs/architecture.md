@@ -3635,8 +3635,10 @@ What a plugin holds beside its skills, its hooks, its agents and its MCP
 servers, as its entry or its manifest declares them or its folder keeps
 them (`marketplace::Holding`), is said in a note and never taken: none of
 it is a skill, and each is something an agent runs. A manifest declares one
-by a path only while something is at that path in the plugin, since a path
-that keeps nothing holds nothing to say. Its MCP servers are kept in
+by a path only while something is at that path in the plugin, and by a list
+of paths, as Claude Code's lists its agents' and hooks' files, only while
+something is at one of them, since a path that keeps nothing holds nothing
+to say. Its MCP servers are kept in
 `.mcp.json` or in `mcp.json` (`marketplace::MCP_FILES`, #104), and the note
 names the file each is in (`Child::mcp_files`), so a person knows which to
 read; nothing of either is imported, which this roadmap never does. A

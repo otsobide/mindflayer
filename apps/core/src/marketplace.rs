@@ -349,19 +349,18 @@ impl Holding {
     ///
     /// A manifest's, of the plugin at `root`, declares one by a path only
     /// while something is at that path, lexically inside the plugin's
-    /// folder and looked at, never followed (#104): a path names where
-    /// the plugin keeps it, and one that keeps nothing there holds nothing
-    /// to say. A catalog's entry, which names no file of the plugin's,
-    /// declares whatever it holds under the key, as #103 read it.
+    /// folder and looked at, never followed (#104), and by a list of paths
+    /// only while something is at one of them ([`declares`]): a path names
+    /// where the plugin keeps it, and one that keeps nothing there holds
+    /// nothing to say. A catalog's entry, which names no file of the
+    /// plugin's, declares whatever it holds under the key, as #103 read it.
     pub(crate) fn declared_in(object: &JsonObject<'_>, root: Option<&Path>) -> Vec<Holding> {
         Holding::ALL
             .into_iter()
             .filter(|holding| match (object.get(holding.key()), root) {
                 (None | Some(JsonValue::Null), _) => false,
-                (Some(JsonValue::String(path)), Some(root)) => {
-                    !crate::gather::outside(path) && is_there(&root.join(path.as_ref()))
-                }
-                (Some(_), _) => true,
+                (Some(value), Some(root)) => declares(value, root),
+                (Some(_), None) => true,
             })
             .collect()
     }
@@ -381,6 +380,22 @@ impl Holding {
 /// The files a plugin keeps its MCP servers in, at its root: `.mcp.json`,
 /// as Claude Code's and Codex's plugins do, and `mcp.json` (#104).
 pub const MCP_FILES: [&str; 2] = [".mcp.json", "mcp.json"];
+
+/// Whether `value`, what the manifest of the plugin at `root` writes under
+/// the key of one of [`Holding`], declares it: a path while something is
+/// there, a list while one of what it lists does, as Claude Code's
+/// manifests list their agents' and hooks' files, and anything else, which
+/// declares it inline, as it is.
+fn declares(value: &JsonValue<'_>, root: &Path) -> bool {
+    match value {
+        JsonValue::Null => false,
+        JsonValue::String(path) => {
+            !crate::gather::outside(path) && is_there(&root.join(path.as_ref()))
+        }
+        JsonValue::Array(values) => values.iter().any(|value| declares(value, root)),
+        _ => true,
+    }
+}
 
 /// Whether something is at `path`, a link among it, whatever it leads to.
 fn is_there(path: &Path) -> bool {

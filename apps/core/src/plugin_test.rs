@@ -87,6 +87,23 @@ fn a_manifest_declares_what_it_names_by_a_path_only_while_something_is_there() {
 }
 
 #[test]
+fn a_manifest_declares_what_it_names_by_a_list_of_paths_only_while_one_of_them_is_there() {
+    let dir = folder(&[
+        (
+            ".claude-plugin/plugin.json",
+            r#"{"agents": ["./agents/missing.md", ".."], "hooks": ["./hooks/missing.json", "./hooks/hooks.json"], "mcpServers": []}"#,
+        ),
+        ("hooks/hooks.json", "{}"),
+    ]);
+
+    let manifest = read_in(&dir, Dialect::Claude).unwrap().unwrap();
+
+    // The hooks one of its list keeps; no agent file it lists is there, nor
+    // inside the plugin, and an empty list names nothing.
+    assert_eq!(manifest.declares, [Holding::Hooks]);
+}
+
+#[test]
 fn a_plugin_is_read_by_the_manifest_of_the_agent_its_catalog_is_for_first() {
     let dir = folder(&[
         (".codex-plugin/plugin.json", r#"{"license": "MIT"}"#),
