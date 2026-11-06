@@ -2,6 +2,7 @@
 import type { Directory } from "./Directory";
 import type { Held } from "./Held";
 import type { LibraryHolder } from "./LibraryHolder";
+import type { LibraryServer } from "./LibraryServer";
 import type { Said } from "./Said";
 import type { Template } from "./Template";
 
@@ -38,4 +39,10 @@ templates: Array<Template>,
  * What could not be read in it and is no artifact's: a folder that
  * cannot be listed, its templates.
  */
-failures: Array<Said>, };
+failures: Array<Said>, 
+/**
+ * Each of its own MCP servers whose definition reads, in the order
+ * of `artifacts`, as each agent would be given it: what a page of
+ * servers shows beside each one's row of `artifacts`.
+ */
+servers: Array<LibraryServer>, };

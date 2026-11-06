@@ -278,6 +278,7 @@
       }
     ],
     "origin": "workspace",
+    "servers": [],
     "templates": [
       {
         "kind": "skill",
