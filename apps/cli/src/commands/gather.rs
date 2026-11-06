@@ -7,6 +7,7 @@ use std::path::Path;
 use mindweaver_core::gather::{self, Gathered, Preview, Report, Request, Scrub, Watch};
 use mindweaver_core::install::{offered_by_loads, Offer};
 use mindweaver_core::ledger::{Ledger, SourceListing};
+use mindweaver_core::marketplace::{self, Listed, Pick, Plugin};
 use mindweaver_core::sources::{self, Regathered, Removal, Renamed, Which};
 use mindweaver_core::url::redacted;
 use mindweaver_core::{Kind, WeaverWorkspace};
@@ -61,6 +62,60 @@ pub(crate) fn run_gather(
                 // By the repository the address names, which is what was
                 // gathered: a tree URL's branch and folder are no part of it.
                 Ok(report) => Ok(said.before(gathered(request.source.url(), &report))),
+                Err(error) => Err(Failure {
+                    error: Box::new(error.into()),
+                    warnings: said.lines(),
+                }),
+            }
+        }
+        GatherCommand::Marketplace {
+            source,
+            path,
+            reference,
+            name,
+            list,
+            plugins,
+            all,
+            yes,
+        } => {
+            // Read before the workspace is, as `gather git`'s address is.
+            let catalog = Request::addressed(source, reference.clone(), path.clone())
+                .map_err(CliError::from)?
+                .named(name.clone())
+                .watched_by(watch.clone());
+            let pick = if *list {
+                Pick::Listing
+            } else if *all {
+                Pick::All
+            } else {
+                Pick::Plugins(plugins.clone())
+            };
+            let request = marketplace::Request::new(catalog, pick);
+            // Looked at first, as a read that makes no workspace and writes
+            // nothing, as a dry run of `gather git` is: one with more plugins
+            // than a yes is waited for beyond stops there, and one with
+            // fewer is gathered whole without one.
+            if *all && !*yes {
+                let mut waits = None;
+                let said = reading_workspace(directory, lookup, |workspace| {
+                    let ledger = workspace.ledger_for_reading().map_err(CliError::from)?;
+                    let listed =
+                        marketplace::look(workspace, &ledger, &request).map_err(CliError::from)?;
+                    let outcome = unconfirmed(&listed);
+                    if listed.needs_confirming() {
+                        waits = Some(());
+                    }
+                    Ok(outcome)
+                })?;
+                if waits.is_some() {
+                    return Ok(said);
+                }
+            }
+            let workspace = workspace_here(directory, lookup)?;
+            let (ledger, scrub) = workspace.ledger_to_write().map_err(CliError::from)?;
+            let said = scrubbed(&scrub);
+            match marketplace::gather(&workspace, &ledger, &request) {
+                Ok(report) => Ok(said.before(marketplace_gathered(&report, &request.pick))),
                 Err(error) => Err(Failure {
                     error: Box::new(error.into()),
                     warnings: said.lines(),
@@ -581,6 +636,174 @@ fn previewed(url: &str, preview: &Preview) -> Outcome {
     let stderr = said_of(&preview.failures, &preview.warnings);
     let ok = stderr.is_empty();
     Outcome { stdout, stderr, ok }
+}
+
+/// What a gather of a marketplace did: its catalog, by the name it is
+/// called and the URL it was fetched from, then, for `--list`, each plugin
+/// it lists and that nothing was gathered, and otherwise each plugin
+/// gathered as `gather git` says a source, an empty line apart.
+///
+/// Each entry that cannot be gathered is a warning, by the marketplace's
+/// name, and fails the command, as a skill a gather cannot take does; so
+/// does a plugin whose gather failed, by its entry, beside the rest. What a
+/// plugin holds beside its skills, which is not taken, is a note.
+fn marketplace_gathered(report: &marketplace::Report, pick: &Pick) -> Outcome {
+    let catalog = &report.catalog;
+    let mut outcome = Outcome::plain(catalog_line(catalog));
+    if *pick == Pick::Listing {
+        outcome.stdout.push_str(&entries(catalog));
+        let _ = writeln!(
+            outcome.stdout,
+            "\n{} listed; nothing gathered: gather some with --plugin <name>, or every one with \
+             --all",
+            plural(catalog.listed, "plugin")
+        );
+    }
+    outcome.stderr.extend(entry_failures(catalog));
+    outcome.ok = catalog.failures.is_empty();
+    for child in &report.children {
+        match &child.outcome {
+            Ok(report) => {
+                let said = gathered(&gathered_url(catalog, child), report);
+                outcome.stdout.push('\n');
+                outcome.stdout.push_str(&said.stdout);
+                outcome.stderr.extend(said.stderr);
+                outcome.ok &= said.ok;
+                if !child.holds.is_empty() {
+                    let holds: Vec<&str> =
+                        child.holds.iter().map(|holding| holding.words()).collect();
+                    outcome.stderr.push(Warning::from(format!(
+                        "note: {}: its plugin holds {} too, which are not gathered",
+                        printable(&report.name),
+                        and(&holds)
+                    )));
+                }
+            }
+            Err(error) => {
+                outcome.stderr.push(Warning::coded(
+                    error.code(),
+                    format!(
+                        "warning: {}: {}",
+                        printable(&child.entry),
+                        printable(&error.to_string())
+                    ),
+                ));
+                outcome.ok = false;
+            }
+        }
+    }
+    outcome
+}
+
+/// The URL a plugin was gathered from, which its report's header says: the
+/// marketplace's for one in its repository, and its own otherwise.
+fn gathered_url(catalog: &Listed, child: &marketplace::Child) -> String {
+    catalog
+        .entries
+        .iter()
+        .find(|entry| entry.name == child.entry)
+        .and_then(|entry| entry.plugin.url().map(|url| url.into_owned()))
+        .map(|url| mindweaver_core::url::fetched(&url).into_owned())
+        .unwrap_or_else(|| catalog.url.to_string())
+}
+
+/// `words` as a sentence lists them: `a`, `a and b`, `a, b and c`.
+fn and(words: &[&str]) -> String {
+    match words {
+        [] => String::new(),
+        [one] => (*one).to_owned(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+    }
+}
+
+/// A catalog's first line: the marketplace by its name, then the URL its
+/// catalog was fetched from and the commit it was read at.
+fn catalog_line(catalog: &Listed) -> String {
+    let at = catalog
+        .revision
+        .as_deref()
+        .map(short)
+        .map_or_else(String::new, |revision| format!(" at {revision}"));
+    let reference = catalog
+        .reference
+        .as_deref()
+        .map_or_else(String::new, |at| format!("#{}", printable(at)));
+    format!(
+        "{}: {}{reference}{at}\n",
+        printable(&catalog.name),
+        printable(&catalog.url)
+    )
+}
+
+/// Each plugin a catalog lists that can be gathered, by its name, its kind
+/// of source and where it is, with the branch and the commit it is pinned
+/// to when its entry names them, indented under the catalog's line.
+fn entries(catalog: &Listed) -> String {
+    if catalog.entries.is_empty() {
+        return String::from("  no plugin it lists can be gathered\n");
+    }
+    let rows: Vec<Vec<String>> = catalog
+        .entries
+        .iter()
+        .map(|entry| {
+            let at = match &entry.plugin {
+                Plugin::Relative { route } if route.is_empty() => String::from("."),
+                Plugin::Relative { route } => route.clone(),
+                Plugin::Github { repo, .. } => repo.clone(),
+                Plugin::Url { url, .. } => redacted(url).into_owned(),
+                Plugin::GitSubdir { url, path, .. } => format!("{} {path}", redacted(url)),
+            };
+            let mut pins = Vec::new();
+            if let Some(reference) = entry.plugin.reference() {
+                pins.push(format!("ref {}", printable(reference)));
+            }
+            if let Some(sha) = entry.plugin.sha() {
+                pins.push(format!("pinned {}", printable(short(sha))));
+            }
+            vec![
+                printable(&entry.name),
+                entry.plugin.kind().to_owned(),
+                printable(&at),
+                pins.join(" "),
+            ]
+        })
+        .collect();
+    indent(&table(&rows))
+}
+
+/// Each entry of `catalog` that cannot be gathered, as a warning by the
+/// marketplace's name.
+fn entry_failures(catalog: &Listed) -> Vec<Warning> {
+    catalog
+        .failures
+        .iter()
+        .map(|failure| {
+            Warning::coded(
+                failure.code(),
+                format!(
+                    "warning: {}: {}",
+                    printable(&catalog.name),
+                    printable(&failure.to_string())
+                ),
+            )
+        })
+        .collect()
+}
+
+/// What `--all` would gather of a catalog, a dry run: its line, each plugin
+/// it lists, and, when it lists more than a yes is waited for beyond, that
+/// nothing was gathered; with fewer, what follows is the gather itself.
+fn unconfirmed(catalog: &Listed) -> Outcome {
+    let mut outcome = Outcome::plain(catalog_line(catalog));
+    outcome.stdout.push_str(&entries(catalog));
+    let _ = writeln!(
+        outcome.stdout,
+        "\n{} to gather; nothing gathered: add --yes to gather every one",
+        plural(catalog.entries.len(), "plugin")
+    );
+    outcome.stderr.extend(entry_failures(catalog));
+    outcome.ok = outcome.stderr.is_empty();
+    outcome
 }
 
 /// Everything that can be installed from elsewhere, with where each thing

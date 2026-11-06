@@ -89,6 +89,8 @@ pub enum CliError {
     #[error(transparent)]
     Source(#[from] mindweaver_core::sources::SourceError),
     #[error(transparent)]
+    Marketplace(#[from] mindweaver_core::marketplace::MarketplaceError),
+    #[error(transparent)]
     Ledger(#[from] LedgerError),
     #[error(transparent)]
     Install(#[from] mindweaver_core::install::InstallError),
@@ -297,6 +299,7 @@ codes!(CliError {
     Self::Artifact(error) => error,
     Self::Gather(error) => error,
     Self::Source(error) => error,
+    Self::Marketplace(error) => error,
     Self::Ledger(error) => error,
     Self::Install(error) => error,
     Self::Create(error) => error,

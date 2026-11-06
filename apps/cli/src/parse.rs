@@ -1519,6 +1519,64 @@ pub enum GatherCommand {
         dry_run: bool,
     },
 
+    /// Take skills from a Claude Code plugin marketplace: its catalog,
+    /// `.claude-plugin/marketplace.json`, recorded as a source of its own,
+    /// and each plugin picked gathered into a source of its own under it.
+    ///
+    /// Nothing but the catalog is fetched until a plugin is picked: --list
+    /// lists them, --plugin gathers each it names, and --all every one, a
+    /// dry run without --yes when the catalog lists more than 25.
+    #[command(group(
+        ArgGroup::new("pick")
+            .args(["list", "plugins", "all"])
+            .required(true)
+            .multiple(false)
+    ))]
+    Marketplace {
+        /// The marketplace's repository: a URL, a path, GitHub's
+        /// `owner/repo`, `owner/repo@ref`, or a GitHub or GitLab tree URL,
+        /// which names a branch and a folder too.
+        source: String,
+
+        /// The folder inside the repository its `.claude-plugin` is in,
+        /// instead of its root.
+        #[arg(long, value_name = "DIR")]
+        path: Option<String>,
+
+        /// A branch or tag to take, instead of the repository's default.
+        #[arg(long = "ref", value_name = "REF")]
+        reference: Option<String>,
+
+        /// What to call the marketplace, instead of the name its catalog
+        /// gives it: what `gather sources` shows. Its plugins are called
+        /// after it, `<marketplace>.<plugin>`.
+        #[arg(long, value_name = "NAME")]
+        name: Option<String>,
+
+        /// List its plugins, each by its name, its kind of source and where
+        /// it is, and gather none of them.
+        #[arg(long)]
+        list: bool,
+
+        /// A plugin to gather, by the name the catalog lists it by; once for
+        /// each.
+        #[arg(long = "plugin", value_name = "NAME")]
+        plugins: Vec<String>,
+
+        /// Every plugin the catalog lists.
+        #[arg(long)]
+        all: bool,
+
+        /// Gather every plugin of a catalog listing more than 25. Without
+        /// this, --all says what it would gather, and gathers nothing.
+        //
+        // Conflicting with the other picks as well as requiring `--all`:
+        // clap passes over what an option requires when that conflicts with
+        // something given, which the pick's group makes `--all` of either.
+        #[arg(short, long, requires = "all", conflicts_with_all = ["list", "plugins"])]
+        yes: bool,
+    },
+
     /// List what can be installed from the shelf and from loaded workspaces,
     /// and where each artifact comes from.
     #[command(alias = "ls")]
