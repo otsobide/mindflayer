@@ -176,7 +176,8 @@ under `apps/` with its own `Makefile`:
   other key kept (`mcp::retransported`, `lifecycle::retransport`, what
   `edit` told the options does), the
   agents and where each kind goes for them (`agent`), the catalog, gathering
-  (through `port::Remote`), a gathered source's own changes, renaming one,
+  (through `port::Remote`), and what a gather would take, nothing written
+  (`gather::preview`), a gathered source's own changes, renaming one,
   gathering some again and removing one with what it put on the shelf
   (`sources`), the ledger (through `port::LedgerStore`), installing, keeping installs out of git
   (`exclude`), a project's rules rendered into the block of its `AGENTS.md`
@@ -614,7 +615,20 @@ These are easy to break from a single file without noticing.
   dry run without `--yes`, `sources::plan_removal`), deleting only its
   clone and its shelf folder by the folder name the ledger records for it,
   refused unless that is one folder name, its rows going with them and
-  every installation from it kept, orphaned.
+  every installation from it kept, orphaned. A gather searches its source
+  from the root (`DEFAULT_SUBDIRECTORY` is no folder), or the folder
+  `--path` names, as far as `gather::SEARCH_DEPTH`, never into a skill's
+  folder, a link or `gather::PASSED_OVER` (`gather::candidates`); the folder
+  searched holding a `SKILL.md` is one skill, a repository's root filed
+  under the repository's name (`url::repository`), and every other under
+  its folder's. Two of one name in one source, by folder or as declared, are
+  each a failure (`gathered_name_clash`) and neither is taken
+  (`gather::unclashed`), never a pick; the shelf's copy leaves out what an
+  install leaves out of every copy (`install::left_out_names`). What is
+  typed for a source is read by `url::address`, a contradicting `--ref` or
+  `--path` refused (`Request::addressed`), and `gather::preview` is the dry
+  run, which registers, shelves, records and logs nothing, takes no lock,
+  and leaves no clone.
 - **Output is built, then printed.** Commands return an `Outcome` (stdout
   text, stderr lines, ok), so tests assert on the exact text a user sees.
   The two that run until they are stopped write as they run, the TUI its
@@ -964,8 +978,8 @@ These are easy to break from a single file without noticing.
   writes a definition where its holder keeps servers, as it writes a
   skill, and records nothing, writing nothing into an agent's config. No copy
   holds a skill's top-level `.claude-plugin`
-  (`install::LeftOut`), and none lands inside an agent's own folder
-  (`InstallError::UserScope`). A v3 project is listed from its agents' folders
+  (`install::LeftOut`), nor does a gather's on the shelf, and none lands
+  inside an agent's own folder (`InstallError::UserScope`). A v3 project is listed from its agents' folders
   too, where an unrecorded copy outside the folder it authors in is
   `Provenance::Foreign` (by the path a record names, `Catalog::with_records`),
   and a lifecycle change looks only where the project authors
@@ -1138,7 +1152,10 @@ These are easy to break from a single file without noticing.
     it is refused (`InstallError::Outside`). A gathered skill's licence
     file is read from its copy on the shelf, the head of it alone, never
     from the clone (`gather::license_of`), so a link there is read as the
-    copy resolved it and followed nowhere else.
+    copy resolved it and followed nowhere else. A gathered skill's folder
+    that is a link is taken from where it leads only inside the clone, and
+    refused otherwise (`gathered_link_outside`): the copy's bound includes
+    the folder it copies, so it would follow such a link anywhere.
   - A project's artifact directories must stay inside the project, and so
     must the folders its `targets` name, outside `.mind` and any
     `.mindweaver` too (`misplaced_target`): refused when a change names one,

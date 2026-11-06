@@ -3133,9 +3133,120 @@ still names the source, said with a warning of its own code
 since the scripts it is for would break.
 
 The folder a skill lands in keeps the name the **source** gave it, not the name
-the skill declares. When those disagree that is something gathering warns about
-and `mindweaver validate` reports; renaming the folder on the way in would repair
-the symptom and hide it.
+the skill declares, wherever in the repository it was found, and a skill that
+is a whole repository takes the repository's ([where a source's skills are
+found](#where-a-sources-skills-are-found)). When those disagree that is
+something gathering warns about and `mindweaver validate` reports; renaming the
+folder on the way in would repair the symptom and hide it.
+
+### Where a source's skills are found
+
+A gather searches the repository (#101), from its root unless `--path` names
+a folder, for every folder holding a `SKILL.md`, as far as
+`gather::SEARCH_DEPTH`, four folders down. That is the depth of the deepest
+layout the tools that install skills from a repository share,
+`plugins/<plugin>/skills/<name>`; the others, `skills/<name>`,
+`skills/<group>/<name>`, `skills/.curated/<name>`, `skills/.system/<name>`,
+`<name>` at the root, `.agents/skills/<name>` and `.claude/skills/<name>`,
+lie within it. A list of those layouts, each looked in by name, was the
+other way, and is rejected: it finds nothing in a folder a repository names
+otherwise (`docs/skills/<name>`), and has to grow with every tool. Bounded,
+rather than the whole tree, so that what a repository keeps further down, a
+vendored copy of another, its tests' fixtures, an example inside an
+example, is not taken for what it offers, and so that a search of a large
+repository, or of one made to be large, stays as short as the layouts need
+it to be. A folder holding a `SKILL.md` is not looked into, for the reason
+discovery has: the folder is the skill's, assets and all, and a skill that
+ships another as an example ships it as a file of its own. `.git` and
+`node_modules` (`gather::PASSED_OVER`) are never entered, wherever they
+are: git's own folder holds no checkout, and a package manager's whatever
+its packages hold. Nor is a folder that is a link, whose skills are found
+where it leads, or lie outside the clone. A skill's folder that is a link is
+taken from where it leads when that is inside the clone, and found once
+there, so a repository linking `.claude/skills/<name>` to `skills/<name>`
+offers one skill, found at `skills/<name>`, rather than two of one name; one
+that leads out of the clone is refused (`gathered_link_outside`), since the
+copy bounds what it follows by the folder it copies as well as by the clone
+(`copy::tree`'s `within`), and would copy whatever such a link led to.
+
+The folder searched holding a `SKILL.md` is one skill, and nothing in it is
+another: a repository with one at its root is one skill, everything in it but
+its clone's `.git`. It is filed under the repository's name
+(`url::repository`), the last folder of the URL every spelling of the
+repository is, `.git` left off, so `acme/pdf-skill` and
+`git@github.com:Acme/PDF-Skill.git` are both `pdf-skill`: the clone's own
+folder is named for the workspace's reasons, and the name the skill
+declares is the one a disagreement with its folder is said of, not the one
+a folder is given. It is judged by that folder, the one the shelf files it
+in and `validate` reads it from, not the clone's, and its `upstream_path` is
+`.`. A URL whose path ends in no name, `.` say, files it nowhere, and says
+so (`gathered_root_unnamed`). The folder `--path` names is one skill the same
+way when it holds a `SKILL.md`, filed under that folder's name.
+
+Two skills of one name in one source, in two folders the shelf would file as
+one (`skills/pdf` and `.claude/skills/pdf`), or declaring one name, which the
+ledger keeps one row of a source's for, are a failure each
+(`gathered_name_clash`), naming where the others are, and neither is taken;
+the rest of the source is. Taking one would be a pick nobody made, by
+whichever the search met last; taking neither says so where somebody can
+choose, with `--path`. Each folder is still one the source holds, so what an
+earlier gather took of either stays on the shelf as it was, as a skill that
+stops reading does ([what a source no longer
+holds](#what-a-source-no-longer-holds)). Two copies of one skill, byte for
+byte, clash all the same (see the open questions).
+
+A skill's own `.claude-plugin`, at its top, is left off the shelf
+(`copy::replace_leaving`, with what `install::left_out_names` gives), as
+every install leaves it out of each copy ([what no copy
+holds](#what-no-copy-holds)): the shelf then holds what a project is given,
+a plugin's hooks and servers are never offered, and the hash recorded of a
+gathered skill is the one its installed copies have. The shelf's copy is
+compared with the clone's leaving it out too, so a gather of a skill
+nothing else changed in is `Unchanged`.
+
+The folder searched by default was `skills` until #101, which a source's
+folder is part of what makes it ([D-13](#d-13-sources-have-names-and-a-marketplace-is-a-parent)):
+one an older build gathered without `--path` keeps `skills`, and `gather
+update` gathers it from there, finding what the layouts put under it, where
+a `gather git` of it without `--path` now makes a second source, at the root
+(see the open questions).
+
+`gather git` reads what it is given through `url::address`:
+`owner/repo@ref` is the GitHub repository at `ref`, and a tree URL, as GitHub
+(`https://github.com/<owner>/<repo>/tree/<ref>/<path>`) and GitLab
+(`https://gitlab.com/<group>/<repo>/-/tree/<ref>/<path>`, its groups as deep
+as they go) show a folder of a repository, is the repository, its branch and
+its folder; anything else is the URL it is. Only on those two forges
+(`url::FORGES`): elsewhere `tree` in a path is somebody's folder. The branch
+is the one segment after `tree`: one with a `/` in it cannot be told there
+from the folder after it, and is typed with `--ref` instead. `Request::addressed` holds a `--ref` or a `--path` given beside an
+address that names one to what it names: the same is no contradiction, and
+another is refused before anything is opened (`gather_ref_contradicted`,
+`gather_path_contradicted`), which of two was meant being nothing to guess,
+in words that quote no credential either side carries. A credential in the
+address stays in its URL, for the gather to refuse as it refuses one in any
+URL ([a URL is kept without its
+credentials](#a-url-is-kept-without-its-credentials)).
+
+`gather git --dry-run` (`gather::preview`) is refused for what a gather is
+refused for before it fetches, fetches, and searches as a gather does
+(`checked` and `offered`, which `harvest` and `take` ask too), then says each
+skill it would take by its name, the folder it would be filed under and its
+`upstream_path`, with what the gather would warn of and so the exit it would
+give. It registers no source, writes nothing to the shelf or the ledger,
+logs nothing and takes no lock, since nothing writers take turns at is
+written; resolved as a read, it makes no workspace, and reads the ledger
+without making it. It leaves no clone: the one it needs is made in a folder
+of its own under the cache, named with a `+`, which no folder a source is
+given holds, and taken away once read, whatever came of reading it, with
+the cache and the workspace's folder when it was the dry run that made them.
+Fetching into the source's own clone was the other way, and is rejected:
+that clone is the commit the shelf holds, kept so a gather can be looked at
+afterwards ([the clone is kept, and re-made](#the-clone-is-kept-and-re-made));
+kept in a folder of its own, nothing would ever take it away. So its
+failures are said by their route in the repository
+(`Failure::in_repository`), its warnings too, since the clone they were met
+in is gone by the time they are read.
 
 ### The clone is kept, and re-made
 
@@ -3333,8 +3444,8 @@ since schema 1; its `upstream_path`, its folder in the repository from the
 repository's root, `/` separated, by its lexical route from the clone's
 root, so a folder typed `./skills/` is `skills`; the `content_hash` of the
 copy on the shelf, by `hash::tree`, the recipe an install keeps of a copy,
-so a copy installed from it hashes alike unless it holds a top-level
-`.claude-plugin`, which no installed copy does, and taken of the shelf rather
+so a copy installed from it hashes alike, the shelf holding no top-level
+`.claude-plugin` since #101, as no installed copy does, and taken of the shelf rather
 than the clone, since a link in the clone is what the copy resolved and the
 hash refuses a link; and its `license`, as written. One that cannot be read
 back to be hashed is recorded with no hash and said with a failure of its
@@ -3362,7 +3473,8 @@ it, within the clone, never followed anywhere else, and one that cannot be
 read names nothing, as one that is not there: the hash, which reads every
 file of the copy, has said already that one cannot be. A repository's own
 licence, at its root or as a forge's API says it, is not the skill's
-folder's and is not read.
+folder's and is not read, unless the skill is the whole repository, whose
+root is its folder.
 
 ### Following a gather, and stopping it
 
@@ -4620,8 +4732,11 @@ declares ([docs/agents.md](agents.md), docs-only, so it is left out whatever
 Claude does with it). A skill is instructions an agent reads when it chooses
 to; a plugin's hooks run commands on their own and its servers are started
 for it, which installing a skill must not turn on behind anybody's back.
-Gathering a plugin's skills brings that folder along, and the shelf keeps it,
-as it keeps whatever a source held.
+A gather leaves the folder off the shelf too, since #101 ([where a source's
+skills are found](#where-a-sources-skills-are-found)), so what an install
+leaves out of a skill from the shelf is what a gather from before left
+there; the library's own and a loaded workspace's keep whatever their
+authors put in them.
 
 Left out of every install, whichever agents the project names, rather than
 only out of Claude's copy: one copy differing from the other is what D-07
@@ -13087,13 +13202,37 @@ it once as it closes.
 - **Gathering a repository that is a workspace.** A team repository made by
   `mindweaver init` and `mindweaver add` keeps its own skills in
   `.mindweaver/library/skills`, where a workspace made before the library kept
-  them in `skills`, the folder `mindweaver gather` harvests by default. So a plain
-  `mindweaver gather git <url>` of it, which used to work, now says there is no
-  `skills` folder, and `--path .mindweaver/library/skills` is needed. Gather
-  could read a cloned workspace's `weaver.toml` for where its own are when no
-  `--path` is given, as `load` reads a loaded one's, or look in
-  `.mindweaver/library/skills` among the layouts #101 harvests; whether to
+  them in `skills`. Since #101 a plain `mindweaver gather git <url>` of it
+  finds them there, four folders down, but finds too whatever else of the
+  workspace's the repository holds as deep: a shelf committed beside them,
+  `.mindweaver/skills/<source>/<name>`, each a clash with one of the
+  library's of its name. `--path .mindweaver/library/skills` takes the
+  library alone. Gather could read a cloned workspace's `weaver.toml` for
+  where its own are when no `--path` is given, as `load` reads a loaded
+  one's, or pass over a workspace's folder but for its library; whether to
   trust a marker that came from a source is part of that choice.
+- **A source gathered by the old default.** Until #101 a gather without
+  `--path` searched `skills`, and a source is its folder among the rest, so
+  one gathered so then keeps `skills`: `gather update` gathers it from
+  there, and a `gather git` of the same URL without `--path` now registers
+  a second source, at the root, which offers the same skills under another
+  name, each then offered twice. Taking the old source for the new default
+  would widen what it supplies without being asked; a step that moves such
+  sources to the root, or a gather that names the one source of a URL and
+  branch whatever its folder, is the owner's to choose. `gather remove` of
+  either takes it away.
+- **Two copies of one skill clash.** A repository holding one skill in two
+  folders, `skills/pdf` and `.claude/skills/pdf` byte for byte, is two
+  skills of one name to a gather, and neither is taken, where a link from
+  one to the other is one. Taking either when the two are the same would
+  pick nothing anybody could tell apart, at the cost of a rule that holds
+  only until one of them is edited; whether to is open.
+- **What the search finds that a repository does not offer.** Four folders
+  down holds the layouts, and also a repository's own fixtures and examples
+  within that depth (`tests/fixtures/<name>`), which a gather takes as it
+  takes any skill, warning of what is wrong with each, and which can clash
+  with what it does offer. `--path` keeps a gather to the folder it names;
+  a repository saying what it offers is #103's and #104's catalogs.
 - **Directories edited into a marker by hand.** Where a holder's directories
   may be (inside it and, for a workspace, clear of the shelf and the cache) is
   checked when `init` writes the marker, not each time it is read, so a marker

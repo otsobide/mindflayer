@@ -791,17 +791,74 @@ acme-skills: https://github.com/acme/skills at a1b2c3d
 2 skills: 2 added, 0 updated, 0 unchanged
 ```
 
-The repository's `skills` folder is what gets harvested; `--path agents` takes
-another one, and `--ref v2` takes a branch or a tag instead of the default.
+The whole repository is searched for the folders holding a `SKILL.md`, as
+far as four folders down, which is as deep as the tools that install skills
+from a repository keep them: `skills/<name>`, `skills/<group>/<name>`,
+`skills/.curated/<name>` and `skills/.system/<name>`, `<name>` at the root,
+`.agents/skills/<name>`, `.claude/skills/<name>` and
+`plugins/<plugin>/skills/<name>`. A folder holding one is that skill, assets
+and all, and nothing in it is another. `.git` and `node_modules` are never
+looked in, nor a folder that is a link; a skill's folder that is a link is
+taken from where it leads, inside the repository, and refused with a
+warning when that is outside it. `--path plugins/ops` searches that folder
+alone, and `--ref v2` takes a branch or a tag instead of the default. A
+source an older Mindweaver gathered without `--path` was searched in its
+`skills` folder alone, and `gather update` searches it there still; gathered
+with `gather git` and no `--path`, the repository is another source, of all
+of it.
+
+A repository with a `SKILL.md` at its root is one skill, everything in it
+but `.git`, filed under the repository's name: `pdf-skill` for
+`acme/pdf-skill`, the last folder of its URL without `.git`. So is the
+folder `--path` names when it holds one, under that folder's name. Every
+other skill is filed on the shelf under its own folder's name, wherever in
+the repository it was, and recorded with where that was (its
+`upstream_path`, `.` for the root). Two of one name in one source, two
+folders called `pdf` or two skills declaring `pdf`, are not gathered, either
+of them, each a warning naming where the other is, while the rest of the
+source is: which one the repository means is for you to say, with `--path`.
+What an earlier gather took of either stays on the shelf as it was. A
+skill's own `.claude-plugin` folder, at its top, is left off the shelf, as
+no install copies it either.
+
 The source is called `acme-skills`, after its owner and its repository, which
 is what `gather list` shows and `--from` takes; `--name team-skills` calls it
 something else, and given again with another name renames it. A name is
 letters, digits, `.`, `_` and `-`, and one source's only: one another source
 has is refused before anything is fetched. A
 repository that is a weaver workspace made by `mindweaver init` keeps its own in
-[its library](#the-workspaces-own-skills-and-rules), so it is gathered with
-`--path .mindweaver/library/skills`, or [loaded](#loading-another-workspace)
-from a clone instead.
+[its library](#the-workspaces-own-skills-and-rules), which the search finds
+at `.mindweaver/library/skills/<name>`; `--path .mindweaver/library/skills`
+gathers those alone, or it can be [loaded](#loading-another-workspace) from a
+clone instead.
+
+`acme/skills` is GitHub's `https://github.com/acme/skills`, and
+`acme/skills@v2` the same at `v2`. A tree URL, as GitHub shows a folder of a
+repository (`https://github.com/acme/skills/tree/main/plugins/ops`) and GitLab
+does (`https://gitlab.com/acme/skills/-/tree/main/plugins/ops`), is the
+repository at that branch, searched in that folder. Its branch is the one
+segment after `tree`, so a branch with a `/` in it is given with `--ref` and
+the folder with `--path` instead. Either given beside an address that names
+one has to say the same, or nothing is gathered:
+
+```
+$ mindweaver gather git acme/skills@v2 --ref v3
+error: acme/skills@v2 names the branch or tag `v2`, and --ref names `v3`: give one
+```
+
+`--dry-run` says what a gather would take, each skill by its name and where
+it is in the repository, with what the gather would warn of and the exit it
+would give, and gathers nothing: no source is recorded, nothing is put on
+the shelf, and the clone made to look is taken away again, so it leaves none
+in the workspace's cache, nor a workspace where none is made yet.
+
+```
+$ mindweaver gather git https://github.com/acme/skills/tree/main/plugins/ops --dry-run
+https://github.com/acme/skills at a1b2c3d
+  deploy  plugins/ops/skills/deploy
+
+1 skill to gather; nothing gathered: run it again without --dry-run to gather them
+```
 
 With stderr on a terminal it says what it is doing while it does it
 (`connecting`, `receiving objects 120/340`, `reading folders 3/40`) on one line
@@ -1725,8 +1782,9 @@ warning: /home/you/Projects/collapse/skills/broken/SKILL.md: the file does not s
   it comes from (`loaded` or `shelf`) and its `origin`, as `--from` takes it,
   and for one from the shelf its `source`, by its `name` and the `pin` it
   was gathered at among the rest, and where it came from: its
-  `upstream_path` in the repository, the `content_hash` of what was put on
-  the shelf, and its `license`, `null` when unknown.
+  `upstream_path` in the repository, `.` for a skill that is the whole of
+  it, the `content_hash` of what was put on the shelf, and its `license`,
+  `null` when unknown.
 - `gather sources`: each source the shelf is filled from, with what a shelf
   row's `source` holds (its `name`, `url`, `reference`, `pin` and the rest),
   `gathered_at`, when a gather last took it, in seconds since the Unix
@@ -2978,8 +3036,9 @@ $ tail -5 collapse/.git/info/exclude
 Outside a git repository a local install says nothing keeps its copies out
 of git, as a `note:`. A skill's own `.claude-plugin` folder goes into no copy,
 with a warning, since Claude would load the skill as a plugin, hooks and MCP
-servers included. And a project at your home is refused an install, since its
-`.claude/skills` and `.agents/skills` are the ones every project reads.
+servers included (a gather leaves it off the shelf already). And a project at
+your home is refused an install, since its `.claude/skills` and
+`.agents/skills` are the ones every project reads.
 
 A rule goes into the block in the project's `AGENTS.md` instead ([the
 kinds](#the-kinds)), rendered there with every other rule the project

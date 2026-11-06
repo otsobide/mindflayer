@@ -289,15 +289,24 @@ Everything the panel does is a command, and so is everything it does not do
 yet, such as gathering:
 
 ```bash
-cd ~/Projects/blog && mind init          # make a repository a project
-cd ~/Projects && mindweaver link blog    # and link it to the workspace
-mindweaver gather git acme/skills        # put a repository's skills on the shelf
-mindweaver gather update --all           # gather every source again, saying what moved
-mindweaver install -p blog commit-style  # install one into a project
-mindweaver status                        # what every project holds, and how it stands
-mindweaver update --all --yes            # bring every project up to date
-mindweaver                               # the TUI: all of it from the keyboard
+cd ~/Projects/blog && mind init              # make a repository a project
+cd ~/Projects && mindweaver link blog        # and link it to the workspace
+mindweaver gather git acme/skills --dry-run  # see what a repository would give
+mindweaver gather git acme/skills            # put a repository's skills on the shelf
+mindweaver gather update --all               # gather every source again, saying what moved
+mindweaver install -p blog commit-style      # install one into a project
+mindweaver status                            # what every project holds, and how it stands
+mindweaver update --all --yes                # bring every project up to date
+mindweaver                                   # the TUI: all of it from the keyboard
 ```
+
+A gather finds a repository's skills wherever the tools that install them
+keep them (`skills/<name>`, `.claude/skills/<name>`, `.agents/skills/<name>`,
+`plugins/<plugin>/skills/<name>`, a `SKILL.md` at its root), and `--path`
+keeps it to one folder; `acme/skills@v2` takes a branch, and a GitHub or
+GitLab tree URL a branch and a folder. Two skills of one name in one
+repository are a warning each, and neither is taken. `--dry-run` says what
+would be taken and takes nothing.
 
 A repository gathered is one source however its URL is spelled (`acme/skills`,
 `https://github.com/acme/skills`, `git@github.com:acme/skills.git`), called
