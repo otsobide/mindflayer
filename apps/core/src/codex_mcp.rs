@@ -478,10 +478,26 @@ fn config(root: &Path) -> Result<ConfigFile, CodexMcpError> {
 }
 
 /// The user's [`USER_FILE`] in the Codex home, as text: only read, never
-/// written.
-struct UserConfig {
-    path: PathBuf,
+/// written. What a render asks whether a name collides and a project is
+/// trusted, and what doctor asks the same of (`crate::doctor`): one reading
+/// of Codex's config, never a second.
+pub(crate) struct UserConfig {
+    pub(crate) path: PathBuf,
     text: String,
+}
+
+/// How the user's config marks a project for Codex, which reads the
+/// project's [`FILE`] only in one it trusts, and its `AGENTS.md` in any it
+/// does not mark `untrusted` (docs/agents.md, docs-only).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Trust {
+    /// `trust_level = "trusted"` under its root, as handed or resolved.
+    Trusted,
+    /// `trust_level = "untrusted"`, and trusted under neither spelling:
+    /// Codex reads neither its `AGENTS.md` nor its [`FILE`].
+    Untrusted,
+    /// Neither: Codex reads its `AGENTS.md`, not its [`FILE`], and asks.
+    Unmarked,
 }
 
 impl UserConfig {
@@ -491,7 +507,7 @@ impl UserConfig {
     ///
     /// Refused when it does not read as TOML, as Codex refuses it: whether
     /// it names a server cannot be told of a file that does not parse.
-    fn read(homes: &AgentHomes) -> Result<Option<Self>, CodexMcpError> {
+    pub(crate) fn read(homes: &AgentHomes) -> Result<Option<Self>, CodexMcpError> {
         let Some(home) = &homes.codex_home else {
             return Ok(None);
         };
@@ -499,28 +515,35 @@ impl UserConfig {
         Ok(config_entry::read_through(&path, MAX_BYTES)?.map(|text| UserConfig { path, text }))
     }
 
-    /// Whether the user's config marks the project at `root` trusted,
-    /// under its root as it is handed or as its links resolve to: the
-    /// folder a program starts in is reported to it with its links
-    /// resolved, and a project is often reached through one.
+    /// Whether the user's config marks the project at `root` trusted.
     fn trusts(&self, root: &Path) -> Result<bool, CodexMcpError> {
+        Ok(self.trust(root)? == Trust::Trusted)
+    }
+
+    /// How the user's config marks the project at `root`, under its root as
+    /// it is handed or as its links resolve to: the folder a program starts
+    /// in is reported to it with its links resolved, and a project is often
+    /// reached through one. Trusted under either is trusted.
+    pub(crate) fn trust(&self, root: &Path) -> Result<Trust, CodexMcpError> {
         let mut roots = vec![root.to_path_buf()];
         roots.extend(install::resolved(root).filter(|resolved| resolved != root));
+        let mut trust = Trust::Unmarked;
         for root in &roots {
             // A path no TOML key can spell is none a project is marked by.
             let Some(key) = root.to_str() else {
                 continue;
             };
-            let level = self.get(&["projects", key, "trust_level"])?;
-            if level == Some(Value::from("trusted")) {
-                return Ok(true);
+            match self.get(&["projects", key, "trust_level"])? {
+                Some(level) if level == Value::from("trusted") => return Ok(Trust::Trusted),
+                Some(level) if level == Value::from("untrusted") => trust = Trust::Untrusted,
+                _ => {}
             }
         }
-        Ok(false)
+        Ok(trust)
     }
 
     /// What the user's config holds at `key`.
-    fn get(&self, key: &[&str]) -> Result<Option<Value>, CodexMcpError> {
+    pub(crate) fn get(&self, key: &[&str]) -> Result<Option<Value>, CodexMcpError> {
         config_entry::get(Format::Toml, &self.text, key).map_err(|source| {
             FileError::Entry {
                 path: self.path.clone(),
@@ -625,8 +648,9 @@ codes!(Warning {
     Self::Dropped { shape, .. } => shape,
 });
 
-/// Where nothing says `project` is trusted, for [`Warning::Untrusted`].
-fn unmarked(project: &Path, config: Option<&Path>) -> String {
+/// Where nothing says `project` is trusted, for [`Warning::Untrusted`],
+/// and for doctor's word on the same (`crate::doctor`).
+pub(crate) fn unmarked(project: &Path, config: Option<&Path>) -> String {
     match config {
         Some(config) => format!(
             "{} does not mark {} `trusted`",

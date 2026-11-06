@@ -232,6 +232,8 @@
         "add_mcp_key_repeated",
         "add_mcp_url_userinfo",
         "add_mcp_unfit",
+        "doctor_codex_untrusted",
+        "doctor_codex_distrusted",
         "exclude_key_invalid",
         "exclude_pattern_invalid",
         "exclude_path_unnamable",

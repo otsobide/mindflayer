@@ -32,6 +32,7 @@ pub mod copy;
 pub mod create;
 #[cfg(any(feature = "ts", feature = "schema"))]
 pub mod described;
+pub mod doctor;
 pub mod draft;
 pub mod everywhere;
 pub mod exclude;
