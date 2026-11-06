@@ -957,6 +957,28 @@ fn a_server_is_installed_by_its_bare_name_as_by_one_qualified() {
     }
 }
 
+/// A project a `mind.toml` marks names no agent to give a server: a bare
+/// name nothing offers is answered as nothing offered, as before servers
+/// could be installed, and only a server's name with why none can go
+/// there.
+#[test]
+fn a_bare_name_nothing_offers_is_not_offered_where_no_server_could_go_either() {
+    let dir = library();
+    older_project(&dir.path().join("legacy"));
+    weaver(dir.path(), &["link", "legacy"]).unwrap();
+
+    let typo = weaver(dir.path(), &["install", "-p", "legacy", "deplyo"]).unwrap_err();
+    let server = weaver(dir.path(), &["install", "-p", "legacy", "github"]).unwrap_err();
+
+    assert_eq!(typo.error.code(), "not_offered", "{}", typo.error);
+    assert_eq!(server.error.code(), "no_target", "{}", server.error);
+    assert_eq!(
+        server.error.to_string(),
+        "legacy names no agent in its settings that MCP servers are installed for, so none \
+         can be installed into it"
+    );
+}
+
 /// A server a project received is entries in its agents' config files,
 /// never a definition the project keeps (D-23): `rename`, `edit` and
 /// `remove` aimed at one are refused, saying what changes it instead.

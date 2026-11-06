@@ -1239,8 +1239,13 @@ pub fn offered(
 /// called, is a rule's however it is typed. When no kind offers it, the
 /// first refusal that says more than that nothing is offered is the one
 /// given: a project with nowhere to put a skill is told so, as before
-/// rules could be installed, rather than sent to gather one. A ledger that
-/// cannot be read is said first, from whichever kind found it.
+/// rules could be installed, rather than sent to gather one. Only where it
+/// is worth saying, though: a kind the project has nowhere to put is said
+/// over another kind offering nothing of the name only when the name is
+/// offered as that kind. Otherwise a typo in a skill's name, in a project
+/// a `mind.toml` marks, which names no agent to give a server, would be
+/// answered with why no MCP server can go there. A ledger that cannot be
+/// read is said first, from whichever kind found it.
 ///
 /// `from` is taken as typed first, so a shelf source's address or
 /// `workspace` means what it says, and only when that offers a kind nothing,
@@ -1290,13 +1295,25 @@ pub fn offered_typed(
             kinds,
         });
     }
+    // Some kind could go into the project, and offers nothing of the name.
+    let received = asked
+        .iter()
+        .any(|(_, asked)| matches!(asked, Err(InstallError::NotOffered { .. })));
+    let offered_as = |kind: Kind| {
+        offers(workspace, ledger, kind)
+            .is_ok_and(|offers| offers.iter().any(|offer| offer.name() == name))
+    };
     let index = asked
         .iter()
         .position(|(_, asked)| offering(asked))
         .or_else(|| {
-            asked
-                .iter()
-                .position(|(_, asked)| !matches!(asked, Err(InstallError::NotOffered { .. })))
+            asked.iter().position(|(kind, asked)| match asked {
+                Err(InstallError::NotOffered { .. }) => false,
+                Err(InstallError::NoTarget { .. } | InstallError::NoUsableTarget { .. }) => {
+                    !received || offered_as(*kind)
+                }
+                _ => true,
+            })
         })
         .unwrap_or(0);
     asked.swap_remove(index).1

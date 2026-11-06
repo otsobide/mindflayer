@@ -3948,7 +3948,11 @@ path offers.
 
 A server's name is a key (`mcp::name::is_key`), so `github` is asked of the
 skills, the rules and the servers alike, and `git/commits` of the rules
-alone (#95).
+alone (#95). A kind with nowhere to go in the project is then said over
+another that offers nothing of the name only when the name is offered as
+that kind: a project a `mind.toml` marks names no agent to give a server,
+and a typo in a skill's name there would otherwise be answered with why no
+server can go in, rather than that nothing of the name is offered.
 
 Taking one out reads the ledger instead (`install::uninstall_typed`): a bare
 name is the one kind recorded under it, one recorded as two is refused
