@@ -1225,8 +1225,10 @@ These are easy to break from a single file without noticing.
     (`apps/core/tests/fixtures/ledger-v<N>.sql`) for a test to migrate.
     What no SQL can know is handed to the step rather than read by it:
     schema 5 is told each linked project's id (`Ledger::open_knowing`, from
-    `WeaverWorkspace::known`), and schema 7 which URLs are one repository's
-    (`url::canonical`). A step that makes two rows one hands back the rows
+    `WeaverWorkspace::known`), and schema 7 each source's identity, the
+    name a gather would give it and its URL without a credential
+    (`url::canonical`, `SourceName::derived`, `url::redacted`), worked out
+    before the step (`spelled_sources`). A step that makes two rows one hands back the rows
     that went (`LedgerStore::merged`), whose folders whoever opened the
     ledger clears (`gather::clear_merged`) and a command that writes says.
 - **What is written outside the code is Mindweaver's, and a Mindflayer

@@ -3493,24 +3493,26 @@ is what the projects hold, not how today's code spells something. A project
 a `mind.toml` marks, an entry that will not open and an id two linked
 directories hold are handed in for none, and their records keep their route
 alone. Version 6 fills in nothing: no build before it installed an MCP
-server. Version 7 is handed what no SQL can do, which URLs are one
-repository's (`url::canonical`, the rule a gather finds a source by), as
-version 5 is handed each project's id, and its own SQL writes each row's
-identity in, names each source as a gather would (`owner-repo`,
-`SourceName::derived`) in the order the sources were first gathered, the
-later of two that would take one name numbered, and makes rows that turn out
-to be one place one, before the identity is made unique: the one whose shelf
+server. Version 7 is handed, as values, what no SQL can work out of a
+source's URL, as version 5 is handed each project's id: the identity it is
+(`url::canonical`, the rule a gather finds a source by), the name a gather
+would give it (`owner-repo`, `SourceName::derived`) and the URL without a
+credential (`url::redacted`), each worked out before the step
+(`spelled_sources`). Its own SQL writes each row's identity in, names each
+source by what it is handed in the order the sources were first gathered,
+the later of two that would take one name numbered, and makes rows that turn
+out to be one place one, before the identity is made unique: the one whose shelf
 was filled most recently is kept, by the rule the scrub keeps, what the
 other gathered goes with it, and every installation from it is from the kept
 one, its origin rewritten to the kept one's as version 3 spelled an origin,
 without the credential the kept one's URL may still hold, so an update finds
 where it came from offered there and no row is given one it did not hold. It
 is the second
-exception, and of another kind: what it is handed is a rule, today's, since
-no SQL can tell that two URLs are one repository's, and what the rule says
-of each row is written into the row, which a gather finds its source by from
-then on. A build that changes the rule changes which URLs are one, and so
-takes a step of its own to write each identity again. The rows that went are
+exception, and of another kind: what it is handed is what today's rules say
+of each row, since no SQL can tell that two URLs are one repository's, and
+once written into the row it is what a gather finds its source by. A build
+that changes a rule changes which URLs are one, and so takes a step of its
+own to write each identity again. The rows that went are
 handed back (`LedgerStore::merged`), and whoever opened the ledger removes
 their clones and shelf folders, which nothing points into any more
 (`gather::clear_merged`), a read too, since the step that made them nobody's

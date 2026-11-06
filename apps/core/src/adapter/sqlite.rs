@@ -330,11 +330,12 @@ impl Sqlite {
         }
         let mut merged = Vec::new();
         if found < 7 {
-            // What no SQL can do, which URLs are one repository's, handed
-            // to the step: the rule a gather finds a source by.
-            merged = seven(&transaction, canonical).map_err(|source| {
-                self.failed("naming each source and knowing it by its URL", source)
-            })?;
+            let failed =
+                |source| self.failed("naming each source and knowing it by its URL", source);
+            // What no SQL can work out of a URL, handed to the step as
+            // values, as the step to schema 5 is handed each project's id.
+            let spelled = spelled_sources(&transaction).map_err(failed)?;
+            merged = seven(&transaction, &spelled).map_err(failed)?;
         }
 
         transaction
@@ -2285,16 +2286,53 @@ CREATE UNIQUE INDEX sources_by_identity
 CREATE UNIQUE INDEX sources_by_name ON sources (name);
 ";
 
-/// The step to schema 7, through `transaction`, `canonical` being what
-/// spells a URL as the identity it is.
+/// What the step to schema 7 is handed of one source: what no SQL can work
+/// out of its URL, by today's rules.
+struct Spelled {
+    id: i64,
+    /// The URL every spelling of its repository is ([`canonical`]), the
+    /// rule a gather finds a source by.
+    identity: String,
+    /// The name a gather would give it ([`SourceName::derived`]), before
+    /// it is numbered for one another source takes first.
+    name: String,
+    /// Its URL without a credential ([`redacted`]).
+    clean: String,
+}
+
+/// What [`seven`] is handed of every source a ledger of an earlier schema
+/// holds, read through `transaction` before the step changes anything.
 ///
-/// What a version before it held is filled in, but not all of it by SQL:
-/// no SQL can tell that two URLs are one repository's, so the step is
-/// handed what can (`canonical`), as the step to schema 5 is handed each
-/// project's id, and its own SQL writes what that says in. So is a name,
-/// made of the identity by [`SourceName::derived`], in the order the
-/// sources were first gathered, the later of two that would take one
-/// numbered.
+/// Worked out here rather than inside the step, which writes it in with SQL
+/// of its own, as the step to schema 5 writes the ids it is handed: no SQL
+/// can tell that two URLs are one repository's, nor take a credential out
+/// of one. It is what today's rules say of each row, and once written it is
+/// what a gather finds the row by: a build that changes a rule takes a step
+/// of its own to write the rows again.
+fn spelled_sources(transaction: &Transaction<'_>) -> rusqlite::Result<Vec<Spelled>> {
+    let mut statement = transaction.prepare("SELECT id, url FROM sources ORDER BY id")?;
+    let rows = statement.query_map([], |row| Ok((row.get(0)?, row.get::<_, String>(1)?)))?;
+    rows.map(|row| {
+        row.map(|(id, url)| {
+            let identity = canonical(&url);
+            Spelled {
+                id,
+                name: SourceName::derived(&identity).to_string(),
+                clean: redacted(&url).into_owned(),
+                identity,
+            }
+        })
+    })
+    .collect()
+}
+
+/// The step to schema 7, through `transaction`, `spelled` being what no SQL
+/// can work out of each source's URL ([`spelled_sources`]).
+///
+/// What a version before it held is filled in by its own SQL from what it
+/// is handed, as the step to schema 5 writes in the ids it is handed: each
+/// row's identity, and its name, in the order the sources were first
+/// gathered, the later of two that would take one numbered.
 ///
 /// Rows that turn out to be one place, two spellings of one URL at one
 /// branch from one folder, become one before the identity is made unique,
@@ -2306,29 +2344,26 @@ CREATE UNIQUE INDEX sources_by_name ON sources (name);
 /// its origin rewritten to the kept one's as version 3 spelled an origin,
 /// without the credential the kept one's URL may hold, so an update finds
 /// where it came from offered there and no row is given a credential it
-/// did not hold. The rows that went
-/// are handed back ([`Merged`]), for the folders they had to go too, which
-/// nothing points into any more.
+/// did not hold. The rows that went are handed back ([`Merged`]), for the
+/// folders they had to go too, which nothing points into any more.
 ///
 /// A credential is left where the scrub finds it, which every command that
 /// writes runs ([`crate::gather::scrub`]): it rewrites a clone before its
 /// row, and a row this rewrote first would no longer say that its clone
 /// still holds the credential. The identity, the name and an origin this
 /// writes never hold one.
-fn seven(
-    transaction: &Transaction<'_>,
-    canonical: impl Fn(&str) -> String,
-) -> rusqlite::Result<Vec<Merged>> {
+fn seven(transaction: &Transaction<'_>, spelled: &[Spelled]) -> rusqlite::Result<Vec<Merged>> {
     transaction.execute_batch(SCHEMA_V7)?;
-    let urls: Vec<(i64, String)> = {
-        let mut statement = transaction.prepare("SELECT id, url FROM sources")?;
-        let rows = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
-        rows.collect::<Result<_, _>>()?
+    let of = |id: i64| {
+        spelled
+            .iter()
+            .find(|spelled| spelled.id == id)
+            .ok_or(rusqlite::Error::QueryReturnedNoRows)
     };
-    for (id, url) in urls {
+    for spelled in spelled {
         transaction.execute(
             "UPDATE sources SET canonical_url = ?2 WHERE id = ?1",
-            rusqlite::params![id, canonical(&url)],
+            rusqlite::params![spelled.id, spelled.identity],
         )?;
     }
 
@@ -2351,73 +2386,67 @@ fn seven(
         })?;
         rows.collect::<Result<_, _>>()?
     };
-    let mut pairs: Vec<(Source, i64)> = Vec::new();
+    // Each row that goes, as it was, and the row it is one with.
+    let mut pairs: Vec<(i64, Option<String>, String, i64)> = Vec::new();
     let mut kept: Option<&(i64, [String; 4])> = None;
     for row in &ranked {
         match kept {
             Some((into, identity)) if *identity == row.1 => {
-                let gone = transaction.query_row(
-                    "SELECT id, kind, url, reference, subdirectory, revision, directory, ''
-                       FROM sources WHERE id = ?1",
+                let (reference, directory) = transaction.query_row(
+                    "SELECT reference, directory FROM sources WHERE id = ?1",
                     [row.0],
-                    read_source,
+                    |row| Ok((row.get(0)?, row.get(1)?)),
                 )?;
-                pairs.push((gone, *into));
+                pairs.push((row.0, reference, directory, *into));
             }
             _ => kept = Some(row),
         }
     }
-    for (gone, into) in &pairs {
-        // Spelled without the credential the kept row may still hold, which
-        // the scrub takes out of the row and its own installations' origins
-        // later: an installation moved here held none, and is not to be
-        // given one.
-        let origin = transaction.query_row(
-            "SELECT url, reference FROM sources WHERE id = ?1",
+    for (gone, _, _, into) in &pairs {
+        let reference: Option<String> = transaction.query_row(
+            "SELECT reference FROM sources WHERE id = ?1",
             [into],
-            |row| {
-                let url = redacted(&row.get::<_, String>(0)?).into_owned();
-                Ok(match row.get::<_, Option<String>>(1)? {
-                    Some(reference) => format!("{url}#{reference}"),
-                    None => url,
-                })
-            },
+            |row| row.get(0),
         )?;
+        let clean = &of(*into)?.clean;
+        let origin = match reference {
+            Some(reference) => format!("{clean}#{reference}"),
+            None => clean.clone(),
+        };
         transaction.execute(
             "UPDATE installations SET source_id = ?1, origin = ?3 WHERE source_id = ?2",
-            rusqlite::params![into, gone.id, origin],
+            rusqlite::params![into, gone, origin],
         )?;
         // What it gathered goes with it, by the cascade.
-        transaction.execute("DELETE FROM sources WHERE id = ?1", [gone.id])?;
+        transaction.execute("DELETE FROM sources WHERE id = ?1", [gone])?;
     }
 
-    let identities: Vec<(i64, String)> = {
-        let mut statement =
-            transaction.prepare("SELECT id, canonical_url FROM sources ORDER BY id")?;
-        let rows = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+    let remaining: Vec<i64> = {
+        let mut statement = transaction.prepare("SELECT id FROM sources ORDER BY id")?;
+        let rows = statement.query_map([], |row| row.get(0))?;
         rows.collect::<Result<_, _>>()?
     };
-    let mut taken: Vec<SourceName> = Vec::new();
-    for (id, identity) in identities {
-        let wanted = SourceName::derived(&identity);
+    let mut taken: Vec<String> = Vec::new();
+    for id in remaining {
+        let wanted = &of(id)?.name;
         let name = std::iter::once(wanted.clone())
-            .chain((2..).map(|n| wanted.numbered(n)))
+            .chain((2..).map(|n| format!("{wanted}-{n}")))
             .find(|name| !taken.contains(name))
             .expect("one of endlessly many names is free");
         transaction.execute(
             "UPDATE sources SET name = ?2 WHERE id = ?1",
-            rusqlite::params![id, name.as_str()],
+            rusqlite::params![id, name],
         )?;
         taken.push(name);
     }
     transaction.execute_batch(SCHEMA_V7_INDEXES)?;
 
     let mut merged = Vec::new();
-    for (gone, into) in pairs {
+    for (gone, reference, directory, into) in pairs {
         merged.push(Merged {
-            url: gone.url,
-            reference: gone.reference,
-            directory: gone.directory,
+            url: Redacted::new(&of(gone)?.clean),
+            reference,
+            directory,
             into: transaction.query_row(
                 &format!("SELECT {SOURCE_COLUMNS} FROM sources WHERE id = ?1"),
                 [into],
