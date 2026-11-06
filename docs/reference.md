@@ -1021,6 +1021,7 @@ mcp linear into collapse, from load:../team:
   claude reaches: https://mcp.linear.app/mcp
   codex reaches: https://mcp.linear.app/mcp
   opencode reaches: https://mcp.linear.app/mcp
+  warning: Codex reads `linear` from /home/you/Projects/collapse/.codex/config.toml only in a project it trusts, and /home/you/.codex/config.toml does not mark /home/you/Projects/collapse `trusted`
 ```
 
 What does not fit the terminal scrolls with `j` and `k`, and `y` waits
@@ -3352,6 +3353,7 @@ would install mcp linear into collapse, from load:../team
   codex reaches: https://mcp.linear.app/mcp
   opencode reaches: https://mcp.linear.app/mcp
 nothing installed: it comes from elsewhere than this workspace's library, so add --yes to go ahead
+warning: Codex reads `linear` from /home/you/Projects/collapse/.codex/config.toml only in a project it trusts, and /home/you/.codex/config.toml does not mark /home/you/Projects/collapse `trusted`
 $ mindweaver install -p collapse linear --yes
 installed mcp linear into collapse, from load:../team
   claude reaches: https://mcp.linear.app/mcp
@@ -3360,6 +3362,7 @@ installed mcp linear into collapse, from load:../team
   set LINEAR_API_KEY (a secret) where the agents run: each reads it there, and no file holds it
   claude asks to approve it before it starts it in a session, though a run with `-p` starts it unasked
   opencode starts it without asking
+warning: Codex reads `linear` from /home/you/Projects/collapse/.codex/config.toml only in a project it trusts, and /home/you/.codex/config.toml does not mark /home/you/Projects/collapse `trusted`
 ```
 
 An input read from no variable cannot be given to any agent as a reference,

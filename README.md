@@ -302,7 +302,8 @@ the environment variable an agent reads it from (`--secret-env`,
 looks like a token. `mindweaver show mcp:github` says how each agent will be
 given it. Installing it gives it to each agent the project names, an entry in
 that agent's own config file, and says what each will run, then what to set
-before one starts it:
+before one starts it, and that Codex reads it only once you trust the
+project:
 
 ```
 $ mindweaver install -p collapse github
@@ -313,6 +314,7 @@ installed mcp github into collapse, from workspace
   set GITHUB_PERSONAL_ACCESS_TOKEN (a secret) where the agents run: each reads it there, and no file holds it
   claude asks to approve it before it starts it in a session, though a run with `-p` starts it unasked
   opencode starts it without asking
+warning: Codex reads `github` from /home/you/Projects/collapse/.codex/config.toml only in a project it trusts, and /home/you/.codex/config.toml does not mark /home/you/Projects/collapse `trusted`
 ```
 
 A server from a workspace yours loads, or from the shelf, is a command
