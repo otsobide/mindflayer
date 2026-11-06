@@ -201,6 +201,7 @@ every_store![
     a_source_remembers_the_revision_it_was_last_gathered_at,
     a_source_keeps_the_pin_its_last_gather_had_and_none_once_one_had_none,
     forgetting_a_source_takes_what_it_brought_and_frees_its_folder,
+    forgetting_one_artifact_a_source_supplied_leaves_the_rest_and_its_source,
     every_source_is_listed_by_url_then_branch_then_folder_even_with_nothing_gathered,
     a_gathered_artifact_reads_back_with_its_source,
     gathering_a_name_again_from_one_source_replaces_it_and_from_another_adds_it,
@@ -1631,6 +1632,53 @@ fn forgetting_a_source_takes_what_it_brought_and_frees_its_folder(mut store: Sto
     // A gather cancelled after registering it leaves nothing holding its
     // folder, so the next source given that name has it.
     assert_eq!(source(&store, &url).directory, forgotten.directory);
+}
+
+fn forgetting_one_artifact_a_source_supplied_leaves_the_rest_and_its_source(mut store: Store) {
+    let from = source(&store, &UrlMother::https());
+    let other = source(&store, &UrlMother::https());
+    let names = distinct_names(2);
+    let (gone, kept) = (&names[0], &names[1]);
+    // The name that goes, from both sources, and one beside it from the
+    // first: only the first's of that name is forgotten.
+    for (supplier, name) in [(&from, gone), (&from, kept), (&other, gone)] {
+        store
+            .record(
+                supplier,
+                Kind::Skill,
+                name,
+                &format!("skills/{}/{name}", supplier.directory),
+                None,
+                &UpstreamMother::random(),
+            )
+            .unwrap();
+    }
+    let mut installed = InstallRecordMother::skill(gone);
+    installed.source_id = Some(from.id);
+    installed.origin = Some(from.origin());
+    store.installed("collapse", &installed).unwrap();
+
+    assert!(store.ungathered(from.id, Kind::Skill, gone).unwrap());
+    assert!(!store.ungathered(from.id, Kind::Skill, gone).unwrap());
+    assert!(!store.ungathered(from.id, Kind::Rule, kept).unwrap());
+
+    store.reopen();
+    let mut left: Vec<(i64, ArtifactName)> = store
+        .gathered()
+        .unwrap()
+        .into_iter()
+        .map(|artifact| (artifact.source.id, artifact.name))
+        .collect();
+    left.sort();
+    let mut expected = vec![(from.id, kept.clone()), (other.id, gone.clone())];
+    expected.sort();
+    assert_eq!(left, expected, "{gone} forgotten from {} alone", from.name);
+    assert_eq!(store.sources().unwrap().len(), 2);
+    // What was installed from it is still from there: orphaned, as nothing
+    // there offers it, never told it came from nowhere.
+    let read = recorded(&store, "collapse", Kind::Skill, gone).expect("still recorded");
+    assert_eq!(read.source_id, Some(from.id));
+    assert_eq!(read.origin, Some(from.origin()));
 }
 
 fn every_source_is_listed_by_url_then_branch_then_folder_even_with_nothing_gathered(

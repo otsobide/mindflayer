@@ -256,6 +256,17 @@ pub trait LedgerStore: Debug + Send {
     /// otherwise hold on to its folder name. Its files are the caller's.
     fn forget_source(&self, id: i64) -> Result<bool, LedgerError>;
 
+    /// Forget the artifact of `kind` called `name` that the source `id`
+    /// supplied, and nothing it or another source supplied beside it:
+    /// whether there was one.
+    ///
+    /// For a gather that found its source no longer holds it at the commit
+    /// it took ([`crate::gather`]): what the shelf offers is what the
+    /// ledger records, so a row kept would go on offering a skill the
+    /// source dropped. An installation of it keeps its origin and its
+    /// source, and is orphaned once nothing offers it there.
+    fn ungathered(&self, id: i64, kind: Kind, name: &str) -> Result<bool, LedgerError>;
+
     /// Record one gathered artifact, where it sits and the one line a
     /// listing shows, and where it came from (`upstream`), replacing what
     /// that source held under the same name.
