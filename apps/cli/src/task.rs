@@ -1121,7 +1121,8 @@ impl Refusal {
                 | WeaverCommand::Gather(
                     GatherCommand::List { .. }
                     | GatherCommand::Sources { .. }
-                    | GatherCommand::Rename { .. },
+                    | GatherCommand::Rename { .. }
+                    | GatherCommand::Remove { .. },
                 )
                 | WeaverCommand::Install { .. }
                 | WeaverCommand::Uninstall { .. }
@@ -1194,7 +1195,8 @@ pub fn refused(words: &[String]) -> Option<Refusal> {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum Caution {
-    /// `remove --yes`, at either level: the artifact deleted.
+    /// `remove --yes`, at either level: the artifact deleted; and `gather
+    /// remove --yes`, every artifact a source put on the shelf.
     #[error("deletes an artifact: its folder and everything in it, or its file")]
     Removes,
     /// `uninstall`, every form of it, and `mindweaver remove --everywhere
@@ -1273,6 +1275,11 @@ impl Caution {
             }
             Some(WeaverCommand::Unlink { .. }) => vec![Caution::Unlinks],
             Some(WeaverCommand::Unload { .. }) => vec![Caution::Unloads],
+            // The folders of every artifact the source put on the shelf,
+            // and its clone.
+            Some(WeaverCommand::Gather(GatherCommand::Remove { yes, .. })) => {
+                when(*yes, &[Caution::Removes])
+            }
             #[cfg(feature = "ui")]
             Some(WeaverCommand::Ui(_)) => Vec::new(),
             None

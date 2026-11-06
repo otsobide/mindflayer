@@ -1464,6 +1464,7 @@ fn a_front_end_with_no_terminal_runs_everything_else() {
         "mindweaver gather list",
         "mindweaver gather sources --json",
         "mindweaver gather rename acme team",
+        "mindweaver gather remove --yes acme",
         "mindweaver install -p alpha deploy",
         "mindweaver install --all-projects deploy",
         // Half an install, which opens no screen: the command refuses it
@@ -1586,6 +1587,8 @@ fn a_line_that_takes_something_away_is_asked_about_for_what_it_takes() {
         ("mind -C alpha remove -y rule:style", vec![Removes]),
         ("mindweaver remove --yes skill:deploy", vec![Removes]),
         ("mindweaver remove -p alpha --yes deploy", vec![Removes]),
+        ("mindweaver gather remove --yes acme", vec![Removes]),
+        ("mind weaver gather remove acme -y", vec![Removes]),
         ("mind weaver remove --yes deploy", vec![Removes]),
         (
             "mindweaver remove --everywhere --yes skill:deploy",
@@ -1628,6 +1631,9 @@ fn a_line_that_takes_nothing_away_is_asked_about_for_nothing() {
     for said in [
         "mind remove deploy",
         "mindweaver remove --everywhere skill:deploy",
+        "mindweaver gather remove acme",
+        "mindweaver gather update --all",
+        "mindweaver gather rename acme team",
         "mind update --force",
         "mindweaver update --all --force",
         "mind update --yes",

@@ -1551,6 +1551,22 @@ pub enum GatherCommand {
         all: bool,
     },
 
+    /// Remove a source: its clone, what it put on the shelf and what the
+    /// workspace records of it. What was installed from it stays in each
+    /// project, recorded, and orphaned.
+    ///
+    /// Without --yes it says what would go, and every copy installed from
+    /// it, and removes nothing.
+    Remove {
+        /// The source, by its name, as `gather sources` lists it.
+        name: String,
+
+        /// Remove it. Without this nothing is removed, and the command says
+        /// what would be.
+        #[arg(short, long)]
+        yes: bool,
+    },
+
     /// List the sources the shelf is filled from: each by its name, with
     /// its URL, the branch or tag and the commit it is pinned to, how many
     /// skills it holds and when it was last gathered.

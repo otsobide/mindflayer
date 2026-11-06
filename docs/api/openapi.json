@@ -164,7 +164,7 @@
         "oneOf": [
           {
             "const": "removes",
-            "description": "`remove --yes`, at either level: the artifact deleted.",
+            "description": "`remove --yes`, at either level: the artifact deleted; and `gather\nremove --yes`, every artifact a source put on the shelf.",
             "type": "string"
           },
           {

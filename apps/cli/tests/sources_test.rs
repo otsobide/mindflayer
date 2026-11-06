@@ -448,3 +448,138 @@ fn gather_update_all_with_no_sources_says_how_to_gather_one() {
     );
     assert!(!dir.path().join(WEAVER_DIR).join("mindweaver.db").exists());
 }
+
+// ---------------------------------------------------------------------------
+// gather remove
+// ---------------------------------------------------------------------------
+
+/// The folders the source called `name` has: its clone and its shelf.
+fn folders_of(dir: &Path, name: &str) -> [PathBuf; 2] {
+    let workspace = WeaverWorkspace::open(dir).unwrap();
+    let ledger = workspace.ledger_for_reading().unwrap();
+    let source = ledger
+        .sources()
+        .unwrap()
+        .into_iter()
+        .find(|source| source.name.as_str() == name)
+        .unwrap();
+    [
+        workspace.cache_dir().join(&source.directory),
+        workspace.gathered_dir(Kind::Skill).join(&source.directory),
+    ]
+}
+
+#[test]
+fn gather_remove_without_yes_says_what_would_go_and_what_would_be_orphaned_and_removes_nothing() {
+    let (dir, _source, url) = gathered_from(&["deploy", "review"]);
+    weaver(dir.path(), &["gather", "git", &url, "--name", "acme"]).unwrap();
+    installed_in_collapse(dir.path(), &["deploy"]);
+    let [clone, shelf] = folders_of(dir.path(), "acme");
+
+    let outcome = weaver(dir.path(), &["gather", "remove", "acme"]).unwrap();
+
+    assert!(outcome.ok, "{:?}", outcome.stderr);
+    assert!(outcome.stderr.is_empty(), "{:?}", outcome.stderr);
+    assert_eq!(
+        outcome.stdout,
+        format!(
+            "would remove the source acme, gathered from {url}, and the 2 skills it holds on the shelf\n\
+             would delete {}\n\
+             would delete {}\n\
+             would leave deploy in collapse, installed from it, orphaned\n\
+             nothing removed: add --yes to go ahead\n",
+            clone.display(),
+            shelf.display()
+        )
+    );
+    assert!(clone.is_dir() && shelf.is_dir());
+    let listed = weaver(dir.path(), &["gather", "sources"]).unwrap();
+    assert!(listed.stdout.starts_with("acme "), "{}", listed.stdout);
+}
+
+#[test]
+fn gather_remove_yes_deletes_its_folders_and_rows_and_its_copies_read_as_orphaned() {
+    let (dir, _source, url) = gathered_from(&["deploy", "review"]);
+    weaver(dir.path(), &["gather", "git", &url, "--name", "acme"]).unwrap();
+    installed_in_collapse(dir.path(), &["deploy"]);
+    let [clone, shelf] = folders_of(dir.path(), "acme");
+
+    let outcome = weaver(dir.path(), &["gather", "remove", "acme", "--yes"]).unwrap();
+
+    assert!(outcome.ok, "{:?}", outcome.stderr);
+    assert_eq!(
+        outcome.stdout,
+        format!(
+            "removed the source acme, gathered from {url}, and the 2 skills it held on the shelf\n\
+             deleted {}\n\
+             deleted {}\n\
+             left deploy in collapse, installed from it, orphaned\n",
+            clone.display(),
+            shelf.display()
+        )
+    );
+    assert_eq!(
+        stderr_codes(&outcome),
+        [None],
+        "a note, with no code: {:?}",
+        outcome.stderr
+    );
+    assert!(outcome.stderr[0].text.starts_with("note: "));
+    assert!(!clone.exists() && !shelf.exists());
+    let listed = weaver(dir.path(), &["gather", "sources"]).unwrap();
+    assert!(
+        listed.stdout.starts_with("no sources yet"),
+        "{}",
+        listed.stdout
+    );
+    let shelved = weaver(dir.path(), &["gather", "list"]).unwrap();
+    assert!(
+        shelved.stdout.starts_with("nothing gathered yet"),
+        "{}",
+        shelved.stdout
+    );
+    // Recorded still, where it came from said, and offered by nothing.
+    assert_eq!(
+        standing_in_collapse(dir.path()),
+        [(String::from("deploy"), String::from("orphaned"))]
+    );
+    let copy = dir.path().join("collapse/.claude/skills/deploy/SKILL.md");
+    assert!(copy.is_file(), "the copy stays where it was installed");
+}
+
+#[test]
+fn gather_remove_refuses_a_folder_the_ledger_does_not_record_as_the_sources_own() {
+    let (dir, _source, url) = gathered_from(&["deploy"]);
+    weaver(dir.path(), &["gather", "git", &url, "--name", "acme"]).unwrap();
+    // A folder on the shelf no source records, and one beside the
+    // workspace that a hand-edited ledger names.
+    let workspace = WeaverWorkspace::open(dir.path()).unwrap();
+    let stray = workspace.gathered_dir(Kind::Skill).join("stray");
+    fs::create_dir_all(stray.join("notes")).unwrap();
+    let outside = dir.path().join("keep");
+    fs::create_dir_all(outside.join("notes")).unwrap();
+
+    let unknown = weaver(dir.path(), &["gather", "remove", "stray", "--yes"]).unwrap_err();
+    rusqlite::Connection::open(workspace.ledger_path())
+        .unwrap()
+        .execute(
+            "UPDATE sources SET directory = '../../keep' WHERE name = 'acme'",
+            [],
+        )
+        .unwrap();
+    let misfiled = weaver(dir.path(), &["gather", "remove", "acme", "--yes"]).unwrap_err();
+    let planned = weaver(dir.path(), &["gather", "remove", "acme"]).unwrap_err();
+
+    assert_eq!(unknown.error.code(), "source_not_found");
+    assert_eq!(misfiled.error.code(), "source_folder_not_its_own");
+    assert_eq!(planned.error.code(), "source_folder_not_its_own");
+    assert_eq!(
+        misfiled.error.to_string(),
+        "the source `acme` is recorded with the folder `../../keep`, which is no one folder of \
+         the shelf or the cache, so nothing is removed"
+    );
+    assert!(stray.join("notes").is_dir());
+    assert!(outside.join("notes").is_dir());
+    let listed = weaver(dir.path(), &["gather", "sources"]).unwrap();
+    assert!(listed.stdout.starts_with("acme "), "{}", listed.stdout);
+}

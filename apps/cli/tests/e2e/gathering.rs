@@ -427,6 +427,63 @@ fn gather_update_gathers_a_source_again_and_status_then_says_what_moved_and_what
 }
 
 #[test]
+fn gather_remove_says_what_would_go_and_what_it_would_leave_orphaned() {
+    let scenario = acme();
+    scenario
+        .given("~/Projects", "mindweaver gather git ../src/acme-skills")
+        .given("~/Projects", "mindweaver install -p collapse commit-style");
+
+    scenario
+        .run("~/Projects", "mindweaver gather remove src-acme-skills")
+        .succeeds()
+        .prints(
+            "would remove the source src-acme-skills, gathered from ../src/acme-skills, and the \
+             2 skills it holds on the shelf\n\
+             would delete /home/you/Projects/.mindweaver/cache/..-src-acme-skills\n\
+             would delete /home/you/Projects/.mindweaver/skills/..-src-acme-skills\n\
+             would leave commit-style in collapse, installed from it, orphaned\n\
+             nothing removed: add --yes to go ahead\n",
+        )
+        .quiet();
+
+    assert!(scenario.exists("~/Projects/.mindweaver/skills/..-src-acme-skills/commit-style"));
+}
+
+#[test]
+fn gather_remove_yes_takes_the_source_and_leaves_its_copies_orphaned() {
+    let scenario = acme();
+    scenario
+        .given("~/Projects", "mindweaver gather git ../src/acme-skills")
+        .given("~/Projects", "mindweaver install -p collapse commit-style");
+
+    scenario
+        .run(
+            "~/Projects",
+            "mindweaver gather remove src-acme-skills --yes",
+        )
+        .succeeds()
+        .prints(
+            "removed the source src-acme-skills, gathered from ../src/acme-skills, and the 2 \
+             skills it held on the shelf\n\
+             deleted /home/you/Projects/.mindweaver/cache/..-src-acme-skills\n\
+             deleted /home/you/Projects/.mindweaver/skills/..-src-acme-skills\n\
+             left commit-style in collapse, installed from it, orphaned\n",
+        )
+        .says(
+            "note: nothing offers what was installed from it any more; `mindweaver uninstall \
+             --orphaned --all-projects` takes out what nothing offers\n",
+        );
+
+    assert!(!scenario.exists("~/Projects/.mindweaver/skills/..-src-acme-skills"));
+    assert!(!scenario.exists("~/Projects/.mindweaver/cache/..-src-acme-skills"));
+    scenario
+        .run("~/Projects", "mindweaver status")
+        .succeeds()
+        .prints("commit-style  orphaned  claude,codex,opencode  ../src/acme-skills\n")
+        .quiet();
+}
+
+#[test]
 fn a_gathered_skill_installs_from_the_source_it_came_from() {
     let scenario = acme();
     scenario.given("~/Projects", "mindweaver gather git ../src/acme-skills");

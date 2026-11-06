@@ -7,7 +7,7 @@ use std::path::Path;
 use mindweaver_core::gather::{self, Gathered, Report, Request, Scrub, Watch};
 use mindweaver_core::install::{offered_by_loads, Offer};
 use mindweaver_core::ledger::{Ledger, SourceListing};
-use mindweaver_core::sources::{self, Regathered, Renamed, Which};
+use mindweaver_core::sources::{self, Regathered, Removal, Renamed, Which};
 use mindweaver_core::url::redacted;
 use mindweaver_core::{Kind, WeaverWorkspace};
 
@@ -78,6 +78,23 @@ pub(crate) fn run_gather(
             };
             match sources::update(&workspace, &ledger, which, watch) {
                 Ok(updated) => Ok(said.before(regathered(&updated))),
+                Err(error) => Err(Failure {
+                    error: Box::new(error.into()),
+                    warnings: said.lines(),
+                }),
+            }
+        }
+        GatherCommand::Remove { name, yes } => {
+            let workspace = workspace_here(directory, lookup)?;
+            if !*yes {
+                let ledger = workspace.ledger_for_reading().map_err(CliError::from)?;
+                let removal =
+                    sources::plan_removal(&workspace, &ledger, name).map_err(CliError::from)?;
+                return Ok(removing(&removal, false));
+            }
+            let (ledger, said) = ledger_to_change(&workspace)?;
+            match sources::remove(&workspace, &ledger, name) {
+                Ok(removal) => Ok(said.before(removing(&removal, true))),
                 Err(error) => Err(Failure {
                     error: Box::new(error.into()),
                     warnings: said.lines(),
@@ -166,6 +183,63 @@ fn regathered(updated: &[Regathered]) -> Outcome {
                 outcome.ok = false;
             }
         }
+    }
+    outcome
+}
+
+/// What removing a source would do, `done` or not: the source, by its name
+/// and where it was gathered from, and what it holds on the shelf, then
+/// each folder deleted, then each copy a project the workspace links
+/// installed from it, left there with its record and orphaned, by the name
+/// it is installed as and its project.
+///
+/// Not refused without `--yes`, as `remove` of an artifact is: the dry run
+/// says what would go and what would be left orphaned, which is what it is
+/// asked for, and exits as a dry run of `remove --everywhere` does. What is
+/// left orphaned once it is done is no failure either, being what removing
+/// a source does, and a note says what takes them out. A project that
+/// cannot be opened is a warning, since what it installed from the source
+/// cannot be told.
+fn removing(removal: &Removal, done: bool) -> Outcome {
+    let (would, deleted, left) = if done {
+        ("removed", "deleted", "left")
+    } else {
+        ("would remove", "would delete", "would leave")
+    };
+    let held = if done { "held" } else { "holds" };
+    let mut outcome = Outcome::plain(format!(
+        "{would} the source {}, gathered from {}, and the {} it {held} on the shelf\n",
+        printable(&removal.source.name),
+        printable(&removal.source.origin()),
+        plural(removal.artifacts, "skill"),
+    ));
+    for folder in &removal.folders {
+        let _ = writeln!(outcome.stdout, "{deleted} {}", folder.display());
+    }
+    for copy in &removal.installed {
+        let _ = writeln!(
+            outcome.stdout,
+            "{left} {} in {}, installed from it, orphaned",
+            printable(&super::install::named(copy.kind, &copy.name)),
+            printable(copy.project.name()),
+        );
+    }
+    if !done {
+        outcome
+            .stdout
+            .push_str("nothing removed: add --yes to go ahead\n");
+    } else if !removal.installed.is_empty() {
+        outcome.stderr.push(Warning::from(String::from(
+            "note: nothing offers what was installed from it any more; `mindweaver uninstall \
+             --orphaned --all-projects` takes out what nothing offers",
+        )));
+    }
+    for failure in &removal.unread {
+        outcome.stderr.push(Warning::coded(
+            failure.code(),
+            format!("warning: {failure}"),
+        ));
+        outcome.ok = false;
     }
     outcome
 }
