@@ -65,10 +65,12 @@ mod blanked;
 mod expressible;
 mod given;
 pub(crate) mod name;
+mod runs;
 mod token;
 
 pub use expressible::{Expressibility, Inexpressible};
 pub use given::{Address, Given, Program, Repeated};
+pub use runs::Runs;
 
 /// The format a definition is written in, and the newest this build reads.
 ///

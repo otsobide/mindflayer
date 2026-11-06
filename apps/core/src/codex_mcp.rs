@@ -92,7 +92,7 @@ use crate::code::codes;
 use crate::config_entry::{self, ConfigFile, Edit, EntryError, FileError, Format, Value, Written};
 use crate::hash;
 use crate::install;
-use crate::mcp::{self, Inexpressible, McpDefinition, Transport, TransportType};
+use crate::mcp::{self, Inexpressible, McpDefinition, Runs, Transport, TransportType};
 use crate::value::{ArtifactName, ContentHash, InputName, VariableName};
 
 /// Where Codex reads a project's servers, from its root.
@@ -141,6 +141,13 @@ impl Entry {
     /// it is written, and what one an agent's file holds is told by.
     pub fn fingerprint(&self) -> ContentHash {
         hash::fingerprint(&self.canonical())
+    }
+
+    /// What the agent runs or reaches, read off the entry as it is written,
+    /// its `command` and `args`, or its `url`: what an install says it gives the agent before it writes
+    /// anything, never spelled again from the definition.
+    pub fn runs(&self) -> Runs {
+        Runs::of(&self.value).expect("an entry is written with a program or an address")
     }
 }
 
