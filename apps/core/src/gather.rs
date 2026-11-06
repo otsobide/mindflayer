@@ -703,8 +703,8 @@ fn look(
         warnings: Vec::new(),
     };
     let shelf = into.join("shelf");
-    let leave_out = left_off_the_shelf();
     for (directory, folder, artifact) in &taken {
+        let leave_out = left_off_the_shelf(request, &clone.root, directory);
         let copied = copy::replace_leaving(directory, &shelf.join(folder), &clone.root, &leave_out);
         if let Err(source) = copied {
             failures.push(Failure::Copy {
@@ -1244,13 +1244,13 @@ pub(crate) fn place(
     // since the revision a source names is the one its shelf holds.
     ledger.saw_source(source.id, clone.revision.as_deref(), pin)?;
 
-    let leave_out = left_off_the_shelf();
     watch.report(Progress::Placing {
         done: 0,
         total: taken.len(),
     });
     for (done, (directory, folder, artifact)) in taken.iter().enumerate() {
         let destination = shelf.join(folder);
+        let leave_out = left_off_the_shelf(request, &clone.root, directory);
         let placed = copy::replace_leaving(directory, &destination, &clone.root, &leave_out);
         watch.report(Progress::Placing {
             done: done + 1,
@@ -1347,13 +1347,25 @@ pub(crate) fn place(
     Ok(report)
 }
 
-/// What no copy on the shelf holds at a skill's top: what no install
-/// copies, so the shelf holds what a project is given and a plugin's hooks
-/// and servers are never offered, and git's own folder, which only a skill
-/// that is the whole repository has at its top: its clone's.
-fn left_off_the_shelf() -> Vec<&'static str> {
+/// What no copy on the shelf holds at the top of the skill at `directory`,
+/// found as `request` searches the repository cloned at `clone`: what no
+/// install copies, so the shelf holds what a project is given and a
+/// plugin's hooks and servers are never offered, and git's own folder,
+/// which only a skill that is the whole repository has at its top: its
+/// clone's.
+///
+/// And for a skill that is the whole of the plugin a marketplace lists
+/// ([`Search::Plugin`]), what that plugin holds beside its skills where it
+/// keeps each ([`crate::marketplace::Holding`]): said of it and never taken,
+/// as from a plugin whose skills are folders of it.
+fn left_off_the_shelf(request: &Request, clone: &Path, directory: &Path) -> Vec<&'static str> {
     let mut leave_out = crate::install::left_out_names().to_vec();
     leave_out.push(".git");
+    let plugin = matches!(request.search, Search::Plugin { .. });
+    if plugin && paths::normalize(directory) == paths::normalize(&clone.join(&request.subdirectory))
+    {
+        leave_out.extend(crate::marketplace::Holding::kept_in());
+    }
     leave_out
 }
 

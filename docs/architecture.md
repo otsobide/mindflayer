@@ -3567,10 +3567,13 @@ A plugin's licence, as the catalog gives it, is a skill's that says none
 What a plugin holds beside its skills, its hooks, its agents and its MCP
 servers, as its entry declares them or its folder keeps them
 (`marketplace::Holding`), is said in a note and never taken: none of it is a
-skill, and each is something an agent runs. Each plugin's gather is
-watched, cancelled before it places and logged as a gather is; one that
-fails is said by its entry beside the rest, and once one is cancelled the
-rest are not begun.
+skill, and each is something an agent runs. A plugin that is one skill, its
+`SKILL.md` at its root or its root the skill its entry names, is put on the
+shelf without them, where it keeps each (`hooks`, `agents`, `.mcp.json`), as
+a skill's `.claude-plugin` is left off, and compared without them too. Each
+plugin's gather is watched, cancelled before it places and logged as a
+gather is; one that fails is said by its entry beside the rest, and once one
+is cancelled the rest are not begun.
 
 The schema's ninth step is what keeps them ([why the ledger is
 SQLite](#why-the-ledger-is-sqlite)): `entry` beside the `parent_id` version 7

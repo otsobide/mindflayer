@@ -229,6 +229,12 @@ impl Holding {
 
     const ALL: [Holding; 3] = [Holding::Hooks, Holding::Agents, Holding::McpServers];
 
+    /// Where a plugin keeps each of them, from its root: what a skill that
+    /// is the whole of its plugin is put on the shelf without.
+    pub(crate) fn kept_in() -> impl Iterator<Item = &'static str> {
+        Holding::ALL.into_iter().map(|holding| holding.declared().1)
+    }
+
     /// What the plugin at `root` holds of them, as files or folders where a
     /// plugin keeps each: looked at, never read or followed.
     pub fn held_at(root: &Path) -> Vec<Holding> {

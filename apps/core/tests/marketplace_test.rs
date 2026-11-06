@@ -772,6 +772,65 @@ fn a_plugins_folders_are_its_own_whatever_its_entry_spells() {
 }
 
 #[test]
+fn a_plugin_that_is_one_skill_is_gathered_without_its_hooks_agents_and_servers() {
+    // One found by its root's `SKILL.md`, and one whose entry names its
+    // root as its skill.
+    let entries = [
+        r#"{"name": "solo", "source": "./solo"}"#,
+        r#"{"name": "listed", "source": "./listed", "skills": ["./"]}"#,
+    ]
+    .map(String::from);
+    let mut files = vec![(
+        String::from(".claude-plugin/marketplace.json"),
+        catalog("m", &entries),
+    )];
+    for plugin in ["solo", "listed"] {
+        files.extend([
+            (format!("{plugin}/SKILL.md"), skill(plugin, "One skill")),
+            (format!("{plugin}/notes.md"), String::from("its own")),
+            (format!("{plugin}/hooks/hooks.json"), String::from("{}")),
+            (
+                format!("{plugin}/agents/helper.md"),
+                String::from("an agent"),
+            ),
+            (format!("{plugin}/.mcp.json"), String::from("{}")),
+        ]);
+    }
+    let files: Vec<(&str, &str)> = files
+        .iter()
+        .map(|(path, text)| (path.as_str(), text.as_str()))
+        .collect();
+    let market = repository(&files);
+    let routes = Arc::new(Routes::default().to(MARKET, &market));
+    let (_ws, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let report = marketplace::gather(&workspace, &ledger, &request(&routes, Pick::All)).unwrap();
+
+    assert_eq!(report.children.len(), 2);
+    for child in &report.children {
+        let gathered = child.outcome.as_ref().unwrap();
+        assert_eq!(gathered.added.len(), 1, "{child:?}");
+        let copy = &gathered.added[0].path;
+        assert!(copy.join("SKILL.md").is_file() && copy.join("notes.md").is_file());
+        for held in ["hooks", "agents", ".mcp.json"] {
+            assert!(!copy.join(held).exists(), "{}: {held}", child.entry);
+        }
+        // Said, as of a plugin whose skills are folders of it.
+        assert_eq!(
+            child.holds,
+            [Holding::Hooks, Holding::Agents, Holding::McpServers]
+        );
+    }
+    // Compared without them too, so a gather again changes nothing.
+    let again = marketplace::gather(&workspace, &ledger, &request(&routes, Pick::All)).unwrap();
+    for child in &again.children {
+        let gathered = child.outcome.as_ref().unwrap();
+        assert_eq!(gathered.unchanged.len(), 1, "{child:?}");
+    }
+}
+
+#[test]
 fn a_plugin_that_cannot_be_fetched_is_said_and_the_rest_gathered() {
     let mixed = mixed();
     // The marketplace and the monorepo, and nothing at acme/tools.
