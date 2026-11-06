@@ -5,8 +5,9 @@ import type { Given } from '@/api/generated/Given'
  * A program and an address, each as the form holds it while it is typed:
  * what the options of `add mcp` say, and nothing else, so every field is
  * one of an option's values. A secret is the name of the variable an
- * agent reads it from, and no field holds a secret's value, there being
- * no option that takes one.
+ * agent reads it from, and no field in a secret's place holds its value,
+ * there being no option that takes one; a setting and a header are values
+ * written into the library as typed, which each says no secret goes in.
  */
 export interface Fields {
   transport: 'program' | 'address'

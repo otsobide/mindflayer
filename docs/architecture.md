@@ -7628,8 +7628,12 @@ What the pages offer:
   and by its code before it is sent, and again by the line when it runs. A
   secret is the name of the variable an agent reads it from, each field in
   a secret's place labelled so, with a note that no value is stored: a
-  `Given` has no field a secret's value could go in, so nothing the form
-  sends can carry one, which a test of the request holds it to.
+  `Given` holds a secret as that name alone, so no field in a secret's
+  place sends a value, which a test of the request holds it to. A setting
+  of the environment and a header are values `add mcp` writes as typed
+  (`--env`, `--header`), which the form says no secret goes in: core
+  refuses one that looks like a token, and nothing else tells a secret
+  typed there from a setting, as the options' own note says.
 - **An MCP server that asks first, confirmed on the matrix**, as the
   install screen confirms it ([installing an MCP
   server](#installing-an-mcp-server)). A plan answers, beside its tasks,

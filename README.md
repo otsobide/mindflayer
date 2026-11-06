@@ -152,8 +152,10 @@ project nothing trusts or a variable that is not set where the agents run.
 Its form adds a server, or changes how one is started or reached: a
 program, its arguments and settings, or an address and its headers. A
 secret is only ever the name of the environment variable an agent reads it
-from, which is all Mindweaver stores: the form has no field for its value.
-Core judges what you type as `mindweaver add mcp` or `mindweaver edit`
+from, which is all Mindweaver stores: no field in a secret's place takes
+its value. A setting or a header is written into the library as you type
+it, as `--env` and `--header` write one, so no secret goes there. Core
+judges what you type as `mindweaver add mcp` or `mindweaver edit`
 would, and the line is shown before it runs.
 
 ### Loaded workspaces

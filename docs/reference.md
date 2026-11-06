@@ -2219,7 +2219,10 @@ events or not, each header, each secret header, a bearer token and each
 part of the address read from a variable). Every field is a value of an
 option of `mindweaver add mcp`, and a secret only ever the name of the
 environment variable an agent reads it from, which the form says no value
-is stored for: it has no field a secret's value could go in. As you type,
+is stored for: no field in a secret's place takes its value. A setting of
+the environment and a header are values written into the library as
+typed, as `--env` and `--header` write them, which the form says no secret
+goes in. As you type,
 core judges it as `mindweaver add mcp` would, and says why it would refuse
 it, in its words. **Add the server** runs the line, shown first:
 
