@@ -24,6 +24,7 @@ use std::time::Duration;
 use mindweaver_core::code::Said;
 use mindweaver_core::gather::Watch;
 use mindweaver_core::resolve::{self, resolve, Intent, Resolved};
+use mindweaver_core::status::{EntryStatus, State};
 use mindweaver_core::view::{self, Directory, Held, LoadedWorkspace, Snapshot};
 use mindweaver_core::{
     scan, AgentHomes, Kind, MarkerFile, MindProject, Template, WeaverWorkspace, WorkspaceError,
@@ -660,7 +661,7 @@ fn held(entry: String, project: &view::Project) -> Member {
         own: false,
         elsewhere: false,
         holdings: Ok(Holdings {
-            items: items(&project.artifacts),
+            items: items_and_entries(&project.artifacts, &project.entries),
             agents: project.agents.clone(),
             named: settings
                 .map(|settings| settings.agents.clone())
@@ -709,6 +710,30 @@ fn items(artifacts: &[Held]) -> Vec<Item> {
             agents: held.agents.clone(),
         })
         .collect()
+}
+
+/// A project's artifacts as rows, and after them each MCP server's entry
+/// somebody keeps in one of its agents' config files, as `status` lists
+/// it (D-23): a row of its own, foreign, with the agent whose file holds
+/// it. One Mindweaver installed is its installation's row already, whose
+/// badges say which agents it reaches.
+fn items_and_entries(artifacts: &[Held], entries: &[EntryStatus]) -> Vec<Item> {
+    let mut rows = items(artifacts);
+    rows.extend(
+        entries
+            .iter()
+            .filter(|entry| entry.state == State::Foreign)
+            .map(|entry| Item {
+                kind: Kind::Mcp,
+                name: entry.name.to_string(),
+                summary: String::new(),
+                issues: Vec::new(),
+                broken: None,
+                state: Some(entry.state),
+                agents: vec![entry.agent],
+            }),
+    );
+    rows
 }
 
 /// What each of `said` says, one line each.

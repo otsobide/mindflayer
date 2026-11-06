@@ -3980,3 +3980,44 @@ fn a_line_that_reads_standard_input_is_not_run_from_the_screen() {
     assert!(done.ok, "{done:?}");
     assert_eq!(fs::read_to_string(&manifest).unwrap(), rewritten);
 }
+
+/// A project's rows show the MCP servers it received, each with a badge
+/// in each agent's place it reaches, and each somebody keeps in an agent's
+/// config file as foreign, as `status` lists them.
+#[test]
+fn a_projects_rows_show_its_mcp_servers_installed_and_somebodys() {
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+    let collapse = dir.path().join("collapse");
+    fs::create_dir(&collapse).unwrap();
+    new_project(&collapse);
+    weaver(dir.path(), &["link", "collapse"]).unwrap();
+    let folder = own_directory_for(dir.path(), Kind::Mcp);
+    fs::create_dir_all(&folder).unwrap();
+    fs::write(
+        folder.join("github.toml"),
+        mindweaver_core::mother::McpMother::plain_program("github"),
+    )
+    .unwrap();
+    weaver(dir.path(), &["install", "-p", "collapse", "github"]).unwrap();
+    let claude = fs::read_to_string(collapse.join(".mcp.json")).unwrap();
+    fs::write(
+        collapse.join(".mcp.json"),
+        claude.replacen(
+            "\"mcpServers\": {",
+            "\"mcpServers\": {\n    \"theirs\": {\"type\": \"http\", \"url\": \"https://example.com/mcp\"},",
+            1,
+        ),
+    )
+    .unwrap();
+    let app = tui_in(dir.path());
+
+    let drawn = tui_drawn(&app);
+
+    for row in [
+        "mcp   github  current  CC CX OC",
+        "mcp   theirs  foreign  CC",
+    ] {
+        assert!(drawn.contains(row), "{row}\n{drawn}");
+    }
+}

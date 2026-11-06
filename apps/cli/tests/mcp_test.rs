@@ -1355,3 +1355,106 @@ fn a_server_goes_into_several_projects_each_said_as_one_install_says_it() {
     );
     assert_eq!(installed.stderr.len(), 2);
 }
+
+/// Status lists a server's entries an agent each, how each stands and
+/// where it came from, beside somebody's the agents' files hold, in the
+/// text as in the JSON.
+#[test]
+fn status_lists_each_entry_of_a_server_an_agent_each_somebodys_among_them() {
+    let (dir, _codex, home) = installing(&McpMother::plain_program("github"));
+    let app = dir.path().join("app");
+    weaver(dir.path(), &["install", "-p", "app", "github", &home]).unwrap();
+    // Codex's entry changed by hand, and a server of somebody's beside ours.
+    let codex = fs::read_to_string(app.join(".codex/config.toml")).unwrap();
+    fs::write(
+        app.join(".codex/config.toml"),
+        codex.replacen("\"--workspace\"", "\"--verbose\"", 1),
+    )
+    .unwrap();
+    let claude = fs::read_to_string(app.join(".mcp.json")).unwrap();
+    fs::write(
+        app.join(".mcp.json"),
+        claude.replacen(
+            "\"mcpServers\": {",
+            "\"mcpServers\": {\n    \"theirs\": {\"type\": \"http\", \"url\": \"https://example.com/mcp\"},",
+            1,
+        ),
+    )
+    .unwrap();
+
+    let text = weaver(dir.path(), &["status", "-p", "app"]).unwrap();
+    let json = weaver(dir.path(), &["status", "-p", "app", "--json"]).unwrap();
+    let here = mind(&app, &["status"]).unwrap();
+
+    assert_eq!(
+        text.stdout,
+        "\
+github  current  claude    workspace
+theirs  foreign  claude
+github  edited   codex     workspace
+github  current  opencode  workspace
+"
+    );
+    assert!(text.ok, "{:?}", text.stderr);
+    assert_eq!(here.stdout, text.stdout);
+    let data: serde_json::Value = serde_json::from_str(&json.stdout).unwrap();
+    let entries: Vec<(&str, &str, &str)> = data["data"]["projects"][0]["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| {
+            (
+                entry["agent"].as_str().unwrap(),
+                entry["name"].as_str().unwrap(),
+                entry["state"].as_str().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        entries,
+        [
+            ("claude", "github", "current"),
+            ("claude", "theirs", "foreign"),
+            ("codex", "github", "edited"),
+            ("opencode", "github", "current"),
+        ]
+    );
+    // The installation's own row, as every installed artifact has, says it
+    // as a whole.
+    assert_eq!(
+        data["data"]["projects"][0]["artifacts"][0]["state"],
+        "edited"
+    );
+}
+
+/// A server an agent of the project is given no entry of is said of it,
+/// as a rule some of its agents read nowhere is, in `missed`.
+#[test]
+fn status_says_which_agents_a_server_the_project_received_does_not_reach() {
+    let (dir, _codex, home) = installing(&McpMother::create("github", GITHUB, "http"));
+    weaver(dir.path(), &["install", "-p", "app", "github", &home]).unwrap();
+
+    let text = weaver(dir.path(), &["status", "-p", "app"]).unwrap();
+    let json = weaver(dir.path(), &["status", "-p", "app", "--json"]).unwrap();
+
+    assert_eq!(
+        text.stdout,
+        "\
+github  current  claude    workspace
+github  current  opencode  workspace
+"
+    );
+    assert_eq!(
+        warned(&text),
+        [(
+            None,
+            String::from("warning: codex does not read mcp `github` in app")
+        )]
+    );
+    assert!(!text.ok);
+    let data: serde_json::Value = serde_json::from_str(&json.stdout).unwrap();
+    assert_eq!(
+        data["data"]["projects"][0]["missed"],
+        serde_json::json!([{"kind": "mcp", "name": "github", "agents": ["codex"]}])
+    );
+}
