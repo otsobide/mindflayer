@@ -165,6 +165,8 @@ export type CoreCode =
   | "doctor_user_skill_differs"
   | "doctor_server_at_user_scope"
   | "doctor_variable_unset"
+  | "doctor_leftover_stage"
+  | "doctor_leftover_beside"
   | "exclude_key_invalid"
   | "exclude_pattern_invalid"
   | "exclude_path_unnamable"

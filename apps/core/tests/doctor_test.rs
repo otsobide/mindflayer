@@ -634,3 +634,49 @@ fn a_server_of_an_installed_one_s_name_at_codex_s_and_opencode_s_user_scope_is_f
         found[0].fix
     );
 }
+
+#[test]
+fn a_stage_an_install_left_in_mind_tmp_is_found_and_left_there() {
+    let fixture = fixture(&[Agent::Claude]);
+    let tmp = fixture.root().join(".mind/tmp");
+    let stage = tmp.join("4242-00112233445566ff");
+    fs::create_dir_all(stage.join("review")).unwrap();
+    // Not named as a stage is: somebody else's.
+    fs::create_dir_all(tmp.join("notes")).unwrap();
+
+    let examined = fixture.examined();
+
+    assert_eq!(codes(&examined), vec!["doctor_leftover_stage"]);
+    assert_eq!(examined.findings[0].path, stage);
+    assert!(examined.findings[0].agents.is_empty());
+    assert!(stage.is_dir(), "doctor sweeps nothing");
+}
+
+#[test]
+fn an_older_version_left_beside_a_copy_where_an_agent_reads_is_found_by_its_copy() {
+    let fixture = fixture(&[Agent::Claude, Agent::OpenCode]);
+    let new = fixture.root().join(".claude/skills/.review.mindweaver-new");
+    let old = fixture.root().join(".agents/skills/.review.mindflayer-old");
+    fs::create_dir_all(&new).unwrap();
+    fs::create_dir_all(&old).unwrap();
+    // Neither a copy's older version nor a folder.
+    fixture.write(
+        &fixture.root().join(".claude/skills/.notes.mindweaver-new"),
+        "",
+    );
+
+    let examined = fixture.examined();
+
+    assert_eq!(
+        codes(&examined),
+        vec!["doctor_leftover_beside", "doctor_leftover_beside"]
+    );
+    let paths: Vec<&Path> = examined
+        .findings
+        .iter()
+        .map(|finding| finding.path.as_path())
+        .collect();
+    assert_eq!(paths, vec![old.as_path(), new.as_path()]);
+    assert!(examined.findings[0].fix.contains("`review`"));
+    assert!(new.is_dir() && old.is_dir(), "doctor removes nothing");
+}

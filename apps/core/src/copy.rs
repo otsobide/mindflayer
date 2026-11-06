@@ -624,6 +624,54 @@ fn sweep(scratch: &Path) -> Vec<PathBuf> {
     swept
 }
 
+/// Every stage in `scratch` an interrupted run left, or a run going on now
+/// is building in, which nothing short of the lock tells apart: what
+/// [`sweep`] would remove, read and never removed, for doctor to say
+/// (`crate::doctor`), which takes no lock. In name order; none when
+/// `scratch` is not there or cannot be listed, as a sweep finds none.
+pub(crate) fn stages_in(scratch: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = fs::read_dir(scratch) else {
+        return Vec::new();
+    };
+    let mut stages: Vec<PathBuf> = entries
+        .flatten()
+        .filter(|entry| {
+            entry.file_type().is_ok_and(|kind| kind.is_dir())
+                && entry.file_name().to_str().is_some_and(is_stage_name)
+        })
+        .map(|entry| entry.path())
+        .collect();
+    stages.sort();
+    stages
+}
+
+/// Every older version an interrupted install of an earlier version left
+/// beside a copy in `folder`, `.<name>.mindweaver-new` or `-old`, or a
+/// Mindflayer build's: what [`Stage`] clears beside a copy it replaces,
+/// read and never removed, each with the name of the copy it was beside,
+/// in path order. None when `folder` is not there or cannot be listed.
+pub(crate) fn left_beside(folder: &Path) -> Vec<(PathBuf, String)> {
+    let Ok(entries) = fs::read_dir(folder) else {
+        return Vec::new();
+    };
+    let mut left: Vec<(PathBuf, String)> = entries
+        .flatten()
+        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
+        .filter_map(|entry| {
+            let file_name = entry.file_name().into_string().ok()?;
+            let named = file_name.strip_prefix('.')?;
+            let name = [BESIDE, FLAYER_BESIDE].into_iter().find_map(|by| {
+                ["new", "old"]
+                    .into_iter()
+                    .find_map(|what| named.strip_suffix(&format!("{by}{what}")))
+            })?;
+            (!name.is_empty()).then(|| (entry.path(), name.to_owned()))
+        })
+        .collect();
+    left.sort();
+    left
+}
+
 /// How many hex digits follow the process id in a stage's name.
 const SUFFIX_LEN: usize = 16;
 

@@ -41,6 +41,7 @@ use crate::claude_md::{self, ClaudeMdError};
 use crate::claude_rules;
 use crate::code::{codes, Said};
 use crate::codex_mcp::{self, CodexMcpError, Trust, UserConfig};
+use crate::copy;
 use crate::hash;
 use crate::install::{self, Offer};
 use crate::kind::Kind;
@@ -180,6 +181,7 @@ impl Examined {
         exam.skill_copies();
         exam.user_skills();
         exam.servers(workspace);
+        exam.leftovers();
         Examined {
             entry,
             name: Some(project.name().to_owned()),
@@ -312,6 +314,15 @@ pub enum Symptom {
         /// The first of their config files.
         file: PathBuf,
     },
+    /// A stage in the project's `.mind/tmp` an install did not finish, or
+    /// one going on now is building, which no read tells apart.
+    #[error("{path}: an install into the project built a copy here and did not finish, unless one is running now")]
+    LeftoverStage { path: PathBuf },
+    /// An older version of the copy `copy`, which an install of an earlier
+    /// version left beside it, in a folder an agent reads: a skill it may
+    /// load, a hidden folder OpenCode's first line globs (docs/agents.md).
+    #[error("{path}: an install of an earlier version left it beside `{copy}` and did not finish, and an agent may load it as a skill")]
+    LeftoverBeside { path: PathBuf, copy: String },
 }
 
 /// `paths`, each as it is written, in a list a sentence holds.
@@ -353,6 +364,8 @@ codes!(Symptom {
     Self::UserSkillDiffers { .. } => "doctor_user_skill_differs",
     Self::ServerAtUserScope { .. } => "doctor_server_at_user_scope",
     Self::VariableUnset { .. } => "doctor_variable_unset",
+    Self::LeftoverStage { .. } => "doctor_leftover_stage",
+    Self::LeftoverBeside { .. } => "doctor_leftover_beside",
 });
 
 impl Symptom {
@@ -371,6 +384,9 @@ impl Symptom {
                 agents.clone()
             }
             Symptom::ServerAtUserScope { agent, .. } => vec![*agent],
+            // Nothing an agent reads yet, or what any agent reading the
+            // folder may.
+            Symptom::LeftoverStage { .. } | Symptom::LeftoverBeside { .. } => Vec::new(),
         }
     }
 
@@ -394,6 +410,7 @@ impl Symptom {
             Symptom::UserSkillDiffers { copy, .. } => copy,
             Symptom::ServerAtUserScope { config, .. } => config,
             Symptom::VariableUnset { file, .. } => file,
+            Symptom::LeftoverStage { path } | Symptom::LeftoverBeside { path, .. } => path,
         }
     }
 
@@ -452,6 +469,13 @@ impl Symptom {
                 variable, server, ..
             } => {
                 format!("set {variable} where the agents start `{server}`: no file holds its value")
+            }
+            Symptom::LeftoverStage { .. } => String::from(
+                "the next install into the project sweeps it once no other is running, or remove \
+                 it then",
+            ),
+            Symptom::LeftoverBeside { copy, .. } => {
+                format!("the next install of `{copy}` clears it, or remove it")
             }
         }
     }
@@ -954,6 +978,34 @@ impl<'a> Exam<'a> {
                 agents: agents.clone(),
                 file: self.root().join(&first.file),
             });
+        }
+    }
+
+    /// What an install that did not finish left: a stage in the project's
+    /// `.mind/tmp`, which the next install sweeps while no other runs, and
+    /// an older version an earlier version staged beside a copy, in each
+    /// folder an install writes in or an agent of the project reads. Said,
+    /// never swept: doctor writes nothing, and takes no lock to tell a
+    /// stage left from one in use.
+    fn leftovers(&mut self) {
+        for path in copy::stages_in(&self.project.scratch_dir()) {
+            self.symptoms.push(Symptom::LeftoverStage { path });
+        }
+        let mut folders: Vec<PathBuf> = install::targets(self.project, Kind::Skill)
+            .map(|targets| targets.into_iter().map(|target| target.folder).collect())
+            .unwrap_or_default();
+        for agent in self.agents.clone() {
+            folders.extend(self.read_by(agent));
+        }
+        let mut seen: Vec<PathBuf> = Vec::new();
+        for folder in folders {
+            if seen.contains(&folder) {
+                continue;
+            }
+            for (path, copy) in copy::left_beside(&folder) {
+                self.symptoms.push(Symptom::LeftoverBeside { path, copy });
+            }
+            seen.push(folder);
         }
     }
 }
