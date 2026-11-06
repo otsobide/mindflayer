@@ -266,13 +266,49 @@ fn moved_on() -> (tempfile::TempDir, Revision, Revision) {
     (repository, first, second)
 }
 
+/// [`moved_on`], with a branch `side` off its first commit, which the
+/// history of HEAD never reaches: `skills/deploy` says `side` at its first
+/// commit, no branch's tip, and `side, later` at its second. The
+/// repository, the branch HEAD is on, and that first commit on `side`.
+fn branched() -> (tempfile::TempDir, String, Revision) {
+    use crate::mother::GitRepositoryMother;
+
+    let (repository, first, _) = moved_on();
+    let git = repository.path().join(".git");
+    let head = fs::read_to_string(git.join("HEAD")).unwrap();
+    let branch = head
+        .trim()
+        .strip_prefix("ref: refs/heads/")
+        .unwrap()
+        .to_owned();
+    fs::write(git.join("refs/heads/side"), format!("{first}\n")).unwrap();
+    fs::write(git.join("HEAD"), "ref: refs/heads/side\n").unwrap();
+    let deploy = "skills/deploy/SKILL.md";
+    GitRepositoryMother::write(repository.path(), &[(deploy, "side\n")]);
+    GitRepositoryMother::commit(repository.path());
+    let side = Revision::from(
+        gix::open(repository.path())
+            .unwrap()
+            .head_id()
+            .unwrap()
+            .to_string(),
+    );
+    GitRepositoryMother::write(repository.path(), &[(deploy, "side, later\n")]);
+    GitRepositoryMother::commit(repository.path());
+    fs::write(git.join("HEAD"), head).unwrap();
+    (repository, branch, side)
+}
+
 fn deploy_in(cloned: &Cloned) -> String {
     fs::read_to_string(cloned.root.join("skills/deploy/SKILL.md")).unwrap()
 }
 
 #[test]
 fn a_pin_is_fetched_by_itself_and_checked_out() {
-    let (repository, first, _) = moved_on();
+    // No branch's tip, and off the history of HEAD, so only a fetch of it
+    // by itself hands it over: looked for in that history instead, it
+    // would be refused.
+    let (repository, _, side) = branched();
     let cache = tempfile::TempDir::new().unwrap();
     let url = repository.path().to_string_lossy();
 
@@ -280,14 +316,14 @@ fn a_pin_is_fetched_by_itself_and_checked_out() {
         .fetch(
             &url,
             None,
-            Some(&first),
+            Some(&side),
             &cache.path().join("clone"),
             &Watch::new(),
         )
         .unwrap();
 
-    assert_eq!(cloned.revision, Some(first));
-    assert_eq!(deploy_in(&cloned), "first\n");
+    assert_eq!(cloned.revision, Some(side));
+    assert_eq!(deploy_in(&cloned), "side\n");
 }
 
 #[test]
@@ -355,5 +391,27 @@ fn a_pin_its_reference_does_not_reach_is_refused_and_leaves_no_clone() {
              remote's HEAD, so it cannot be gathered: name the branch or tag it is on with --ref"
         )
     );
+    assert!(!into.exists());
+}
+
+#[test]
+fn a_pin_the_repository_holds_off_its_references_history_is_refused_and_leaves_no_clone() {
+    let (repository, branch, side) = branched();
+    let url = repository.path().to_string_lossy();
+    let cache = tempfile::TempDir::new().unwrap();
+    let into = cache.path().join("clone");
+
+    // A commit of this repository's, on another branch than the one named.
+    let refused = reaching(&url, Some(&branch), &side, &into, &Watch::new()).unwrap_err();
+
+    assert!(
+        matches!(
+            &refused,
+            GitError::PinUnreachable { pin, reference: Some(named), .. }
+                if *pin == side && *named == branch
+        ),
+        "{refused}"
+    );
+    assert_eq!(refused.code(), "git_pin_unreachable");
     assert!(!into.exists());
 }
