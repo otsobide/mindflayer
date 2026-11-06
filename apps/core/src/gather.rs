@@ -421,6 +421,152 @@ pub fn gather(
     outcome
 }
 
+/// What a gather of a request would take, as a dry run of it found it
+/// ([`preview`]): nothing of it is on the shelf.
+///
+/// What it serializes to is a contract, as a report's is: each field by its
+/// name.
+#[derive(Debug, Serialize)]
+pub struct Preview {
+    /// The revision the source is at, which a gather would take.
+    pub revision: Option<Revision>,
+    /// Each skill a gather would take, in the order of where it is in the
+    /// repository.
+    pub found: Vec<Previewed>,
+    /// What keeps the rest from being taken, as a gather would say it, each
+    /// path in the clone the dry run read and took away again.
+    ///
+    /// Not serialized, nor `warnings`, as a report's are not: a front end
+    /// says both as its warnings.
+    #[serde(skip)]
+    pub failures: Vec<Failure>,
+    /// What is wrong with what would be taken anyway, each by where its
+    /// manifest is in the repository, as there is no copy on the shelf yet.
+    #[serde(skip)]
+    pub warnings: Vec<Warning>,
+}
+
+/// One skill a gather would take.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Previewed {
+    /// The name it declares, which it would be asked for by.
+    pub name: ArtifactName,
+    /// The folder the shelf would file it under.
+    pub directory: String,
+    /// Where it is in the repository, from its root, as the ledger would
+    /// record it: `.` for a skill that is the whole of it.
+    pub upstream_path: String,
+    /// The one line a listing shows.
+    pub summary: Option<String>,
+}
+
+/// What the folder a dry run clones into is named by, before what makes it
+/// its own ([`copy::unique_name`]): a `+`, which no folder a source is given
+/// holds, so it is never one.
+const DRY_RUN: &str = "+dry-run-";
+
+/// What a gather of `request` would take, a dry run of it: the source
+/// fetched and searched as a gather fetches and searches it, refused for
+/// what a gather refuses before it fetches, and nothing else done.
+///
+/// Nothing registered, nothing put on the shelf, nothing recorded, nothing
+/// logged, and no lock taken, since none of what writers take turns at is
+/// written: `ledger` is only read, for a `--name` another source has, so
+/// one read without being made ([`WeaverWorkspace::ledger_for_reading`]) is
+/// the one to hand it. The clone it needs is made in a folder of its own
+/// under the workspace's cache ([`DRY_RUN`]) and taken away once it has
+/// been read, whatever came of reading it, with the cache and the
+/// workspace's folder when it was the dry run that made them. So it leaves
+/// no clone: not in the folder a source's clone is kept in, which would then
+/// hold another commit than the one its shelf came from, nor in a folder of
+/// its own, which nothing would ever take away.
+pub fn preview(
+    workspace: &WeaverWorkspace,
+    ledger: &Ledger,
+    request: &Request,
+) -> Result<Preview, GatherError> {
+    let (
+        Checked {
+            pinned, manifest, ..
+        },
+        _,
+    ) = checked(ledger, request)?;
+    let url = fetched(request.source.url());
+    let made: Vec<PathBuf> = [workspace.weaver_dir(), workspace.cache_dir()]
+        .into_iter()
+        .filter(|folder| !folder.exists())
+        .collect();
+    let into = workspace
+        .cache_dir()
+        .join(format!("{DRY_RUN}{}", copy::unique_name()));
+    let outcome = look(request, &url, manifest, pinned.as_ref(), &into);
+    let _ = fs::remove_dir_all(&into);
+    // Only while each is empty, so nothing another command put there since
+    // goes with it.
+    for folder in made.iter().rev() {
+        let _ = fs::remove_dir(folder);
+    }
+    outcome
+}
+
+/// Fetch `request`'s source into `into` and say what a gather would take
+/// of it: the dry run, once its clone has somewhere to go.
+fn look(
+    request: &Request,
+    url: &str,
+    manifest: &str,
+    pin: Option<&Revision>,
+    into: &Path,
+) -> Result<Preview, GatherError> {
+    let watch = &request.watch;
+    watch.report(Progress::Connecting);
+    let clone = match &request.source {
+        Source::Git { reference, .. } => request
+            .remote
+            .fetch(url, reference.as_deref(), pin, into, watch)
+            .map_err(|error| match error {
+                GitError::Cancelled => GatherError::Cancelled,
+                error => error.into(),
+            })?,
+    };
+    let mut failures = Vec::new();
+    let Offered { taken, .. } = offered(&clone.root, request, url, manifest, &mut failures)?;
+    if watch.is_cancelled() {
+        return Err(GatherError::Cancelled);
+    }
+    let mut preview = Preview {
+        revision: clone.revision,
+        found: Vec::with_capacity(taken.len()),
+        failures: Vec::new(),
+        warnings: Vec::new(),
+    };
+    for (directory, folder, artifact) in &taken {
+        let upstream_path = upstream(directory, &clone.root, folder);
+        let at = match upstream_path.as_str() {
+            "." => PathBuf::from(manifest),
+            route => Path::new(route).join(manifest),
+        };
+        preview.warnings.extend(
+            filed_issues(artifact, folder)
+                .into_iter()
+                .map(|issue| Warning {
+                    path: at.clone(),
+                    issue,
+                }),
+        );
+        preview.found.push(Previewed {
+            name: artifact.name().to_owned(),
+            directory: folder.clone(),
+            upstream_path,
+            summary: artifact.summary().map(str::to_owned),
+        });
+    }
+    failures.sort_by(|a, b| a.path().cmp(b.path()));
+    preview.failures = failures;
+    preview.warnings.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(preview)
+}
+
 /// What the scrub [`WeaverWorkspace::ledger_to_write`] runs took out.
 #[derive(Debug, Default)]
 pub struct Scrub {
@@ -605,12 +751,23 @@ pub struct ScrubFailure {
 
 codes!(ScrubFailure => "clone_unscrubbed");
 
-/// The work itself, with the logging left to [`gather`].
-fn harvest(
-    workspace: &WeaverWorkspace,
+/// What a request is refused for before anything is registered or
+/// fetched, and what it is when it is not: the name it gives its source,
+/// the commit it is pinned to, and the manifest a folder of its kind holds.
+struct Checked {
+    name: Option<SourceName>,
+    pinned: Option<Revision>,
+    manifest: &'static str,
+}
+
+/// Hold `request` to what a gather refuses before it registers or fetches
+/// anything, a dry run as much as a gather ([`preview`]), and look up the
+/// source it gathers into, if a gather has registered it, which `--name`
+/// must not take another's name from.
+fn checked(
     ledger: &Ledger,
     request: &Request,
-) -> Result<Report, GatherError> {
+) -> Result<(Checked, Option<ledger::Source>), GatherError> {
     // Refused before anything is registered or fetched, rather than used for
     // this one fetch and dropped from what is stored: a token on the command
     // line is already where `ps` and the shell history show it, and every
@@ -690,6 +847,29 @@ fn harvest(
             }
         }
     }
+    let checked = Checked {
+        name,
+        pinned,
+        manifest,
+    };
+    Ok((checked, found))
+}
+
+/// The work itself, with the logging left to [`gather`].
+fn harvest(
+    workspace: &WeaverWorkspace,
+    ledger: &Ledger,
+    request: &Request,
+) -> Result<Report, GatherError> {
+    let (
+        Checked {
+            name,
+            pinned,
+            manifest,
+        },
+        found,
+    ) = checked(ledger, request)?;
+    let url = fetched(request.source.url());
     let new = found.is_none();
     let mut source = ledger.source_for(
         request.source.kind(),
@@ -763,14 +943,6 @@ fn take(
             })?,
     };
 
-    let harvested_from = clone.root.join(&request.subdirectory);
-    if !harvested_from.is_dir() {
-        return Err(GatherError::NoSuchFolder {
-            subdirectory: request.subdirectory.clone(),
-            url: url.to_owned(),
-        });
-    }
-
     let shelf = workspace.gathered_dir(request.kind).join(&source.directory);
     let mut report = Report {
         revision: clone.revision.clone(),
@@ -793,29 +965,8 @@ fn take(
         .into_iter()
         .filter(|gathered| gathered.source.id == source.id && gathered.kind == request.kind)
         .collect();
-    let found = candidates(&harvested_from, &clone.root, manifest, &mut report.failures)?;
-    // What a skill at the repository's root is filed under.
-    let repository = crate::url::repository(url);
-    let mut taken = Vec::with_capacity(found.len());
-    watch.report(Progress::Harvesting {
-        done: 0,
-        total: found.len(),
-    });
-    for (done, directory) in found.iter().enumerate() {
-        if let Some(read) = read(
-            directory,
-            &clone.root,
-            repository.as_deref(),
-            &mut report.failures,
-        ) {
-            taken.push(read);
-        }
-        watch.report(Progress::Harvesting {
-            done: done + 1,
-            total: found.len(),
-        });
-    }
-    let taken = unclashed(taken, &clone.root, &mut report.failures);
+    let Offered { held, taken } =
+        offered(&clone.root, request, url, manifest, &mut report.failures)?;
 
     // The last moment a cancel is honoured, and the reason everything is read
     // first: past here the shelf and the ledger change, and a gather stopped
@@ -914,10 +1065,6 @@ fn take(
         }
     }
 
-    let held: Vec<String> = found
-        .iter()
-        .filter_map(|directory| filed(directory, &clone.root, repository.as_deref()))
-        .collect();
     take_off(
         workspace,
         ledger,
@@ -932,6 +1079,60 @@ fn take(
     // Stable, so one file's warnings stay in the order `validate` gives them.
     report.warnings.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(report)
+}
+
+/// What the repository cloned at `clone`, fetched from `url`, offers of
+/// the kind `request` gathers, in the folder it searches: every folder found
+/// holding a `manifest`, by the folder it is filed under, whether or not it
+/// could be taken (`held`), and each skill that was read and shares a name
+/// with no other (`taken`), what keeps the rest from being taken among
+/// `failures`. What a gather and a dry run of one ([`preview`]) both find,
+/// by the one search.
+struct Offered {
+    held: Vec<String>,
+    taken: Vec<(PathBuf, String, Artifact)>,
+}
+
+/// Read what the clone at `clone` offers ([`Offered`]), telling `request`'s
+/// watch each folder read.
+fn offered(
+    clone: &Path,
+    request: &Request,
+    url: &str,
+    manifest: &str,
+    failures: &mut Vec<Failure>,
+) -> Result<Offered, GatherError> {
+    let watch = &request.watch;
+    let searched = clone.join(&request.subdirectory);
+    if !searched.is_dir() {
+        return Err(GatherError::NoSuchFolder {
+            subdirectory: request.subdirectory.clone(),
+            url: url.to_owned(),
+        });
+    }
+    let found = candidates(&searched, clone, manifest, failures)?;
+    // What a skill at the repository's root is filed under.
+    let repository = crate::url::repository(url);
+    let mut taken = Vec::with_capacity(found.len());
+    watch.report(Progress::Harvesting {
+        done: 0,
+        total: found.len(),
+    });
+    for (done, directory) in found.iter().enumerate() {
+        if let Some(read) = read(directory, clone, repository.as_deref(), failures) {
+            taken.push(read);
+        }
+        watch.report(Progress::Harvesting {
+            done: done + 1,
+            total: found.len(),
+        });
+    }
+    let taken = unclashed(taken, clone, failures);
+    let held = found
+        .iter()
+        .filter_map(|directory| filed(directory, clone, repository.as_deref()))
+        .collect();
+    Ok(Offered { held, taken })
 }
 
 /// Take off the shelf what `source` supplied before (`supplied`) and does

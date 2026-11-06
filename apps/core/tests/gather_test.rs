@@ -1957,3 +1957,217 @@ fn a_gather_report_serializes_what_changed_and_leaves_its_failures_to_the_warnin
         )
     );
 }
+
+// ---------------------------------------------------------------------------
+// A dry run
+// ---------------------------------------------------------------------------
+
+/// The commit `source` is at.
+fn head(source: &TempDir) -> String {
+    gix::open(source.path())
+        .unwrap()
+        .head_id()
+        .unwrap()
+        .to_string()
+}
+
+#[test]
+fn a_dry_run_lists_what_a_gather_would_take_and_writes_nothing() {
+    let source = repository(&[
+        ("skills/deploy/SKILL.md", &skill("deploy", "Ship it")),
+        (
+            ".claude/skills/review/SKILL.md",
+            &skill("review", "Read a change"),
+        ),
+        (
+            "skills/pdf--forms/SKILL.md",
+            &skill("pdf--forms", "Fill in forms"),
+        ),
+        ("skills/broken/SKILL.md", "---\nname: [unclosed\n---\n"),
+    ]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let preview = gather::preview(&workspace, &ledger, &Request::git(url(&source))).unwrap();
+
+    let found: Vec<(&str, &str, &str)> = preview
+        .found
+        .iter()
+        .map(|it| {
+            (
+                it.name.as_str(),
+                it.directory.as_str(),
+                it.upstream_path.as_str(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        found,
+        [
+            ("review", "review", ".claude/skills/review"),
+            ("deploy", "deploy", "skills/deploy"),
+            ("pdf--forms", "pdf--forms", "skills/pdf--forms"),
+        ]
+    );
+    assert_eq!(preview.revision.as_deref(), Some(head(&source).as_str()));
+    assert!(!preview.warnings.is_empty());
+    assert!(preview
+        .warnings
+        .iter()
+        .all(|warning| warning.path == std::path::Path::new("skills/pdf--forms/SKILL.md")));
+    assert_eq!(preview.failures.len(), 1, "{:?}", preview.failures);
+    assert!(preview.failures[0]
+        .path()
+        .ends_with("skills/broken/SKILL.md"));
+    // Nothing registered, shelved, recorded or logged, and no clone kept.
+    assert_eq!(ledger.sources().unwrap(), []);
+    assert!(ledger.gathered().unwrap().is_empty());
+    assert!(ledger.history(10).unwrap().is_empty());
+    assert!(!workspace.gathered_dir(Kind::Skill).exists());
+    assert!(!workspace.cache_dir().exists(), "the clone is taken away");
+}
+
+#[test]
+fn a_dry_run_of_a_source_gathered_before_leaves_its_clone_its_shelf_and_its_rows() {
+    let source = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    let request = Request::git(url(&source));
+    let first = gather::gather(&workspace, &ledger, &request).unwrap();
+    let before = (ledger.sources().unwrap(), ledger.gathered().unwrap());
+
+    write_files(
+        source.path(),
+        &[
+            (
+                "skills/deploy/SKILL.md",
+                &skill("deploy", "Ship it, carefully"),
+            ),
+            ("skills/review/SKILL.md", &skill("review", "Read a change")),
+        ],
+    );
+    commit(source.path());
+    let preview = gather::preview(&workspace, &ledger, &request).unwrap();
+
+    assert_eq!(preview.revision.as_deref(), Some(head(&source).as_str()));
+    assert_eq!(preview.found.len(), 2, "{preview:?}");
+    assert_eq!(
+        (ledger.sources().unwrap(), ledger.gathered().unwrap()),
+        before
+    );
+    assert_eq!(ledger.history(10).unwrap().len(), 1, "the first gather");
+    let clones: Vec<String> = fs::read_dir(workspace.cache_dir())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(clones, std::slice::from_ref(&first.directory));
+    let cloned = workspace.cache_dir().join(&first.directory);
+    let shelf = workspace.gathered_dir(Kind::Skill).join(&first.directory);
+    for kept in [cloned.join("skills"), shelf] {
+        assert_eq!(
+            fs::read_to_string(kept.join("deploy/SKILL.md")).unwrap(),
+            skill("deploy", "Ship it"),
+            "{}",
+            kept.display()
+        );
+        assert!(!kept.join("review").exists());
+    }
+}
+
+#[test]
+fn a_dry_run_in_a_workspace_nobody_has_made_makes_no_folder_of_it() {
+    let source = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
+    let home = TempDir::new().unwrap();
+    let workspace = WeaverWorkspace::unmade(home.path()).unwrap();
+    let ledger = workspace.ledger_for_reading().unwrap();
+
+    let preview = gather::preview(&workspace, &ledger, &Request::git(url(&source))).unwrap();
+
+    assert_eq!(preview.found.len(), 1);
+    assert_eq!(
+        fs::read_dir(home.path()).unwrap().count(),
+        0,
+        "{}",
+        workspace.weaver_dir().display()
+    );
+}
+
+#[test]
+fn a_dry_run_is_refused_for_what_a_gather_is_refused_for_before_it_fetches() {
+    let one = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
+    let other = repository(&[("skills/review/SKILL.md", &skill("review", "Look"))]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    gather::gather(
+        &workspace,
+        &ledger,
+        &Request::git(url(&one)).named(Some("team")),
+    )
+    .unwrap();
+
+    let taken = gather::preview(
+        &workspace,
+        &ledger,
+        &Request::git(url(&other)).named(Some("team")),
+    )
+    .unwrap_err();
+    let pinned = gather::preview(
+        &workspace,
+        &ledger,
+        &Request::git(url(&other)).pinned(Some("4f9c2a7")),
+    )
+    .unwrap_err();
+
+    assert_eq!(taken.code(), "source_name_taken");
+    assert_eq!(pinned.code(), "gather_pin_invalid");
+    assert_eq!(ledger.sources().unwrap().len(), 1);
+}
+
+#[test]
+fn a_dry_run_cancelled_before_it_starts_fetches_nothing() {
+    let source = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    let watch = Watch::new();
+    watch.cancel();
+
+    let error = gather::preview(
+        &workspace,
+        &ledger,
+        &Request::git(url(&source)).watched_by(watch),
+    )
+    .unwrap_err();
+
+    assert!(matches!(error, GatherError::Cancelled), "{error}");
+    assert!(!workspace.cache_dir().exists());
+}
+
+#[test]
+fn a_dry_run_serializes_what_it_found_and_leaves_its_failures_to_the_warnings() {
+    let preview = gather::Preview {
+        revision: Some(mindweaver_core::value::Revision::from("4f9c2a7")),
+        found: vec![gather::Previewed {
+            name: mindweaver_core::value::ArtifactName::from("deploy"),
+            directory: String::from("deploy"),
+            upstream_path: String::from("skills/team/deploy"),
+            summary: Some(String::from("Ship it")),
+        }],
+        failures: vec![gather::Failure::UnusableName {
+            path: std::path::PathBuf::from("/work/.mindweaver/cache/x"),
+        }],
+        warnings: vec![Warning {
+            path: std::path::PathBuf::from("skills/team/deploy/SKILL.md"),
+            issue: ValidationIssue::MetadataNotAMap,
+        }],
+    };
+
+    let serialized = serde_json::to_string(&preview).unwrap();
+
+    assert_eq!(
+        serialized,
+        concat!(
+            r#"{"revision":"4f9c2a7","found":[{"name":"deploy","directory":"deploy","#,
+            r#""upstream_path":"skills/team/deploy","summary":"Ship it"}]}"#,
+        )
+    );
+}
