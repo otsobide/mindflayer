@@ -8516,8 +8516,9 @@ CI gives the panel jobs of its own:
   name they would have to be changed by hand to require.
 - **`build (cli)`** waits for `test (web)`, downloads that `dist/` before
   anything compiles, and builds the release for the runner's own triple,
-  which embeds it. The runner has Node and no pnpm, so `make cli/release`
-  takes the downloaded panel rather than building another, and the panel a
+  which embeds it. No step of the job sets up pnpm, so on a runner with
+  none of its own `make cli/release` takes the downloaded panel rather than
+  building another, and the panel a
   binary ships is the one that passed. Then it removes `apps/web/dist` and
   runs `make cli/release/check`, which starts the release's `mindweaver ui`
   (`scripts/serves-panel.sh`) from a folder of its own, with a home of its
@@ -8544,6 +8545,27 @@ CI gives the panel jobs of its own:
 The rulesets for `dev` and `main` require every check that runs on every
 pull request, the panel's three among them; AGENTS.md lists them by name.
 
+Every Linux job, `Gitflow`'s two among them, runs on the repository's own
+runner, a self-hosted one asked for by its labels (`runs-on: [self-hosted,
+Linux, X64]`), and only test-cross on GitHub's: GitHub's Linux runners
+stopped starting jobs once the account was locked over billing, and a check
+that never starts is one the rulesets wait on for ever. By its labels
+rather than its name, so a second runner given them takes jobs beside the
+first: one runner runs one job at a time, so the jobs GitHub ran side by
+side wait for each other there. A variable naming the runner was rejected:
+it would switch back without a commit, but the workflow would no longer say
+where a job runs. A self-hosted runner's image is not GitHub's, and it keeps
+what a job installed, so a step that needs what GitHub's image held
+installs it only where it is missing, as `test (cli)` does zsh and the
+python3 its virtualenv is made with. The repository is public, and such a
+runner runs whatever a pull request's code says, on a machine that keeps
+what a job leaves: the repository's Actions settings hold a pull request
+from a fork for a maintainer's approval only from somebody with nothing
+merged here yet, so one merged change is all it takes for a stranger's
+next to run there unasked. Approval for every outside contributor would
+close that, at the price of approving each of their runs; collaborators
+work in branches of the repository, which no setting holds.
+
 The tests are split by app and by nothing else. A crate's unit tests, its
 value objects and its integration suites run in its one `test (<app>)`,
 as `make <app>/test` runs them: a workflow of jobs by layer (`unit`,
@@ -8564,8 +8586,8 @@ the binaries embed instead, the panel `dist/` already holds or none, and
 they build anyway, since a binary without the panel still has every
 command; failing there, as both did before #71, left `cargo install` the
 one way to the binaries without Node. Both tools are looked for, since pnpm
-runs the panel's tools on the `node` the PATH gives, and CI's runners have
-a Node and no pnpm.
+runs the panel's tools on the `node` the PATH gives, and GitHub's runners,
+which CI ran on until it moved to its own, had a Node and no pnpm.
 
 Node is 24, the LTS line (`.node-version`), and pnpm is pinned through
 `packageManager`; `PNPM` names another way to run it, such as `npx`, where
@@ -8692,7 +8714,8 @@ and in zsh. Each of those runs its shell with no startup file and an
 environment holding only a `PATH`, a temporary `HOME` and what the test sets,
 so no developer's shell or activation gets in. A shell that is not installed
 is skipped, which a passing test does not show; under `$CI` that fails
-instead, and the `test (cli)` job installs the zsh its runner lacks. The
+instead, and the `test (cli)` job installs the zsh and the python3 its
+runner lacks, where it lacks them. The
 function is never called `deactivate`: defining that would take the
 virtualenv's away. Activating again runs an existing `mindweaver-deactivate`
 first, so one workspace is swapped for the other, and what the variable held
@@ -13485,9 +13508,10 @@ it once as it closes.
   Windows jobs build no release. The compatibility pass (#154) could take it
   there, with the console's Ctrl-C on Windows.
 - **Which panel `build (cli)` embeds rests on the runner.** `make
-  cli/release` embeds the downloaded panel because the runner has no pnpm.
-  An image that gained one would have it build the panel again, from the
-  same lockfile, on whatever Node the image has, rather than embed the one
+  cli/release` embeds the downloaded panel because no pnpm is on the
+  runner's PATH. A self-hosted runner whose image has one, which nothing
+  here rules out, would have it build the panel again, from the same
+  lockfile, on whatever Node the image has, rather than embed the one
   `test (web)` tested; a variable telling `make web/build/if-node` to take
   `dist/` as it is would settle it, at the price of a knob only CI turns.
 - **A writer waiting while a workspace is moved to the new names.** The
