@@ -3505,7 +3505,10 @@ know, a `command` source, refused and never run, and two entries of one
 name, neither of them gathered, as two skills of one name in a source are
 not. A key the format gives that the entry does not have the shape of is an
 unreadable entry; one it does not know is passed over, `headersHelper`
-among them, which is never read and so never run.
+among them, which is never read and so never run. An entry whose name has
+a control character or a space at either end is unreadable too: a list
+shows a name in printable text, which would then be a name `--plugin` does
+not take, and the TUI's tick of it would name another.
 
 Where a plugin is (`marketplace::Plugin`) is held as a folder of a
 repository is. A relative one, `./x`, `.` or a bare name read under the

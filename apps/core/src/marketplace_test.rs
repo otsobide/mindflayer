@@ -243,6 +243,44 @@ fn an_entry_that_cannot_be_read_is_said_by_where_it_is_in_the_list() {
 }
 
 #[test]
+fn an_entry_whose_name_no_list_shows_as_it_is_is_unreadable_and_said_by_its_name() {
+    let catalog = Catalog::parse(
+        r#"{"plugins": [
+            {"name": " pdf", "source": "./a"},
+            {"name": "pdf\t", "source": "./b"},
+            {"name": "a\u001b[2Jb", "source": "./c"},
+            {"name": "two words", "source": "./d"}
+        ]}"#,
+    )
+    .unwrap();
+
+    let listed: Vec<&str> = catalog
+        .entries
+        .iter()
+        .map(|entry| entry.name.as_str())
+        .collect();
+    assert_eq!(listed, ["two words"]);
+    let failed: Vec<(Option<&str>, &str)> = catalog
+        .failures
+        .iter()
+        .map(|failure| (failure.name(), failure.code()))
+        .collect();
+    assert_eq!(
+        failed,
+        [
+            (Some(" pdf"), "marketplace_entry_unreadable"),
+            (Some("pdf\t"), "marketplace_entry_unreadable"),
+            (Some("a\u{1b}[2Jb"), "marketplace_entry_unreadable"),
+        ]
+    );
+    assert_eq!(
+        catalog.failures[0].to_string(),
+        "plugins[0] (` pdf`): its name has a control character or a space at either end, which \
+         no list shows as it is, so it is not listed"
+    );
+}
+
+#[test]
 fn a_url_a_failure_names_is_said_without_the_credential_it_carries() {
     let catalog = Catalog::parse(
         r#"{"plugins": [

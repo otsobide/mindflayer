@@ -72,7 +72,8 @@ pub struct Catalog {
 /// name.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Entry {
-    /// Its name, as the catalog writes it: what `--plugin` takes for it.
+    /// Its name, as the catalog writes it: what `--plugin` takes for it,
+    /// and what a list shows, since one it would show otherwise is no entry.
     pub name: String,
     /// The one line the catalog says of it.
     pub description: Option<String>,
@@ -488,6 +489,17 @@ fn entry(
         _ => return Err(unreadable(None, "it has no name")),
     };
     let named = Some(name.as_str());
+    // What a list shows of a name is its printable text, control characters
+    // made spaces and the ends trimmed, so one that is not that already is
+    // listed as what `--plugin` does not take, and a tick in the TUI, which
+    // shows it, would name another.
+    if name.chars().any(char::is_control) || name.trim() != name {
+        return Err(unreadable(
+            named,
+            "its name has a control character or a space at either end, which no list shows as \
+             it is",
+        ));
+    }
     let plugin = match object.get("source") {
         Some(JsonValue::String(path)) => relative(&name, path, plugin_root)?,
         Some(JsonValue::Object(source)) => match elsewhere(&name, source) {
@@ -1318,8 +1330,9 @@ fn apart(
 /// listed, and gathered, all the same.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum EntryFailure {
-    /// It is not an object with a name and a source, or holds a key the
-    /// catalog's format gives a shape it does not have.
+    /// It is not an object with a name and a source, holds a key the
+    /// catalog's format gives a shape it does not have, or has a name no
+    /// list shows as it is.
     #[error("plugins[{at}]{}: {reason}, so it is not listed", .name.as_deref().map(|name| format!(" (`{name}`)")).unwrap_or_default())]
     Unreadable {
         /// Where it is in the `plugins` list, from 0.
