@@ -1573,6 +1573,31 @@ fn each_gather_error_of_its_own_gives_its_own_code() {
     assert_eq!(GatherError::CODES, given.as_slice());
 }
 
+/// A clone fetched into the HTTP cache's folder would replace the answers
+/// kept there, so a source an older build recorded with it is not fetched.
+#[test]
+fn a_source_recorded_with_the_http_caches_folder_is_not_fetched_into_it() {
+    let source = ledger::Source {
+        directory: String::from(crate::workspace::HTTP_CACHE_DIR),
+        ..SourceMother::random()
+    };
+
+    let error = own_folder(&source).unwrap_err();
+
+    assert_eq!(error.code(), "source_folder_not_its_own");
+    assert_eq!(
+        error.to_string(),
+        format!(
+            "the source `{}` is recorded with the folder `http`, which is no folder of its own on \
+             the shelf or in the cache, so nothing is gathered",
+            source.name
+        )
+    );
+    let mut fine = source;
+    fine.directory = String::from("http-2");
+    assert_eq!(own_folder(&fine).unwrap(), "http-2");
+}
+
 /// A source recorded with a folder that is not its own is the condition
 /// `gather remove` meets, and is given its code.
 #[test]

@@ -140,7 +140,8 @@ pub const FLAYER_CONFIG: &str = "flayer.toml";
 pub const CACHE_DIR: &str = "cache";
 /// Where a workspace keeps the answers it fetched over HTTP, inside
 /// [`CACHE_DIR`] beside the clones, each of which has a folder of its own
-/// named from its source.
+/// named from its source: no source is given this one
+/// ([`LedgerStore::source_for`](crate::port::LedgerStore::source_for)).
 pub const HTTP_CACHE_DIR: &str = "http";
 /// Where a workspace keeps its own artifacts when its marker does not say,
 /// inside [`WEAVER_DIR`]: a folder per kind, named after it.

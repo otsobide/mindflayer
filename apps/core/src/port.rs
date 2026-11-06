@@ -225,7 +225,9 @@ pub trait LedgerStore: Debug + Send {
     /// ([`SourceName::derived`]), numbered when another source has that.
     ///
     /// Its `directory` is chosen once, here, and never recomputed: it is where
-    /// files already are.
+    /// files already are. Never [`HTTP_CACHE_DIR`](crate::workspace::HTTP_CACHE_DIR),
+    /// the folder of the cache the HTTP cache keeps beside the clones, nor
+    /// one another source has: a folder the cache names is one clone's alone.
     fn source_for(
         &self,
         kind: SourceKind,
@@ -244,6 +246,7 @@ pub trait LedgerStore: Debug + Send {
     /// the kind git, under the name [`SourceName::child`] gives it,
     /// numbered when another source has that.
     ///
+    /// Its folder is chosen as [`source_for`](Self::source_for) chooses one.
     /// Found again, it is moved to where it is said to be now, since the
     /// catalog says where its plugin is: its folder stays, where its files
     /// already are.

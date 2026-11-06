@@ -1192,8 +1192,18 @@ fn take(
 /// so (`LedgerStore::source_for`, `child_for`), and a row edited by hand is
 /// refused here, before either is joined, as `gather remove` refuses it
 /// ([`crate::sources`]).
+///
+/// Refused too when it is the folder the HTTP cache keeps
+/// ([`HTTP_CACHE_DIR`](crate::workspace::HTTP_CACHE_DIR)), which no ledger
+/// gives a source either, but one a build from before it gave a source whose
+/// URL reads as `http`: a fetch there would replace the cache's answers with
+/// a clone. `gather remove` takes such a source and its folder, the cache's
+/// answers with it, which are only kept answers, and a gather of its URL then
+/// gives it a folder of its own.
 pub(crate) fn own_folder(source: &ledger::Source) -> Result<&str, GatherError> {
-    if crate::install::is_folder_name(&source.directory) {
+    if crate::install::is_folder_name(&source.directory)
+        && source.directory != crate::workspace::HTTP_CACHE_DIR
+    {
         Ok(&source.directory)
     } else {
         Err(GatherError::FolderNotItsOwn {
@@ -2375,12 +2385,12 @@ pub enum GatherError {
         #[source]
         source: io::Error,
     },
-    /// The folder the ledger records for the source is not one folder name
-    /// ([`own_folder`]): the condition `gather remove` meets, said for a
-    /// gather.
+    /// The folder the ledger records for the source is not one folder name,
+    /// or is the one the HTTP cache keeps ([`own_folder`]): the condition
+    /// `gather remove` meets, said for a gather.
     #[error(
-        "the source `{name}` is recorded with the folder `{directory}`, which is no one folder of \
-         the shelf or the cache, so nothing is gathered"
+        "the source `{name}` is recorded with the folder `{directory}`, which is no folder of its \
+         own on the shelf or in the cache, so nothing is gathered"
     )]
     FolderNotItsOwn { name: SourceName, directory: String },
 }

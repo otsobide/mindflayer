@@ -197,6 +197,7 @@ every_store![
     a_render_that_cannot_be_recorded_leaves_the_last_render_whole,
     whether_mindweaver_made_a_file_is_kept_per_project_and_path,
     a_source_is_registered_once_and_found_by_its_coordinate,
+    no_source_is_given_the_folder_the_http_cache_keeps,
     every_coordinate_is_a_source_of_its_own_with_a_folder_of_its_own,
     a_source_remembers_the_revision_it_was_last_gathered_at,
     a_source_keeps_the_pin_its_last_gather_had_and_none_once_one_had_none,
@@ -1482,6 +1483,37 @@ fn a_source_is_registered_once_and_found_by_its_coordinate(mut store: Store) {
         registered
     );
     assert_eq!(store.sources().unwrap(), [registered]);
+}
+
+/// The cache keeps the HTTP cache's answers in its folder `http`, beside
+/// the clones, so a source whose URL reads as `http` is numbered past it,
+/// as one whose folder another source has is.
+fn no_source_is_given_the_folder_the_http_cache_keeps(mut store: Store) {
+    let sources: Vec<Source> = ["http", "https://http/", "file://http"]
+        .into_iter()
+        .map(|url| {
+            store
+                .source_for(SourceKind::Git, url, None, "skills")
+                .unwrap()
+        })
+        .collect();
+    // A plugin's folder is its marketplace's and its entry's, which reads
+    // as `http` for an entry of no plain character under a marketplace an
+    // older build gave that folder.
+    let marketplace = Source {
+        directory: String::from("http"),
+        ..store
+            .source_for(SourceKind::Marketplace, &UrlMother::https(), None, "")
+            .unwrap()
+    };
+    let plugin = store
+        .child_for(&marketplace, "!", &UrlMother::https(), None, "")
+        .unwrap();
+
+    store.reopen();
+    let folders: Vec<&str> = sources.iter().map(|s| s.directory.as_str()).collect();
+    assert_eq!(folders, ["http-2", "http-3", "http-4"]);
+    assert_eq!(plugin.directory, "http-5");
 }
 
 fn every_coordinate_is_a_source_of_its_own_with_a_folder_of_its_own(mut store: Store) {
