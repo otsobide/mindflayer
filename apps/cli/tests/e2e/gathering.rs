@@ -57,6 +57,81 @@ fn gathering_a_repository_puts_its_skills_on_the_shelf_and_says_each() {
 }
 
 #[test]
+fn a_dry_run_says_what_a_gather_would_take_from_every_layout_and_takes_nothing() {
+    let scenario = Scenario::projects(&["collapse"]);
+    scenario.source(
+        SOURCE,
+        &[
+            (
+                "skills/commit-style/SKILL.md",
+                &skill("commit-style", "How this repo writes commit messages"),
+            ),
+            (
+                ".claude/skills/ddd-reviewer/SKILL.md",
+                &skill(
+                    "ddd-reviewer",
+                    "Review a change against the DDD layering rules",
+                ),
+            ),
+            (
+                "plugins/ops/skills/deploy/SKILL.md",
+                &skill("deploy", "Ship the service"),
+            ),
+        ],
+    );
+    let before = scenario.files("~/Projects/.mindweaver");
+
+    scenario
+        .run(
+            "~/Projects",
+            "mindweaver gather git ../src/acme-skills --path plugins/ops --dry-run",
+        )
+        .succeeds()
+        .prints(&format!(
+            "../src/acme-skills at {}\n\
+             \x20 deploy  plugins/ops/skills/deploy\n\
+             \n\
+             1 skill to gather; nothing gathered: run it again without --dry-run to gather them\n",
+            scenario.head(SOURCE)
+        ))
+        .quiet();
+    scenario
+        .run(
+            "~/Projects",
+            "mindweaver gather git ../src/acme-skills --dry-run",
+        )
+        .succeeds()
+        .prints(&format!(
+            "../src/acme-skills at {}\n\
+             \x20 ddd-reviewer  .claude/skills/ddd-reviewer\n\
+             \x20 deploy        plugins/ops/skills/deploy\n\
+             \x20 commit-style  skills/commit-style\n\
+             \n\
+             3 skills to gather; nothing gathered: run it again without --dry-run to gather them\n",
+            scenario.head(SOURCE)
+        ))
+        .quiet();
+
+    assert_eq!(scenario.files("~/Projects/.mindweaver"), before);
+}
+
+#[test]
+fn an_address_naming_another_branch_than_its_ref_is_refused() {
+    let scenario = acme();
+
+    scenario
+        .run(
+            "~/Projects",
+            "mindweaver gather git acme/skills@v2 --ref v3",
+        )
+        .exits(1)
+        .prints("")
+        .says(
+            "error: acme/skills@v2 names the branch or tag `v2`, and --ref names `v3`: give one\n",
+        );
+}
+
+#[test]
 fn gathering_again_says_what_moved() {
     let scenario = acme();
     scenario
