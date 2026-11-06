@@ -398,13 +398,17 @@ fn a_source_listed_serializes_its_source_s_fields_and_then_its_own() {
             source: SourceMother::random(),
             gathered_at: random::chance().then(|| random::between(0, 2_000_000_000) as i64),
             artifacts: random::between(0, 100),
+            parent: random::chance().then(|| SourceName::parse(&random::word()).unwrap()),
+            entry: random::chance().then(random::word),
         };
         let source = source_as_json(&listing.source);
         let expected = format!(
-            r#"{},"gathered_at":{},"artifacts":{}}}"#,
+            r#"{},"gathered_at":{},"artifacts":{},"parent":{},"entry":{}}}"#,
             source.strip_suffix('}').unwrap(),
             json(&listing.gathered_at),
             listing.artifacts,
+            json(&listing.parent),
+            json(&listing.entry),
         );
 
         assert_eq!(json(&listing), expected, "{listing:?}");
@@ -417,6 +421,8 @@ fn a_source_listed_serializes_exactly_these_fields() {
         source: SourceMother::random(),
         gathered_at: None,
         artifacts: 0,
+        parent: None,
+        entry: None,
     };
 
     assert_eq!(
@@ -431,7 +437,9 @@ fn a_source_listed_serializes_exactly_these_fields() {
             "name",
             "pin",
             "gathered_at",
-            "artifacts"
+            "artifacts",
+            "parent",
+            "entry"
         ],
         "{listing:?}"
     );

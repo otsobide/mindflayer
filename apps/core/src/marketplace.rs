@@ -694,6 +694,11 @@ pub enum Pick {
     Plugins(Vec<String>),
     /// Every entry it lists that can be gathered (`--all`).
     All,
+    /// The plugins of it gathered before, by their entries, as `gather
+    /// update` gathers a marketplace again ([`again`]): one the catalog no
+    /// longer lists is said (`marketplace_entry_unlisted`), its source kept
+    /// as it was, rather than refusing the rest.
+    Recorded(Vec<String>),
 }
 
 /// One gather of a marketplace: its catalog, fetched as a git source is,
@@ -821,14 +826,16 @@ pub fn gather(
     let lock = workspace.lock()?;
     let (parent, clone, read) =
         recorded_now(workspace, ledger, catalog, &url, checked.name, found)?;
-    let listed = Listed::of(
+    let mut listed = Listed::of(
         parent.name.clone(),
         &url,
         catalog.source.reference(),
         clone.revision.clone(),
         read,
     );
-    let picked = picked(&listed, &request.pick)?;
+    let (picked, unlisted) = picked(&listed, &request.pick)?;
+    let picked: Vec<Entry> = picked.into_iter().cloned().collect();
+    listed.failures.extend(unlisted);
 
     let mut children: Vec<Option<Child>> = picked.iter().map(|_| None).collect();
     let mut cancelled = false;
@@ -1048,35 +1055,95 @@ fn free(ledger: &Ledger, wanted: SourceName) -> Result<SourceName, LedgerError> 
 }
 
 /// The entries `pick` takes of `listed`, in the catalog's order, each once,
-/// or the first name it does not list.
+/// with what it names that the catalog lists no more, for a pick of what
+/// was gathered before; or the first name a pick of plugins names that it
+/// does not list.
 ///
 /// A name it lists as an entry that cannot be gathered is no entry to take,
 /// and no refusal either: that entry's failure says why already.
-fn picked<'a>(listed: &'a Listed, pick: &Pick) -> Result<Vec<&'a Entry>, MarketplaceError> {
+fn picked<'a>(
+    listed: &'a Listed,
+    pick: &Pick,
+) -> Result<(Vec<&'a Entry>, Vec<EntryFailure>), MarketplaceError> {
+    let lists = |name: &str| {
+        listed.entries.iter().any(|entry| entry.name == name)
+            || listed
+                .failures
+                .iter()
+                .any(|failure| failure.name() == Some(name))
+    };
+    let named = |names: &[String]| -> Vec<&'a Entry> {
+        listed
+            .entries
+            .iter()
+            .filter(|entry| names.contains(&entry.name))
+            .collect()
+    };
     match pick {
-        Pick::Listing => Ok(Vec::new()),
-        Pick::All => Ok(listed.entries.iter().collect()),
+        Pick::Listing => Ok((Vec::new(), Vec::new())),
+        Pick::All => Ok((listed.entries.iter().collect(), Vec::new())),
         Pick::Plugins(names) => {
-            for name in names {
-                let lists = listed.entries.iter().any(|entry| entry.name == *name)
-                    || listed
-                        .failures
-                        .iter()
-                        .any(|failure| failure.name() == Some(name));
-                if !lists {
-                    return Err(MarketplaceError::NotListed {
-                        name: name.clone(),
-                        marketplace: listed.name.clone(),
-                    });
+            if let Some(name) = names.iter().find(|name| !lists(name)) {
+                return Err(MarketplaceError::NotListed {
+                    name: name.clone(),
+                    marketplace: listed.name.clone(),
+                });
+            }
+            Ok((named(names), Vec::new()))
+        }
+        Pick::Recorded(names) => {
+            let mut unlisted: Vec<EntryFailure> = Vec::new();
+            for name in names.iter().filter(|name| !lists(name)) {
+                if !unlisted.iter().any(|failure| failure.name() == Some(name)) {
+                    unlisted.push(EntryFailure::Unlisted { name: name.clone() });
                 }
             }
-            Ok(listed
-                .entries
-                .iter()
-                .filter(|entry| names.contains(&entry.name))
-                .collect())
+            Ok((named(names), unlisted))
         }
     }
+}
+
+/// Gather the marketplace `catalog` names again, a request made of what the
+/// ledger records of it ([`gather::Request::again`]), and the plugins of it
+/// gathered before: those whose entries `entries` names, or every one when
+/// it names none, each from where the catalog says it is now, at the pin it
+/// says now.
+///
+/// What `gather update` does with a marketplace, and with one of its
+/// plugins, which is gathered again from the catalog that lists it rather
+/// than on its own: the catalog is what says where a plugin is and at
+/// which commit, and a plugin in the marketplace's repository has no clone
+/// but its marketplace's.
+pub fn again(
+    workspace: &WeaverWorkspace,
+    ledger: &Ledger,
+    catalog: gather::Request,
+    entries: Option<Vec<String>>,
+) -> Result<Report, MarketplaceError> {
+    let entries = match entries {
+        Some(entries) => entries,
+        None => {
+            let url = fetched(catalog.source.url());
+            match ledger.source(
+                SourceKind::Marketplace,
+                &url,
+                catalog.source.reference(),
+                &catalog.subdirectory,
+            )? {
+                Some(parent) => ledger
+                    .children(parent.id)?
+                    .into_iter()
+                    .filter_map(|child| child.entry)
+                    .collect(),
+                None => Vec::new(),
+            }
+        }
+    };
+    gather(
+        workspace,
+        ledger,
+        &Request::new(catalog, Pick::Recorded(entries)),
+    )
 }
 
 impl Child {
@@ -1277,6 +1344,11 @@ pub enum EntryFailure {
     /// A kind of source this build does not know.
     #[error("`{name}`: a `{kind}` source, which this build does not know, so it is not gathered")]
     Unknown { name: String, kind: String },
+    /// A plugin gathered before that the catalog lists no more: its source
+    /// and what it put on the shelf are kept as they were, for `gather
+    /// remove` to take away when nobody wants them.
+    #[error("`{name}`: gathered before, and the catalog lists it no more, so its source is kept as it was")]
+    Unlisted { name: String },
 }
 
 codes!(EntryFailure {
@@ -1289,6 +1361,7 @@ codes!(EntryFailure {
     Self::Archive { .. } => "marketplace_archive_not_gathered",
     Self::Command { .. } => "marketplace_command_refused",
     Self::Unknown { .. } => "marketplace_source_unknown",
+    Self::Unlisted { .. } => "marketplace_entry_unlisted",
 });
 
 impl EntryFailure {
@@ -1303,7 +1376,8 @@ impl EntryFailure {
             | EntryFailure::Npm { name, .. }
             | EntryFailure::Archive { name, .. }
             | EntryFailure::Command { name }
-            | EntryFailure::Unknown { name, .. } => Some(name),
+            | EntryFailure::Unknown { name, .. }
+            | EntryFailure::Unlisted { name } => Some(name),
         }
     }
 }

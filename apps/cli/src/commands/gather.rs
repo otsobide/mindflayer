@@ -8,9 +8,9 @@ use mindweaver_core::gather::{self, Gathered, Preview, Report, Request, Scrub, W
 use mindweaver_core::install::{offered_by_loads, Offer};
 use mindweaver_core::ledger::{Ledger, SourceListing};
 use mindweaver_core::marketplace::{self, Listed, Pick, Plugin};
-use mindweaver_core::sources::{self, Regathered, Removal, Renamed, Which};
+use mindweaver_core::sources::{self, Again, Regathered, Removal, Renamed, Which};
 use mindweaver_core::url::redacted;
-use mindweaver_core::{Kind, WeaverWorkspace};
+use mindweaver_core::{Kind, SourceKind, WeaverWorkspace};
 
 use super::{reading_workspace, workspace_here};
 use crate::render::{indent, json_or_text, plural, printable, table, utc};
@@ -222,7 +222,8 @@ fn renamed_source(renamed: &Renamed) -> Outcome {
 
 /// What gathering each source again came to, a source after another, an
 /// empty line apart: each as `gather git` says one, by its name and the URL
-/// it was gathered from, and one that could not be gathered as a warning,
+/// it was gathered from, a marketplace as `gather marketplace` says the
+/// plugins it gathers, and one that could not be gathered as a warning,
 /// by its name, beside the rest, failing the command as a gather that
 /// failed would.
 fn regathered(updated: &[Regathered]) -> Outcome {
@@ -241,26 +242,48 @@ fn regathered(updated: &[Regathered]) -> Outcome {
         ok: true,
     };
     for each in updated {
-        match &each.outcome {
-            Ok(report) => {
-                let said = gathered(each.source.url.as_str(), report);
-                if !outcome.stdout.is_empty() {
-                    outcome.stdout.push('\n');
-                }
-                outcome.stdout.push_str(&said.stdout);
-                outcome.stderr.extend(said.stderr);
-                outcome.ok &= said.ok;
+        let said = match &each.outcome {
+            Again::Gathered(Ok(report)) => gathered(each.source.url.as_str(), report),
+            Again::Marketplace(Ok(report)) => {
+                let plugins: Vec<String> = report
+                    .children
+                    .iter()
+                    .map(|child| child.entry.clone())
+                    .collect();
+                marketplace_gathered(report, &Pick::Recorded(plugins))
             }
-            Err(error) => {
-                outcome.stderr.push(Warning::coded(
-                    error.code(),
-                    format!("warning: {}: {error}", printable(&each.source.name)),
-                ));
-                outcome.ok = false;
+            Again::Gathered(Err(error)) => {
+                failed_again(&each.source, error.code(), &error.to_string())
             }
+            Again::Marketplace(Err(error)) => {
+                failed_again(&each.source, error.code(), &error.to_string())
+            }
+        };
+        if !said.stdout.is_empty() && !outcome.stdout.is_empty() {
+            outcome.stdout.push('\n');
         }
+        outcome.stdout.push_str(&said.stdout);
+        outcome.stderr.extend(said.stderr);
+        outcome.ok &= said.ok;
     }
     outcome
+}
+
+/// A source that could not be gathered again, said as a warning by its
+/// name, `error` being what kept it.
+fn failed_again(
+    source: &mindweaver_core::ledger::Source,
+    code: &'static str,
+    error: &str,
+) -> Outcome {
+    Outcome {
+        stdout: String::new(),
+        stderr: vec![Warning::coded(
+            code,
+            format!("warning: {}: {error}", printable(&source.name)),
+        )],
+        ok: false,
+    }
 }
 
 /// What removing a source would do, `done` or not: the source, by its name
@@ -283,16 +306,42 @@ fn removing(removal: &Removal, done: bool) -> Outcome {
         ("would remove", "would delete", "would leave")
     };
     let held = if done { "held" } else { "holds" };
-    let mut outcome = Outcome::plain(format!(
-        "{would} the source {}, gathered from {}, and the {} it {held} on the shelf\n",
-        printable(&removal.source.name),
-        printable(&removal.source.origin()),
-        plural(removal.artifacts, "skill"),
-    ));
-    for folder in &removal.folders {
-        let _ = writeln!(outcome.stdout, "{deleted} {}", folder.display());
+    let mut outcome = Outcome::plain(if removal.source.kind == SourceKind::Marketplace {
+        format!(
+            "{would} the marketplace {}, gathered from {}, and the {} of it gathered\n",
+            printable(&removal.source.name),
+            printable(&removal.source.origin()),
+            plural(removal.children.len(), "plugin"),
+        )
+    } else {
+        format!(
+            "{would} the source {}, gathered from {}, and the {} it {held} on the shelf\n",
+            printable(&removal.source.name),
+            printable(&removal.source.origin()),
+            plural(removal.artifacts, "skill"),
+        )
+    });
+    // Each plugin of a marketplace as a source of its own goes, before it,
+    // as removing goes about it.
+    for each in removal.children.iter().chain(std::iter::once(removal)) {
+        if !std::ptr::eq(each, removal) {
+            let _ = writeln!(
+                outcome.stdout,
+                "{would} its plugin {}, and the {} it {held} on the shelf",
+                printable(&each.source.name),
+                plural(each.artifacts, "skill"),
+            );
+        }
+        for folder in &each.folders {
+            let _ = writeln!(outcome.stdout, "{deleted} {}", folder.display());
+        }
     }
-    for copy in &removal.installed {
+    let installed = removal
+        .children
+        .iter()
+        .chain(std::iter::once(removal))
+        .flat_map(|each| &each.installed);
+    for copy in installed.clone() {
         let _ = writeln!(
             outcome.stdout,
             "{left} {} in {}, installed from it, orphaned",
@@ -304,7 +353,7 @@ fn removing(removal: &Removal, done: bool) -> Outcome {
         outcome
             .stdout
             .push_str("nothing removed: add --yes to go ahead\n");
-    } else if !removal.installed.is_empty() {
+    } else if installed.clone().next().is_some() {
         outcome.stderr.push(Warning::from(String::from(
             "note: nothing offers what was installed from it any more; `mindweaver uninstall \
              --orphaned --all-projects` takes out what nothing offers",
@@ -345,6 +394,10 @@ fn sources(
 /// gathered, in UTC, the one zone a time can be told in without a
 /// database of them.
 ///
+/// A marketplace says how many plugins of it are gathered where a source
+/// says its skills, and each of them is under it, its name indented, in
+/// the order the ledger lists them (#103).
+///
 /// Empty, it says how to fill it, as an empty shelf does.
 fn sources_listing(listed: &[SourceListing]) -> String {
     if listed.is_empty() {
@@ -355,7 +408,11 @@ fn sources_listing(listed: &[SourceListing]) -> String {
     let rows: Vec<Vec<String>> = listed
         .iter()
         .map(|it| {
-            let mut row = vec![printable(&it.source.name), printable(&it.source.url)];
+            let name = match &it.parent {
+                Some(_) => format!("  {}", printable(&it.source.name)),
+                None => printable(&it.source.name),
+            };
+            let mut row = vec![name, printable(&it.source.url)];
             if name_reference {
                 row.push(
                     it.source
@@ -372,7 +429,16 @@ fn sources_listing(listed: &[SourceListing]) -> String {
                         .map_or_else(String::new, |pin| format!("pinned {}", short(pin))),
                 );
             }
-            row.push(plural(it.artifacts, "skill"));
+            row.push(match it.source.kind {
+                SourceKind::Marketplace => plural(
+                    listed
+                        .iter()
+                        .filter(|other| other.source.parent_id == Some(it.source.id))
+                        .count(),
+                    "plugin",
+                ),
+                SourceKind::Git => plural(it.artifacts, "skill"),
+            });
             row.push(it.gathered_at.map_or_else(
                 || String::from("never gathered"),
                 |at| format!("gathered {}", utc(at)),

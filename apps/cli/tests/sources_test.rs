@@ -42,6 +42,8 @@ struct Listed {
     pin: Option<String>,
     gathered_at: Option<i64>,
     artifacts: usize,
+    parent: Option<String>,
+    entry: Option<String>,
 }
 
 /// The commit `repository`'s HEAD is at, whole.
@@ -131,6 +133,11 @@ fn gather_sources_json_prints_each_source_in_the_envelope() {
     assert_eq!(listed.pin, None);
     assert!(listed.gathered_at.is_some_and(|at| at > 0), "{listed:?}");
     assert_eq!(listed.artifacts, 1);
+    // A source gathered on its own, the plugin of no marketplace.
+    assert_eq!(
+        (listed.parent.as_deref(), listed.entry.as_deref()),
+        (None, None)
+    );
 }
 
 #[test]

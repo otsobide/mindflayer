@@ -957,7 +957,7 @@ impl LedgerStore for Sqlite {
                 .map_err(failed)?;
             rows.collect::<Result<_, _>>().map_err(failed)?
         };
-        Ok(self
+        let listed = self
             .sources()?
             .into_iter()
             .map(|source| {
@@ -966,12 +966,15 @@ impl LedgerStore for Sqlite {
                     .find(|(id, _, _)| *id == source.id)
                     .map_or((None, 0), |(_, at, count)| (*at, *count));
                 SourceListing {
+                    entry: source.entry.clone(),
                     source,
                     gathered_at,
                     artifacts: usize::try_from(artifacts).unwrap_or_default(),
+                    parent: None,
                 }
             })
-            .collect())
+            .collect();
+        Ok(SourceListing::under_their_marketplaces(listed))
     }
 
     fn installed(&self, project: &str, installation: &InstallRecord) -> Result<(), LedgerError> {

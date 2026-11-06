@@ -337,9 +337,11 @@ pub trait LedgerStore: Debug + Send {
     /// shown as goes.
     fn sources(&self) -> Result<Vec<Source>, LedgerError>;
 
-    /// Every source, in the order [`sources`](Self::sources) lists them,
-    /// each with when a gather last took it and how many artifacts it holds
-    /// on the shelf ([`SourceListing`]): what `gather sources` lists.
+    /// Every source, in the order [`sources`](Self::sources) lists them but
+    /// for a marketplace's plugins, each right after its marketplace, by
+    /// its name, each with when a gather last took it and how many
+    /// artifacts it holds on the shelf ([`SourceListing`]): what `gather
+    /// sources` lists.
     ///
     /// When a gather last took it rather than when it was registered: a
     /// gather that registered a source and failed before it took anything

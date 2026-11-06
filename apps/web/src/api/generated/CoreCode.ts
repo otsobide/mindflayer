@@ -303,6 +303,7 @@ export type CoreCode =
   | "marketplace_archive_not_gathered"
   | "marketplace_command_refused"
   | "marketplace_source_unknown"
+  | "marketplace_entry_unlisted"
   | "marketplace_name_unusable"
   | "marketplace_plugin_not_listed"
   | "marketplace_catalog_missing"

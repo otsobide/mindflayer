@@ -11,6 +11,7 @@
 mod common;
 
 use common::*;
+use mindweaver_core::Kind;
 
 /// A marketplace as anthropics/skills keeps one, beside a plugin in a
 /// repository of its own and two entries no gather makes.
@@ -377,4 +378,157 @@ fn what_a_catalog_names_is_said_in_printable_text() {
         assert!(!line.text.chars().any(char::is_control), "{line:?}");
     }
     assert_eq!(listed.stderr.len(), 2, "{:?}", listed.stderr);
+}
+
+// ---------------------------------------------------------------------------
+// The marketplace's own commands
+// ---------------------------------------------------------------------------
+
+/// A marketplace of two plugins in its own repository, `a` and `b`, both
+/// gathered into a workspace, and its URL.
+fn both_gathered() -> (TempDir, TempDir, String) {
+    let market = repository(&[
+        (
+            ".claude-plugin/marketplace.json",
+            r#"{"name": "m", "plugins": [{"name": "a", "source": "./a"}, {"name": "b", "source": "./b"}]}"#,
+        ),
+        ("a/skills/one/SKILL.md", &skill_file("one", "First")),
+        ("b/skills/two/SKILL.md", &skill_file("two", "Second")),
+    ]);
+    let dir = workspace();
+    let url = market.path().to_string_lossy().into_owned();
+    let gathered = weaver(dir.path(), &["gather", "marketplace", &url, "--all"]).unwrap();
+    assert!(gathered.ok, "{:?}", gathered.stderr);
+    (dir, market, url)
+}
+
+/// What `gather sources --json` prints of one source, as far as a
+/// marketplace's tests ask.
+#[derive(Debug, serde::Deserialize)]
+struct Listed {
+    kind: String,
+    name: String,
+    parent: Option<String>,
+    entry: Option<String>,
+}
+
+#[test]
+fn gather_sources_lists_each_plugin_of_a_marketplace_under_it() {
+    let (dir, _market, url) = both_gathered();
+
+    let text = weaver(dir.path(), &["gather", "sources"]).unwrap();
+    let json = weaver(dir.path(), &["gather", "sources", "--json"]).unwrap();
+
+    let rows: Vec<Vec<&str>> = text
+        .stdout
+        .lines()
+        .map(|line| line.split_whitespace().take(4).collect())
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            ["m", url.as_str(), "2", "plugins"],
+            ["m.a", url.as_str(), "1", "skill"],
+            ["m.b", url.as_str(), "1", "skill"],
+        ],
+        "{}",
+        text.stdout
+    );
+    assert!(
+        text.stdout.lines().nth(1).unwrap().starts_with("  m.a"),
+        "{}",
+        text.stdout
+    );
+    let (listed, _): (Vec<Listed>, _) = enveloped(&json);
+    let said: Vec<(&str, &str, Option<&str>, Option<&str>)> = listed
+        .iter()
+        .map(|it| {
+            (
+                it.kind.as_str(),
+                it.name.as_str(),
+                it.parent.as_deref(),
+                it.entry.as_deref(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        said,
+        [
+            ("marketplace", "m", None, None),
+            ("git", "m.a", Some("m"), Some("a")),
+            ("git", "m.b", Some("m"), Some("b")),
+        ]
+    );
+}
+
+#[test]
+fn gather_update_of_a_marketplace_gathers_each_plugin_of_it_again() {
+    let (dir, market, url) = both_gathered();
+    let head = short_head(&market);
+
+    let updated = weaver(dir.path(), &["gather", "update", "m"]).unwrap();
+
+    assert!(updated.ok, "{:?}", updated.stderr);
+    assert_eq!(
+        updated.stdout,
+        format!(
+            "m: {url} at {head}\n\
+             \n\
+             m.a: {url} at {head}\n\
+             \x20 unchanged  one  First\n\
+             \n\
+             1 skill: 0 added, 0 updated, 1 unchanged\n\
+             \n\
+             m.b: {url} at {head}\n\
+             \x20 unchanged  two  Second\n\
+             \n\
+             1 skill: 0 added, 0 updated, 1 unchanged\n"
+        )
+    );
+}
+
+#[test]
+fn gather_remove_of_a_marketplace_says_each_plugin_of_it_and_takes_them_with_it() {
+    let (dir, _market, url) = both_gathered();
+    let workspace = WeaverWorkspace::open(dir.path()).unwrap();
+    let ledger = workspace.ledger_for_reading().unwrap();
+    let folder = |name: &str| {
+        let source = mindweaver_core::sources::named(&ledger, name).unwrap();
+        (
+            workspace.cache_dir().join(&source.directory),
+            workspace.gathered_dir(Kind::Skill).join(&source.directory),
+        )
+    };
+    let (clone, _) = folder("m");
+    let ((_, a), (_, b)) = (folder("m.a"), folder("m.b"));
+
+    let planned = weaver(dir.path(), &["gather", "remove", "m"]).unwrap();
+
+    assert_eq!(
+        planned.stdout,
+        format!(
+            "would remove the marketplace m, gathered from {url}, and the 2 plugins of it gathered\n\
+             would remove its plugin m.a, and the 1 skill it holds on the shelf\n\
+             would delete {}\n\
+             would remove its plugin m.b, and the 1 skill it holds on the shelf\n\
+             would delete {}\n\
+             would delete {}\n\
+             nothing removed: add --yes to go ahead\n",
+            a.display(),
+            b.display(),
+            clone.display()
+        )
+    );
+    assert!(clone.is_dir() && a.is_dir() && b.is_dir());
+
+    let removed = weaver(dir.path(), &["gather", "remove", "m", "--yes"]).unwrap();
+
+    assert!(removed.ok, "{:?}", removed.stderr);
+    assert!(!clone.exists() && !a.exists() && !b.exists());
+    let sources = weaver(dir.path(), &["gather", "sources"]).unwrap();
+    assert!(
+        sources.stdout.starts_with("no sources yet"),
+        "{}",
+        sources.stdout
+    );
 }

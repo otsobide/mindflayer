@@ -18,8 +18,9 @@ use crate::code::codes;
 use crate::gather::{self, GatherError, Report, Request, Watch};
 use crate::install;
 use crate::kind::Kind;
-use crate::ledger::{Ledger, LedgerError, Source};
+use crate::ledger::{Ledger, LedgerError, Source, SourceKind};
 use crate::lock::LockError;
+use crate::marketplace::{self, MarketplaceError};
 use crate::value::{ArtifactName, Origin, SourceName};
 use crate::workspace::{same_directory, MindProject, WeaverWorkspace, WorkspaceError};
 
@@ -112,7 +113,34 @@ pub struct Regathered {
     /// What was added, updated, removed and left as it was, or why it could
     /// not be gathered again: one source that fails is no reason not to
     /// gather the rest.
-    pub outcome: Result<Report, GatherError>,
+    pub outcome: Again,
+}
+
+/// What one source gathered again came to, by what kind of source it is.
+#[derive(Debug)]
+pub enum Again {
+    /// A source gathered on its own, gathered again as `gather git`
+    /// gathers it.
+    Gathered(Result<Report, GatherError>),
+    /// A marketplace, its catalog fetched again and each plugin of it
+    /// gathered again, or one plugin of a marketplace, gathered again
+    /// through its marketplace's catalog (#103).
+    Marketplace(Result<marketplace::Report, MarketplaceError>),
+}
+
+impl Again {
+    /// Whether it was cancelled, and so the rest are not begun.
+    pub fn is_cancelled(&self) -> bool {
+        match self {
+            Again::Gathered(outcome) => matches!(outcome, Err(GatherError::Cancelled)),
+            Again::Marketplace(Err(MarketplaceError::Gather(GatherError::Cancelled))) => true,
+            Again::Marketplace(Ok(report)) => report
+                .children
+                .iter()
+                .any(|child| matches!(child.outcome, Err(GatherError::Cancelled))),
+            Again::Marketplace(Err(_)) => false,
+        }
+    }
 }
 
 /// Gather each source `which` names again ([`Request::again`]), through
@@ -127,14 +155,28 @@ pub struct Regathered {
 /// that fails is said in its own [`Regathered::outcome`] and the rest go
 /// ahead; once one is cancelled, the rest are not begun, and are said as
 /// cancelled too, each with nothing put on the shelf.
+///
+/// A marketplace cascades to its plugins (D-13): its catalog is fetched
+/// again and every plugin of it gathered before is gathered again from
+/// where the catalog says it is now ([`marketplace::again`]). A plugin
+/// named on its own is gathered again through its marketplace's catalog
+/// too, with no other plugin of it; one whose marketplace is named beside
+/// it is its marketplace's to gather, once. With every source, each
+/// marketplace is gathered with its plugins, which are not gathered again
+/// apart.
 pub fn update(
     workspace: &WeaverWorkspace,
     ledger: &Ledger,
     which: Which<'_>,
     watch: &Watch,
 ) -> Result<Vec<Regathered>, SourceError> {
+    let every = ledger.sources()?;
     let sources = match which {
-        Which::Every => ledger.sources()?,
+        Which::Every => every
+            .iter()
+            .filter(|source| source.parent_id.is_none())
+            .cloned()
+            .collect(),
         Which::Named(names) => {
             let mut found: Vec<Source> = Vec::with_capacity(names.len());
             for name in names {
@@ -143,6 +185,12 @@ pub fn update(
                     found.push(source);
                 }
             }
+            let named: Vec<i64> = found.iter().map(|source| source.id).collect();
+            found.retain(|source| {
+                source
+                    .parent_id
+                    .is_none_or(|parent| !named.contains(&parent))
+            });
             found
         }
     };
@@ -150,18 +198,47 @@ pub fn update(
     let mut cancelled = false;
     for source in sources {
         let outcome = if cancelled {
-            Err(GatherError::Cancelled)
+            Again::Gathered(Err(GatherError::Cancelled))
         } else {
-            gather::gather(
-                workspace,
-                ledger,
-                &Request::again(&source).watched_by(watch.clone()),
-            )
+            again(workspace, ledger, &every, &source, watch)
         };
-        cancelled = matches!(outcome, Err(GatherError::Cancelled));
+        cancelled = outcome.is_cancelled();
         updated.push(Regathered { source, outcome });
     }
     Ok(updated)
+}
+
+/// Gather `source` again, `every` being every source the ledger keeps: as
+/// it was gathered last, or through its marketplace's catalog.
+fn again(
+    workspace: &WeaverWorkspace,
+    ledger: &Ledger,
+    every: &[Source],
+    source: &Source,
+    watch: &Watch,
+) -> Again {
+    let parent = source
+        .parent_id
+        .and_then(|parent| every.iter().find(|other| other.id == parent));
+    match (source.kind, parent) {
+        (SourceKind::Marketplace, _) => Again::Marketplace(marketplace::again(
+            workspace,
+            ledger,
+            Request::again(source).watched_by(watch.clone()),
+            None,
+        )),
+        (SourceKind::Git, Some(parent)) => Again::Marketplace(marketplace::again(
+            workspace,
+            ledger,
+            Request::again(parent).watched_by(watch.clone()),
+            Some(source.entry.clone().into_iter().collect()),
+        )),
+        (SourceKind::Git, None) => Again::Gathered(gather::gather(
+            workspace,
+            ledger,
+            &Request::again(source).watched_by(watch.clone()),
+        )),
+    }
 }
 
 /// One installation of what a source supplied, in a project the workspace
@@ -192,6 +269,10 @@ pub struct Removal {
     /// installed from the source cannot be told, so it is said beside the
     /// rest.
     pub unread: Vec<WorkspaceError>,
+    /// For a marketplace, what removing each plugin of it gathered would
+    /// do, which removing it does too (D-13), in the order the ledger lists
+    /// them; none for any other source.
+    pub children: Vec<Removal>,
 }
 
 /// What removing the source called `name` would do: the folders it would
@@ -203,6 +284,23 @@ pub fn plan_removal(
     name: &str,
 ) -> Result<Removal, SourceError> {
     let source = named(ledger, name)?;
+    let children = ledger
+        .children(source.id)?
+        .into_iter()
+        .map(|child| plan_of(workspace, ledger, child))
+        .collect::<Result<_, _>>()?;
+    Ok(Removal {
+        children,
+        ..plan_of(workspace, ledger, source)?
+    })
+}
+
+/// What removing `source` alone would do, none of its plugins among it.
+fn plan_of(
+    workspace: &WeaverWorkspace,
+    ledger: &Ledger,
+    source: Source,
+) -> Result<Removal, SourceError> {
     let folders = folders_of(workspace, &source)?;
     let artifacts = ledger
         .gathered()?
@@ -243,6 +341,7 @@ pub fn plan_removal(
         folders,
         installed,
         unread,
+        children: Vec::new(),
     })
 }
 
@@ -266,6 +365,11 @@ pub fn plan_removal(
 /// source ([`forget_source`](crate::port::LedgerStore::forget_source)):
 /// nothing offers it there any more, so `status` says it is orphaned, an
 /// update leaves it, and `uninstall --orphaned` takes it out.
+///
+/// A marketplace's plugins go with it (D-13), each as a source removed
+/// alone goes, before it: their folders first, then its own, then the rows
+/// of each, its own last, so a folder that will not go keeps every row of a
+/// source that still holds one.
 pub fn remove(
     workspace: &WeaverWorkspace,
     ledger: &Ledger,
@@ -273,18 +377,23 @@ pub fn remove(
 ) -> Result<Removal, SourceError> {
     let _lock = workspace.lock()?;
     let removal = plan_removal(workspace, ledger, name)?;
-    for folder in &removal.folders {
-        match fs::remove_dir_all(folder) {
-            Ok(()) => {}
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-            Err(error) => {
-                return Err(SourceError::Unremoved {
-                    name: removal.source.name.clone(),
-                    path: folder.clone(),
-                    source: error,
-                })
+    for each in removal.children.iter().chain(std::iter::once(&removal)) {
+        for folder in &each.folders {
+            match fs::remove_dir_all(folder) {
+                Ok(()) => {}
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Err(error) => {
+                    return Err(SourceError::Unremoved {
+                        name: each.source.name.clone(),
+                        path: folder.clone(),
+                        source: error,
+                    })
+                }
             }
         }
+    }
+    for child in &removal.children {
+        ledger.forget_source(child.source.id)?;
     }
     ledger.forget_source(removal.source.id)?;
     Ok(removal)

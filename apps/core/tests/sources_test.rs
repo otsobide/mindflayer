@@ -11,7 +11,8 @@ use mindweaver_core::assign;
 use mindweaver_core::gather::{self, GatherError, Request, Watch};
 use mindweaver_core::install::{Confirmed, Edits};
 use mindweaver_core::ledger::Ledger;
-use mindweaver_core::sources::{self, Regathered, SourceError, Which};
+use mindweaver_core::marketplace;
+use mindweaver_core::sources::{self, Again, Regathered, SourceError, Which};
 use mindweaver_core::{
     Agent, AgentHomes, Directories, Kind, MindProject, Reference, Share, WeaverWorkspace,
 };
@@ -41,6 +42,15 @@ fn two_gathered() -> (TempDir, WeaverWorkspace, Ledger, TempDir, TempDir) {
     (dir, workspace, ledger, acme, other)
 }
 
+/// What gathering a source on its own again came to, which every source
+/// here is.
+fn again(regathered: &Regathered) -> Result<&gather::Report, &GatherError> {
+    match &regathered.outcome {
+        Again::Gathered(outcome) => outcome.as_ref(),
+        Again::Marketplace(_) => panic!("{regathered:?} is no source gathered on its own"),
+    }
+}
+
 /// A source's name, and the names of what gathering it again added,
 /// updated and removed.
 type Moved = (String, Vec<String>, Vec<String>, Vec<String>);
@@ -53,7 +63,7 @@ fn moved(updated: &[Regathered]) -> Vec<Moved> {
     updated
         .iter()
         .map(|regathered| {
-            let report = regathered.outcome.as_ref().expect("gathered again");
+            let report = again(regathered).expect("gathered again");
             (
                 regathered.source.name.to_string(),
                 names(&report.added),
@@ -183,7 +193,7 @@ fn a_pinned_source_is_gathered_again_at_its_pin() {
 
     let updated = sources::update(&workspace, &ledger, Which::Every, &Watch::new()).unwrap();
 
-    let report = updated[0].outcome.as_ref().unwrap();
+    let report = again(&updated[0]).unwrap();
     assert_eq!(report.revision.as_deref(), Some(pin.as_str()));
     assert_eq!(report.unchanged.len(), 1, "{report:?}");
     assert_eq!(
@@ -209,14 +219,14 @@ fn a_source_that_cannot_be_gathered_again_is_said_and_the_rest_are_gathered() {
 
     let updated = sources::update(&workspace, &ledger, Which::Every, &Watch::new()).unwrap();
 
-    let failed: Vec<&Regathered> = updated.iter().filter(|r| r.outcome.is_err()).collect();
+    let failed: Vec<&Regathered> = updated.iter().filter(|r| again(r).is_err()).collect();
     assert_eq!(failed.len(), 1, "{updated:?}");
     assert_eq!(failed[0].source.url.as_str(), acme_url);
     let gathered = updated
         .iter()
         .find(|r| r.source.name.as_str() == "other")
         .unwrap();
-    assert_eq!(gathered.outcome.as_ref().unwrap().added.len(), 1);
+    assert_eq!(again(gathered).unwrap().added.len(), 1);
     // What the one that failed supplied is on the shelf as it was.
     assert_eq!(
         ledger
@@ -242,7 +252,7 @@ fn once_one_is_cancelled_the_rest_are_not_begun_and_said_cancelled() {
     assert!(
         updated
             .iter()
-            .all(|r| matches!(r.outcome, Err(GatherError::Cancelled))),
+            .all(|r| matches!(again(r), Err(GatherError::Cancelled))),
         "{updated:?}"
     );
     assert_eq!(ledger.history(100).unwrap().len(), logged);
@@ -457,4 +467,251 @@ fn a_shelf_folder_that_will_not_go_keeps_the_source_and_its_rows() {
     assert!(shelf.is_dir());
     assert_eq!(ledger.sources().unwrap().len(), 2);
     assert_eq!(ledger.gathered().unwrap().len(), 3);
+}
+
+// ---------------------------------------------------------------------------
+// A marketplace and its plugins (#103)
+// ---------------------------------------------------------------------------
+
+/// A marketplace's repository, `m`, listing `a` and `b`, each a plugin of
+/// its own repository's, gathered whole into a workspace, beside `acme`, a
+/// source gathered on its own.
+fn marketplace_gathered() -> (TempDir, WeaverWorkspace, Ledger, TempDir, TempDir) {
+    let market = repository(&[
+        (
+            ".claude-plugin/marketplace.json",
+            r#"{"name": "m", "plugins": [
+                {"name": "a", "source": "./a"},
+                {"name": "b", "source": "./b"}
+            ]}"#,
+        ),
+        ("a/skills/one/SKILL.md", &skill("one", "First")),
+        ("b/skills/two/SKILL.md", &skill("two", "Second")),
+    ]);
+    let acme = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
+    let (dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    marketplace::gather(
+        &workspace,
+        &ledger,
+        &marketplace::Request::new(Request::git(url(&market)), marketplace::Pick::All),
+    )
+    .unwrap();
+    gather::gather(
+        &workspace,
+        &ledger,
+        &Request::git(url(&acme)).named(Some("acme")),
+    )
+    .unwrap();
+    (dir, workspace, ledger, market, acme)
+}
+
+/// What gathering a marketplace again came to.
+fn again_of(regathered: &Regathered) -> &marketplace::Report {
+    match &regathered.outcome {
+        Again::Marketplace(Ok(report)) => report,
+        other => panic!("{other:?} is no marketplace gathered again"),
+    }
+}
+
+#[test]
+fn a_marketplace_gathered_again_gathers_each_plugin_of_it_again_from_its_catalog() {
+    let (_dir, workspace, ledger, market, _acme) = marketplace_gathered();
+    write_files(
+        market.path(),
+        &[
+            (
+                ".claude-plugin/marketplace.json",
+                r#"{"name": "m", "plugins": [{"name": "a", "source": "./a"}]}"#,
+            ),
+            ("a/skills/one/SKILL.md", &skill("one", "First, again")),
+        ],
+    );
+    commit(market.path());
+
+    let names = [String::from("m")];
+    let updated =
+        sources::update(&workspace, &ledger, Which::Named(&names), &Watch::new()).unwrap();
+
+    assert_eq!(updated.len(), 1);
+    let report = again_of(&updated[0]);
+    let children: Vec<(&str, usize)> = report
+        .children
+        .iter()
+        .map(|child| {
+            (
+                child.entry.as_str(),
+                child.outcome.as_ref().unwrap().updated.len(),
+            )
+        })
+        .collect();
+    assert_eq!(children, [("a", 1)]);
+    // The one it lists no more is said, and kept as it was.
+    let failures: Vec<(Option<&str>, &str)> = report
+        .catalog
+        .failures
+        .iter()
+        .map(|failure| (failure.name(), failure.code()))
+        .collect();
+    assert_eq!(failures, [(Some("b"), "marketplace_entry_unlisted")]);
+    assert!(sources::named(&ledger, "m.b").is_ok());
+    assert!(ledger
+        .gathered()
+        .unwrap()
+        .iter()
+        .any(|gathered| gathered.name == "two"));
+}
+
+#[test]
+fn every_source_gathered_again_gathers_a_marketplace_once_with_its_plugins() {
+    let (_dir, workspace, ledger, _market, _acme) = marketplace_gathered();
+
+    let updated = sources::update(&workspace, &ledger, Which::Every, &Watch::new()).unwrap();
+
+    let names: Vec<&str> = updated
+        .iter()
+        .map(|regathered| regathered.source.name.as_str())
+        .collect();
+    assert_eq!(names.len(), 2, "{names:?}");
+    assert!(names.contains(&"m") && names.contains(&"acme"), "{names:?}");
+    let market = updated
+        .iter()
+        .find(|regathered| regathered.source.name == "m")
+        .unwrap();
+    let entries: Vec<&str> = again_of(market)
+        .children
+        .iter()
+        .map(|child| child.entry.as_str())
+        .collect();
+    assert_eq!(entries, ["a", "b"]);
+}
+
+#[test]
+fn a_plugin_gathered_again_by_its_name_is_gathered_through_its_marketplace_alone() {
+    let (_dir, workspace, ledger, _market, _acme) = marketplace_gathered();
+
+    let names = [String::from("m.b")];
+    let updated =
+        sources::update(&workspace, &ledger, Which::Named(&names), &Watch::new()).unwrap();
+
+    assert_eq!(updated.len(), 1);
+    assert_eq!(updated[0].source.name, "m.b");
+    let entries: Vec<&str> = again_of(&updated[0])
+        .children
+        .iter()
+        .map(|child| child.entry.as_str())
+        .collect();
+    assert_eq!(entries, ["b"]);
+
+    // Named beside its marketplace, it is its marketplace's to gather, once.
+    let names = [String::from("m.a"), String::from("m")];
+    let updated =
+        sources::update(&workspace, &ledger, Which::Named(&names), &Watch::new()).unwrap();
+    assert_eq!(updated.len(), 1);
+    assert_eq!(updated[0].source.name, "m");
+}
+
+#[test]
+fn the_sources_are_listed_each_plugin_under_its_marketplace() {
+    let (_dir, _workspace, ledger, _market, _acme) = marketplace_gathered();
+
+    let listed: Vec<(String, Option<String>, Option<String>)> = ledger
+        .source_listing()
+        .unwrap()
+        .into_iter()
+        .map(|it| {
+            (
+                it.source.name.to_string(),
+                it.parent.map(|parent| parent.to_string()),
+                it.entry,
+            )
+        })
+        .collect();
+
+    let at = listed.iter().position(|(name, _, _)| name == "m").unwrap();
+    assert_eq!(
+        listed[at..at + 3],
+        [
+            (String::from("m"), None, None),
+            (
+                String::from("m.a"),
+                Some(String::from("m")),
+                Some(String::from("a"))
+            ),
+            (
+                String::from("m.b"),
+                Some(String::from("m")),
+                Some(String::from("b"))
+            ),
+        ]
+    );
+    assert_eq!(listed.len(), 4);
+}
+
+#[test]
+fn removing_a_marketplace_says_and_takes_each_plugin_of_it_and_their_folders() {
+    let (dir, mut workspace, ledger, _market, _acme) = marketplace_gathered();
+    let root = dir.path().join("collapse");
+    fs::create_dir(&root).unwrap();
+    let (project, _) =
+        MindProject::init_settings(&root, &Agent::ALL, Share::Shared, &Directories::default())
+            .unwrap();
+    workspace.link(&project).unwrap();
+    assign::install(
+        &workspace,
+        std::slice::from_ref(&project),
+        &Reference::parse("one"),
+        Some("m.a"),
+        workspace.root(),
+        &AgentHomes::default(),
+        Edits::Kept,
+        Confirmed::Yes,
+    )
+    .unwrap();
+    let market = sources::named(&ledger, "m").unwrap();
+    let a = sources::named(&ledger, "m.a").unwrap();
+    let clone = workspace.cache_dir().join(&market.directory);
+    let shelf = workspace.gathered_dir(Kind::Skill).join(&a.directory);
+
+    let planned = sources::plan_removal(&workspace, &ledger, "m").unwrap();
+
+    let plugins: Vec<&str> = planned
+        .children
+        .iter()
+        .map(|child| child.source.name.as_str())
+        .collect();
+    assert_eq!(plugins, ["m.a", "m.b"]);
+    assert_eq!(planned.folders, std::slice::from_ref(&clone));
+    assert_eq!(planned.children[0].folders, std::slice::from_ref(&shelf));
+    assert_eq!(planned.children[0].installed.len(), 1);
+    assert!(clone.is_dir() && shelf.is_dir());
+
+    let removed = sources::remove(&workspace, &ledger, "m").unwrap();
+
+    assert_eq!(removed.children.len(), 2);
+    assert!(!clone.exists() && !shelf.exists());
+    let names: Vec<String> = ledger
+        .sources()
+        .unwrap()
+        .into_iter()
+        .map(|source| source.name.to_string())
+        .collect();
+    assert_eq!(names, ["acme"]);
+    let record = ledger
+        .installation(project.name(), Kind::Skill, "one")
+        .unwrap()
+        .expect("still recorded");
+    assert_eq!(record.source_id, None);
+}
+
+#[test]
+fn removing_one_plugin_of_a_marketplace_leaves_the_marketplace_and_its_clone() {
+    let (_dir, workspace, ledger, _market, _acme) = marketplace_gathered();
+    let market = sources::named(&ledger, "m").unwrap();
+
+    sources::remove(&workspace, &ledger, "m.a").unwrap();
+
+    assert!(sources::named(&ledger, "m").is_ok());
+    assert!(sources::named(&ledger, "m.b").is_ok());
+    assert!(workspace.cache_dir().join(&market.directory).is_dir());
 }

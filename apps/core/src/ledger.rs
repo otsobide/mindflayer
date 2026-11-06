@@ -174,11 +174,13 @@ impl Source {
 }
 
 /// A source as `gather sources` lists it: the source, when a gather last
-/// took it, and how much of the shelf is its (#100).
+/// took it, and how much of the shelf is its (#100), and for a plugin of a
+/// marketplace, which marketplace and which of its entries it is (#103).
 ///
 /// What it serializes to is a contract, as a status report's is: the
 /// source's fields as [`Source`] writes them, beside its own, each by its
-/// name.
+/// name. `parent` and `entry` were added after the rest, which moved no
+/// version.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SourceListing {
     #[serde(flatten)]
@@ -189,6 +191,48 @@ pub struct SourceListing {
     pub gathered_at: Option<i64>,
     /// How many artifacts it holds on the shelf, of every kind.
     pub artifacts: usize,
+    /// The marketplace it is a plugin of, by the name it is called: `None`
+    /// for a source gathered on its own.
+    pub parent: Option<SourceName>,
+    /// The name its marketplace's catalog lists it by: `None` for a source
+    /// gathered on its own.
+    pub entry: Option<String>,
+}
+
+impl SourceListing {
+    /// `listed`, each source in the order it came, but each plugin of a
+    /// marketplace right after its marketplace, in the order it came too,
+    /// with the marketplace's name: what `gather sources` lists, so a
+    /// marketplace reads with what it holds under it.
+    ///
+    /// One whose marketplace is not among `listed`, which no ledger keeps,
+    /// is listed last, with none.
+    pub(crate) fn under_their_marketplaces(listed: Vec<SourceListing>) -> Vec<SourceListing> {
+        let ids: Vec<i64> = listed.iter().map(|it| it.source.id).collect();
+        let (children, alone): (Vec<SourceListing>, Vec<SourceListing>) =
+            listed.into_iter().partition(|it| {
+                it.source
+                    .parent_id
+                    .is_some_and(|parent| ids.contains(&parent))
+            });
+        let mut grouped = Vec::with_capacity(children.len() + alone.len());
+        for it in alone {
+            let id = it.source.id;
+            let name = it.source.name.clone();
+            grouped.push(it);
+            grouped.extend(
+                children
+                    .iter()
+                    .filter(|child| child.source.parent_id == Some(id))
+                    .cloned()
+                    .map(|mut child| {
+                        child.parent = Some(name.clone());
+                        child
+                    }),
+            );
+        }
+        grouped
+    }
 }
 
 /// A source the step to schema 7 made one with another it found to be the
