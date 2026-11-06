@@ -3141,8 +3141,8 @@ folder on the way in would repair the symptom and hide it.
 
 ### Where a source's skills are found
 
-A gather searches the repository (#101), from its root unless `--path` names
-a folder, for every folder holding a `SKILL.md`, as far as
+A gather searches the repository (#101), from its root unless `--path`, or a
+tree URL, names a folder of it, for every folder holding a `SKILL.md`, as far as
 `gather::SEARCH_DEPTH`, four folders down. That is the depth of the deepest
 layout the tools that install skills from a repository share,
 `plugins/<plugin>/skills/<name>`; the others, `skills/<name>`,
@@ -3168,6 +3168,11 @@ offers one skill, found at `skills/<name>`, rather than two of one name; one
 that leads out of the clone is refused (`gathered_link_outside`), since the
 copy bounds what it follows by the folder it copies as well as by the clone
 (`copy::tree`'s `within`), and would copy whatever such a link led to.
+A folder named that is absolute, or climbs out of the repository's root
+(`..`, read lexically, as every route is), is refused before anything is
+registered or fetched (`gather_path_outside`): the search would start
+outside the clone, in the workspace's cache and shelf or above them, and
+find there what no repository offers.
 
 The folder searched holding a `SKILL.md` is one skill, and nothing in it is
 another: a repository with one at its root is one skill, everything in it but

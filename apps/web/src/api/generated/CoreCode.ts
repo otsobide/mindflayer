@@ -194,6 +194,7 @@ export type CoreCode =
   | "gather_cancelled"
   | "credentials_in_url"
   | "gather_no_such_folder"
+  | "gather_path_outside"
   | "source_name_invalid"
   | "source_name_taken"
   | "gather_pin_invalid"

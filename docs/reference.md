@@ -801,7 +801,8 @@ and all, and nothing in it is another. `.git` and `node_modules` are never
 looked in, nor a folder that is a link; a skill's folder that is a link is
 taken from where it leads, inside the repository, and refused with a
 warning when that is outside it. `--path plugins/ops` searches that folder
-alone, and `--ref v2` takes a branch or a tag instead of the default. A
+alone, named from the repository's root, which it never climbs out of (`..`
+is refused), and `--ref v2` takes a branch or a tag instead of the default. A
 source an older Mindweaver gathered without `--path` was searched in its
 `skills` folder alone, and `gather update` searches it there still; gathered
 with `gather git` and no `--path`, the repository is another source, of all

@@ -221,6 +221,52 @@ fn a_contradiction_is_said_without_the_credentials_either_side_carries() {
 }
 
 #[test]
+fn a_folder_outside_the_repository_is_refused_before_the_remote_is_asked() {
+    let (_dir, workspace) = WorkspaceMother::empty();
+    let ledger = workspace.ledger().unwrap();
+    let remote = Arc::new(Unreached::default());
+
+    for folder in ["..", "../..", "skills/../../x", "/srv/skills"] {
+        let request = Request::git(UrlMother::https())
+            .from_subdirectory(folder)
+            .through(remote.clone());
+
+        let refused = gather(&workspace, &ledger, &request).unwrap_err();
+        let previewed = preview(&workspace, &ledger, &request).unwrap_err();
+
+        assert_eq!(refused.code(), "gather_path_outside", "{folder}");
+        assert_eq!(previewed.code(), "gather_path_outside", "{folder}");
+    }
+    let tree = Request::addressed("https://github.com/acme/skills/tree/main/../..", None, None)
+        .unwrap()
+        .through(remote.clone());
+    let refused = gather(&workspace, &ledger, &tree).unwrap_err();
+
+    assert_eq!(
+        refused.to_string(),
+        "`../..` is no folder of the repository: --path names one from its root, and never \
+         climbs out of it"
+    );
+    assert_eq!(*remote.asked.lock().unwrap(), 0);
+    assert_eq!(ledger.sources().unwrap(), []);
+}
+
+#[test]
+fn a_folder_inside_the_repository_however_it_is_spelled_is_no_folder_outside_it() {
+    for folder in [
+        "",
+        ".",
+        "skills",
+        "./skills/",
+        "skills/..",
+        "a/../b",
+        "..skills",
+    ] {
+        assert!(!outside(folder), "{folder}");
+    }
+}
+
+#[test]
 fn a_credential_a_tree_url_carries_is_refused_before_the_remote_is_asked() {
     let (_dir, workspace) = WorkspaceMother::empty();
     let ledger = workspace.ledger().unwrap();
@@ -1237,6 +1283,12 @@ fn each_gather_error_of_its_own_gives_its_own_code() {
                 url: UrlMother::https(),
             },
             "gather_no_such_folder",
+        ),
+        (
+            GatherError::PathOutside {
+                subdirectory: String::from("../.."),
+            },
+            "gather_path_outside",
         ),
         (
             GatherError::NameInvalid {

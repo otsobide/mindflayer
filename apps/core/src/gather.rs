@@ -16,7 +16,7 @@ mod watch;
 use std::fmt;
 use std::fs;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -803,6 +803,14 @@ fn checked(
             url: redacted(carrying).into_owned(),
         });
     }
+    // Before anything is fetched, and so before a search that would start
+    // outside the clone, in the workspace's cache and shelf or above them,
+    // and take what it found there for the repository's.
+    if outside(&request.subdirectory) {
+        return Err(GatherError::PathOutside {
+            subdirectory: request.subdirectory.clone(),
+        });
+    }
     let name = match &request.name {
         Some(typed) => Some(
             SourceName::parse(typed).ok_or_else(|| GatherError::NameInvalid {
@@ -863,6 +871,18 @@ fn checked(
         manifest,
     };
     Ok((checked, found))
+}
+
+/// Whether `subdirectory`, a folder of a repository as somebody typed it
+/// (`--path`, or a tree URL's), names one outside it: absolute, or
+/// climbing out of the repository's root, lexically, as every route is
+/// read ([`paths::normalize`]), as an installed rule's route is refused
+/// when it climbs ([`crate::install::is_installable_name`]).
+fn outside(subdirectory: &str) -> bool {
+    let path = Path::new(subdirectory);
+    path.components()
+        .any(|part| matches!(part, Component::Prefix(_) | Component::RootDir))
+        || paths::normalize(path).components().next() == Some(Component::ParentDir)
 }
 
 /// The work itself, with the logging left to [`gather`].
@@ -1723,6 +1743,13 @@ pub enum GatherError {
     CredentialsInUrl { url: String },
     #[error("{url}: has no `{subdirectory}` folder to gather from")]
     NoSuchFolder { subdirectory: String, url: String },
+    /// The folder to search is absolute, or climbs out of the repository
+    /// ([`outside`]).
+    #[error(
+        "`{subdirectory}` is no folder of the repository: --path names one from its root, and \
+         never climbs out of it"
+    )]
+    PathOutside { subdirectory: String },
     /// `--name` named what no source can be called ([`SourceName::parse`]).
     #[error(
         "`{name}` cannot name a source: it has to be letters, digits, `.`, `_` and `-`, not \
@@ -1778,6 +1805,7 @@ codes!(GatherError {
     Self::Cancelled => "gather_cancelled",
     Self::CredentialsInUrl { .. } => "credentials_in_url",
     Self::NoSuchFolder { .. } => "gather_no_such_folder",
+    Self::PathOutside { .. } => "gather_path_outside",
     Self::NameInvalid { .. } => "source_name_invalid",
     Self::NameTaken { .. } => "source_name_taken",
     Self::PinInvalid { .. } => "gather_pin_invalid",
