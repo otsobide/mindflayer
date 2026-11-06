@@ -8,7 +8,7 @@ mod common;
 
 use common::mother::ServerOptionsMother;
 use common::*;
-use mindweaver_core::mcp::{Address, Given};
+use mindweaver_core::mcp::{Address, Given, McpDefinition};
 use mindweaver_core::mother::{McpMother, ProjectMother, SettingsMother, UrlMother};
 use mindweaver_core::{Agent, Share};
 
@@ -907,6 +907,78 @@ fn contents_given_whole_that_name_a_server_otherwise_are_refused() {
     .unwrap_err();
 
     assert_eq!(failure.error.code(), "edit_mcp_name_changed");
+}
+
+#[test]
+fn edit_writes_how_a_server_is_started_again_from_the_options_add_takes() {
+    let dir = workspace();
+    add_given(dir.path(), "github", &McpMother::given_program()).unwrap();
+    let file = own_directory_for(dir.path(), Kind::Mcp).join("github.toml");
+    let given = McpMother::given_address(false);
+    let mut line = vec!["edit", "mcp:github"];
+    let options = ServerOptionsMother::words(&given);
+    line.extend(options.iter().map(String::as_str));
+
+    let edited = weaver(dir.path(), &line).unwrap();
+    let again = weaver(dir.path(), &line).unwrap();
+
+    assert_eq!(edited.stdout, "edited mcp github: ok\n");
+    assert_eq!(again.stdout, "left mcp github unchanged: ok\n");
+    let definition = McpDefinition::parse(&fs::read_to_string(&file).unwrap()).unwrap();
+    assert_eq!(definition.description, GITHUB);
+    let Given::Address(mut read) = given else {
+        unreachable!("an address is given as one");
+    };
+    read.headers.sort();
+    assert_eq!(Given::of(&definition), Some(Given::Address(read)));
+    let validated = weaver(dir.path(), &["validate", "mcp:github"]).unwrap();
+    assert!(validated.ok, "{}", validated.stdout);
+}
+
+#[test]
+fn edit_refuses_a_transport_beside_an_editor_or_contents_and_for_a_skill() {
+    let dir = library();
+    for options in [
+        &["--editor", "true", "--command", "npx"][..],
+        &[
+            "--contents",
+            "draft.toml",
+            "--url",
+            "https://example.com/mcp",
+        ][..],
+    ] {
+        for lead in [&["mind"][..], &["mind", "weaver"][..]] {
+            let mut words = lead.to_vec();
+            words.extend(["edit", "mcp:github"]);
+            words.extend(options);
+            let error = Cli::try_parse_from(&words).err().map(|error| error.kind());
+            assert_eq!(
+                error,
+                Some(clap::error::ErrorKind::ArgumentConflict),
+                "{words:?}"
+            );
+        }
+    }
+
+    let failure = weaver(dir.path(), &["edit", "skill:deploy", "--command", "npx"]).unwrap_err();
+
+    assert_eq!(failure.error.code(), "edit_transport_not_mcp");
+}
+
+#[test]
+fn a_front_end_with_no_terminal_runs_an_edit_told_a_servers_transport() {
+    let line: Vec<String> = ["mindweaver", "edit", "mcp:github", "--command", "npx"]
+        .map(String::from)
+        .to_vec();
+    let editor: Vec<String> = ["mindweaver", "edit", "mcp:github"]
+        .map(String::from)
+        .to_vec();
+
+    assert_eq!(mindweaver_cli::task::refused(&line), None);
+    assert_eq!(
+        mindweaver_cli::task::refused(&editor),
+        Some(mindweaver_cli::task::Refusal::Editor)
+    );
 }
 
 #[test]

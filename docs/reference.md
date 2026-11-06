@@ -424,6 +424,9 @@ mind edit <NAME> [--editor CMD]
 mind edit <NAME> --contents FILE|- [--if-unchanged SHA256]
                            # replace what it holds with a file, or standard
                            # input, checked before anything is written
+mind edit mcp:<NAME> --command CMD ... | --url URL ...
+                           # write how an MCP server is started or reached
+                           # again, from the options `add mcp` takes
 mind rename <NAME> <NEW>   # folder and declared name together; `mv` for short
 mind remove <NAME> --yes   # delete it; without --yes, say what would go; `rm`
 mind templates [--json]    # what `add --template` can start from here
@@ -3187,8 +3190,19 @@ secret = true
 env_var = "GITHUB_PERSONAL_ACCESS_TOKEN"
 ```
 
-A definition can be written by hand too, or changed with `mindweaver edit`,
-and holds:
+`edit` writes how one is started or reached again from the same options,
+the server's `transport` and `inputs`, and keeps the rest of what its
+definition holds as it is: its name, its description, its provenance and
+its extras, with their comments. What it writes is held to the rules `add`
+holds a definition to, and it writes nothing when nothing changes:
+
+```
+$ mindweaver edit mcp:linear --url https://mcp.linear.app/sse --sse --bearer-env LINEAR_API_KEY
+edited mcp linear: ok
+```
+
+A definition can be written by hand too, or changed with `mindweaver edit`
+in an editor or with `--contents`, and holds:
 
 | Key | | Holds |
 |---|---|---|

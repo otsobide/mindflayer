@@ -1092,9 +1092,14 @@ impl Refusal {
 
     /// Why an `edit` at either level is not run by a front end with no
     /// terminal, by how it takes what the artifact is to hold: an editor
-    /// or standard input, each the terminal's, are refused, and a file is
-    /// run, its contents held to core's rules as any edit's are.
+    /// or standard input, each the terminal's, are refused, and a file or
+    /// a server's options are run, held to core's rules as any edit is.
     fn of_edit(editing: &Editing) -> Option<Refusal> {
+        // A server's options open nothing and read nothing but the line,
+        // and the grammar takes them with neither an editor nor contents.
+        if editing.server.given().is_some() {
+            return None;
+        }
         match editing.given() {
             None => Some(Refusal::Editor),
             Some(Given::Input) => Some(Refusal::Input),
