@@ -976,6 +976,7 @@ struct Source {
     subdirectory: String,
     revision: Option<String>,
     directory: String,
+    name: String,
 }
 
 impl Offer {

@@ -2048,7 +2048,7 @@ fn a_candidate_from_the_shelf_serializes_without_the_credentials_its_source_carr
             r#""summary":"Review a change","revision":"4f9c2a7","gathered_at":1790000000,"#,
             r#""source":{"kind":"git","url":"https://github.com/acme/skills.git","#,
             r#""reference":"main","subdirectory":"skills","revision":"4f9c2a7","#,
-            r#""directory":"github.com-acme-skills"},"#,
+            r#""directory":"github.com-acme-skills","name":"acme-skills"},"#,
             r#""origin":"https://github.com/acme/skills.git#main"},"#,
             r#""standing":"outdated"}"#,
         )

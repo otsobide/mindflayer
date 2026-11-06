@@ -97,7 +97,8 @@ crate::described::words! {
 /// A place artifacts have been gathered from.
 ///
 /// What it serializes to is a contract, as a status report's is: each field
-/// by its name, but the row id, and the URL only through [`redacted`].
+/// by its name, but the row id, and the URL only through [`redacted`]. Its
+/// `name` was added after the rest (#98), which moved no version.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -127,11 +128,8 @@ pub struct Source {
     /// must not move when the naming rule changes.
     pub directory: String,
     /// What it is called (D-13), one name a source: `owner-repo` unless
-    /// somebody named it ([`SourceName::derived`]).
-    ///
-    /// Not serialized yet: the envelope and the snapshot are given it once
-    /// a listing shows it.
-    #[serde(skip)]
+    /// somebody named it ([`SourceName::derived`]), what a listing shows
+    /// and `--from` takes.
     pub name: SourceName,
 }
 
