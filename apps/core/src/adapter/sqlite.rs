@@ -31,7 +31,7 @@ use crate::value::{ArtifactName, ContentHash, Origin, Redacted, Revision, Source
 /// Refused if the file on disk is newer, for the same reason a marker file is:
 /// an old binary silently misreading a newer database is the failure that has
 /// no error message.
-pub const SCHEMA_VERSION: u32 = 7;
+pub const SCHEMA_VERSION: u32 = 8;
 
 /// The SQLite store, over one connection to the ledger's file, or to one in
 /// memory.
@@ -319,6 +319,11 @@ impl Sqlite {
             // values, as the step to schema 5 is handed each project's id.
             let spelled = spelled_sources(&transaction).map_err(failed)?;
             seven(&transaction, &spelled).map_err(failed)?;
+        }
+        if found < 8 {
+            transaction.execute_batch(SCHEMA_V8).map_err(|source| {
+                self.failed("noting where each gathered artifact came from", source)
+            })?;
         }
 
         transaction
@@ -2327,6 +2332,39 @@ const SCHEMA_V7_INDEXES: &str = "
 CREATE UNIQUE INDEX sources_by_identity
     ON sources (kind, canonical_url, reference_key, subdirectory);
 CREATE UNIQUE INDEX sources_by_name ON sources (name);
+";
+
+/// The eighth schema: where each gathered artifact came from, to the commit,
+/// with its licence and its hash (#99).
+///
+/// An artifact gains `upstream_path`, its folder in the repository from the
+/// repository's root, `/` separated, `content_hash`, [`crate::hash::tree`]
+/// of what the gather put on the shelf, the one definition installs use, and
+/// `license`, as the skill or a licence file beside it says it, `NULL` when
+/// nothing says. The commit it was taken at is the `revision` it has
+/// kept since schema 1. On the end of the table, as schema 7 put a source's
+/// columns, rather than in one of its own that a dropped source would have
+/// to cascade into.
+///
+/// What a version before it held is filled in where it can be known from
+/// the row: its place upstream is its source's folder, as it was typed,
+/// without a `/` at its end and nothing for the root (`.`), joined by `/` to
+/// the folder it has on the shelf, which keeps the name the source gave it.
+/// No hash and no licence is made up: the shelf may have been touched since
+/// it was gathered, and a hash or a licence read from it now would vouch
+/// for bytes no gather placed. The next gather of its source fills them in.
+const SCHEMA_V8: &str = "
+ALTER TABLE artifacts ADD COLUMN upstream_path TEXT NOT NULL DEFAULT '';
+ALTER TABLE artifacts ADD COLUMN content_hash TEXT;
+ALTER TABLE artifacts ADD COLUMN license TEXT;
+
+UPDATE artifacts
+   SET upstream_path =
+       (SELECT CASE WHEN rtrim(s.subdirectory, '/') IN ('', '.') THEN ''
+                    ELSE rtrim(s.subdirectory, '/') || '/' END
+          FROM sources s
+         WHERE s.id = artifacts.source_id)
+       || replace(path, rtrim(path, replace(path, '/', '')), '');
 ";
 
 /// What the step to schema 7 is handed of one source: what no SQL can work

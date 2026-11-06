@@ -3403,7 +3403,7 @@ A source's shelf folder is stored rather than derived: two URLs can reduce to
 the same readable name, and where a source's files went is a fact about the
 past that must not move when the naming rule changes.
 
-The schema has had seven versions, each a block in the SQLite store's
+The schema has had eight versions, each a block in the SQLite store's
 migration (`adapter::sqlite::Sqlite::migrate`) and a
 constant beside it:
 
@@ -3452,6 +3452,12 @@ constant beside it:
    rather than into a new one, which would be copied in under foreign keys
    that cascade a dropped `sources` into every artifact, and the old
    `UNIQUE` stays, holding nothing the new index does not.
+8. On `artifacts`, where each came from beyond the commit it was taken at,
+   which `revision` has kept since version 1: its `upstream_path`, its
+   folder in the repository, the `content_hash` of what the gather put on
+   the shelf, by `hash::tree`, the one recipe installs use, and its
+   `license` as the skill says it, empty when nothing does (#99). On the
+   end of the table, as version 7 put a source's.
 
 An older ledger is migrated step by step, so one made two versions ago ends
 where one made today begins, and two rules hold for every step:
@@ -3532,6 +3538,15 @@ writes tries again, until it goes. While a merge is kept its folder name is
 given to no new source, so no gather can clone into a folder about to be
 removed. A credential is left where the scrub finds it, which rewrites a
 clone before its row, and which the first command that writes runs next.
+Version 8 fills in an artifact's place upstream in its own SQL, from what
+version 1 already kept: its source's folder, as it was typed, without a `/`
+at its end and nothing for the repository's root (`.`), joined by `/` to the
+folder it has on the shelf, which keeps the name the source gave it ([the
+folder a skill lands in](#everything-is-namespaced-by-its-source)). It makes
+up no hash and no licence. Both could be read from the shelf as it is now,
+but the shelf is a folder anybody can change, and a hash taken of it at the
+step would vouch for bytes no gather placed: the next gather of its source
+fills them in, as an install fills in a missing hash.
 D-04's states (#47) took no step of their own: what tells them apart is the hash each copy was written with, which versions
 3 and 4 keep, and what the place it came from offers now, which is read where
 it is offered rather than kept. A record with no hash is held to its offer

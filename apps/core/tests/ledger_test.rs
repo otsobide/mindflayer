@@ -88,6 +88,12 @@ const SOURCES_AS_WRITTEN: &str = "SELECT id, kind, url, reference, subdirectory,
                                          directory, first_seen, last_seen
                                     FROM sources ORDER BY id";
 
+/// Every column of `artifacts` a version before 8 had, which schema 8 adds
+/// to: what a step after it keeps of each row it is not about.
+const ARTIFACTS_AS_WRITTEN: &str = "SELECT id, kind, name, source_id, path, summary, revision,
+                                           gathered_at
+                                      FROM artifacts ORDER BY id";
+
 /// A ledger file in `dir` holding what `fixture` describes, untouched by
 /// anything of this build's.
 fn written_at(dir: &Path, fixture: &str) -> PathBuf {
@@ -295,7 +301,7 @@ fn a_version_2_ledger_keeps_every_row_it_had() {
     assert_eq!(version_of(&after), SCHEMA_VERSION);
     for query in [
         SOURCES_AS_WRITTEN,
-        "SELECT * FROM artifacts ORDER BY id",
+        ARTIFACTS_AS_WRITTEN,
         "SELECT * FROM actions ORDER BY id",
         "SELECT id, project, kind, name, source_id, installed_at
            FROM installations ORDER BY id",
@@ -460,7 +466,7 @@ fn a_version_3_ledger_keeps_every_row_it_had_and_its_copies_gain_no_hash() {
     assert_eq!(version_of(&after), SCHEMA_VERSION);
     for query in [
         SOURCES_AS_WRITTEN,
-        "SELECT * FROM artifacts ORDER BY id",
+        ARTIFACTS_AS_WRITTEN,
         "SELECT * FROM actions ORDER BY id",
         "SELECT id, project, kind, name, source_id, installed_at, origin, content_hash
            FROM installations ORDER BY id",
@@ -537,7 +543,7 @@ fn a_version_4_ledger_keeps_every_row_it_had_and_knows_no_project_it_is_not_told
     assert_eq!(version_of(&after), SCHEMA_VERSION);
     for query in [
         SOURCES_AS_WRITTEN,
-        "SELECT * FROM artifacts ORDER BY id",
+        ARTIFACTS_AS_WRITTEN,
         "SELECT * FROM actions ORDER BY id",
         "SELECT id, project, kind, name, source_id, installed_at, origin, content_hash
            FROM installations ORDER BY id",
@@ -621,7 +627,7 @@ fn a_version_5_ledger_keeps_every_row_it_had_and_its_installations_gain_no_entry
     assert_eq!(version_of(&after), SCHEMA_VERSION);
     for query in [
         SOURCES_AS_WRITTEN,
-        "SELECT * FROM artifacts ORDER BY id",
+        ARTIFACTS_AS_WRITTEN,
         "SELECT * FROM actions ORDER BY id",
         "SELECT * FROM installations ORDER BY id",
         "SELECT * FROM installation_targets ORDER BY installation_id, path",
@@ -731,8 +737,9 @@ fn a_version_6_ledger_keeps_every_row_but_those_of_a_spelling_made_one_with_anot
                FROM sources WHERE id IN (2, 3, 4) ORDER BY id",
         ),
         (
-            "SELECT * FROM artifacts ORDER BY id",
-            "SELECT * FROM artifacts WHERE source_id IN (2, 3, 4) ORDER BY id",
+            ARTIFACTS_AS_WRITTEN,
+            "SELECT id, kind, name, source_id, path, summary, revision, gathered_at
+               FROM artifacts WHERE source_id IN (2, 3, 4) ORDER BY id",
         ),
         (
             "SELECT id, project, kind, name, installed_at, content_hash, project_id
@@ -1140,6 +1147,86 @@ fn a_folder_a_merge_left_that_will_not_go_is_tried_and_said_again_until_it_goes(
         .join("github.com-acme-skills")
         .exists());
     assert!(workspace.ledger_to_write().unwrap().1.is_empty());
+}
+
+/// What schema 7 wrote, dumped from a ledger it made: three repositories
+/// gathered, from `skills`, from `plugins/ops/skills` and from the root.
+const VERSION_7: &str = include_str!("fixtures/ledger-v7.sql");
+
+#[test]
+fn a_version_7_ledger_keeps_every_row_and_knows_where_each_artifact_is_upstream() {
+    let dir = TempDir::new().unwrap();
+    let path = written_at(dir.path(), VERSION_7);
+    let before = as_written(VERSION_7);
+
+    Ledger::open(&path).unwrap();
+
+    let after = Connection::open(&path).unwrap();
+    assert_eq!(version_of(&after), SCHEMA_VERSION);
+    for query in [
+        "SELECT * FROM sources ORDER BY id",
+        ARTIFACTS_AS_WRITTEN,
+        "SELECT * FROM actions ORDER BY id",
+        "SELECT * FROM installations ORDER BY id",
+        "SELECT * FROM installation_targets ORDER BY installation_id, path",
+        "SELECT * FROM projects ORDER BY id",
+    ] {
+        let kept = rows(&after, query);
+        assert_eq!(kept, rows(&before, query), "{query}");
+        assert!(!kept.is_empty(), "{query} reads nothing to compare");
+    }
+    // Its place upstream is its source's folder and its own, the root's
+    // none; no hash and no licence is made up for what nothing recorded.
+    assert_eq!(
+        rows(
+            &after,
+            "SELECT id, upstream_path, content_hash, license FROM artifacts ORDER BY id"
+        ),
+        [
+            [
+                Value::Integer(1),
+                text("skills/deploy"),
+                Value::Null,
+                Value::Null
+            ],
+            [
+                Value::Integer(2),
+                text("skills/review"),
+                Value::Null,
+                Value::Null
+            ],
+            [
+                Value::Integer(3),
+                text("plugins/ops/skills/audit"),
+                Value::Null,
+                Value::Null
+            ],
+            [Value::Integer(4), text("lint"), Value::Null, Value::Null],
+        ]
+    );
+}
+
+#[test]
+fn a_version_7_ledger_is_copied_aside_and_the_copy_opens_at_version_7() {
+    let dir = TempDir::new().unwrap();
+    let path = written_at(dir.path(), VERSION_7);
+    let before = as_written(VERSION_7);
+
+    Ledger::open(&path).unwrap();
+
+    let backup = dir.path().join("mindweaver.db.v7.bak");
+    assert_eq!(backup_path(&path, 7), backup);
+    let copy = Connection::open(&backup).unwrap();
+    assert_eq!(version_of(&copy), 7);
+    for query in [
+        "SELECT * FROM sources ORDER BY id",
+        "SELECT * FROM artifacts ORDER BY id",
+        "SELECT * FROM actions ORDER BY id",
+        "SELECT * FROM installations ORDER BY id",
+        "SELECT type, name, sql FROM sqlite_master ORDER BY name",
+    ] {
+        assert_eq!(rows(&copy, query), rows(&before, query), "{query}");
+    }
 }
 
 #[test]
