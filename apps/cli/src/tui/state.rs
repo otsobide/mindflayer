@@ -205,6 +205,10 @@ pub struct Holdings {
     /// installed only where some of them do not read, and each rule some of
     /// them read nowhere.
     pub unreached: Vec<String>,
+    /// What doctor finds keeps its agents from what it gives them, as
+    /// `mindweaver doctor` says it, each with its fix, one line each: none
+    /// for the workspace's own, which is no project's.
+    pub found: Vec<String>,
     /// Files that could not be read, one line each.
     pub warnings: Vec<String>,
     /// Where each kind lives, relative to the project, so an empty project

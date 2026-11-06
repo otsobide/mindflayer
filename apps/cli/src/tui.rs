@@ -22,6 +22,7 @@ use std::thread;
 use std::time::Duration;
 
 use mindweaver_core::code::Said;
+use mindweaver_core::doctor::{Examined, Report};
 use mindweaver_core::gather::Watch;
 use mindweaver_core::resolve::{self, resolve, Intent, Resolved};
 use mindweaver_core::status::{EntryStatus, State};
@@ -482,10 +483,15 @@ pub fn load_project(directory: &Path, lookup: &Lookup) -> Result<View, CliError>
     // ones `mind add` will find, and no records: it does not link the
     // project, so it says nothing of what was installed there.
     let read = view::Project::read(&project, above.as_ref());
+    // Examined alone, as `mind doctor` examines a project no workspace
+    // links: nothing records what was installed into it.
+    let examined = Report::of_project(&project, None, &lookup.machine())
+        .projects
+        .remove(0);
     Ok(View::Workspace(Box::new(Workspace {
         name: project.name().to_owned(),
         // `.`, because the commands run from the project itself.
-        members: vec![held(String::from("."), &read)],
+        members: vec![held(String::from("."), &read, &examined)],
         root: read.path,
         unlinked: Vec::new(),
         roots: Vec::new(),
@@ -517,11 +523,13 @@ fn workspace_view(resolved: &Resolved, lookup: &Lookup, roots: &[PathBuf]) -> Wo
     let workspace = &resolved.workspace;
     let snapshot = Snapshot::of(resolved, lookup.home.as_deref(), &lookup.machine());
     let mut members = vec![own(&snapshot)];
+    // What doctor found of each, in the order `projects` lists them.
     members.extend(
         snapshot
             .projects
             .iter()
-            .map(|project| member(project, workspace, lookup)),
+            .zip(&snapshot.doctor)
+            .map(|(project, examined)| member(project, examined, workspace, lookup)),
     );
     // Spelled from the workspace root, the default, where the TUI runs its
     // lines, and in the order `mindweaver scan --suggest` lists them, which core
@@ -595,6 +603,7 @@ fn own(snapshot: &Snapshot) -> Member {
             edit_tracked: false,
             targets: None,
             unreached: Vec::new(),
+            found: Vec::new(),
             warnings: messages(&library.failures),
             directories: directories(&library.directories),
             templates: choices(&library.templates),
@@ -610,7 +619,12 @@ fn own(snapshot: &Snapshot) -> Member {
 /// .`. So its templates are the screen's too, the ones the add form's line
 /// will find. Which workspace `mind` consults is the lookup's, which no
 /// snapshot holds, so it is asked here.
-fn member(project: &view::Project, screen: &WeaverWorkspace, lookup: &Lookup) -> Member {
+fn member(
+    project: &view::Project,
+    examined: &Examined,
+    screen: &WeaverWorkspace,
+    lookup: &Lookup,
+) -> Member {
     let entry = project.entry.clone().unwrap_or_default();
     if let Some(stale) = &project.stale {
         return Member {
@@ -631,12 +645,13 @@ fn member(project: &view::Project, screen: &WeaverWorkspace, lookup: &Lookup) ->
     );
     Member {
         elsewhere,
-        ..held(entry, project)
+        ..held(entry, project, examined)
     }
 }
 
-/// What one project holds, as a snapshot read it, under `entry`.
-fn held(entry: String, project: &view::Project) -> Member {
+/// What one project holds, as a snapshot read it, under `entry`, and what
+/// doctor found of it.
+fn held(entry: String, project: &view::Project, examined: &Examined) -> Member {
     let name = project.name.clone().unwrap_or_else(|| entry.clone());
     // What `status` warns of, said in its words: the folders no install
     // uses first, then the agents that read none of the rest, then each rule
@@ -679,6 +694,11 @@ fn held(entry: String, project: &view::Project) -> Member {
                     .map(|targets| targets.folders.clone())
             }),
             unreached,
+            found: examined
+                .findings
+                .iter()
+                .map(|finding| format!("{}; fix: {}", finding.message, finding.fix))
+                .collect(),
             warnings: messages(&project.failures),
             directories: directories(&project.directories),
             templates: choices(&project.templates),

@@ -3649,6 +3649,31 @@ fn a_project_given_a_rule_some_of_its_agents_read_nowhere_is_marked_and_its_pane
 }
 
 #[test]
+fn a_project_doctor_finds_something_in_is_marked_with_how_much_and_its_pane_says_what() {
+    let dir = workspace_with_own();
+    let stage = dir.path().join("alpha/.mind/tmp/4242-00112233445566ff");
+    fs::create_dir_all(&stage).unwrap();
+
+    let app = tui_in(dir.path());
+
+    let holdings = app.member().unwrap().holdings.as_ref().unwrap();
+    assert_eq!(holdings.found.len(), 1, "{:?}", holdings.found);
+    assert!(
+        holdings.found[0].starts_with(&format!("{}: ", stage.display())),
+        "{:?}",
+        holdings.found
+    );
+    assert!(
+        holdings.found[0].contains("; fix: "),
+        "{:?}",
+        holdings.found
+    );
+    let drawn = tui_drawn(&app);
+    assert!(drawn.contains("✚ 1"), "{drawn}");
+    assert!(drawn.contains("Found by doctor"), "{drawn}");
+}
+
+#[test]
 fn a_strip_wraps_by_how_wide_its_words_are_drawn() {
     let dir = workspace_with_own();
     let alpha = dir.path().join("alpha");
@@ -3668,7 +3693,9 @@ fn a_strip_wraps_by_how_wide_its_words_are_drawn() {
             .iter()
             .map(|cell| cell.symbol())
             .collect();
-        assert_eq!(drawn.matches('技').count(), 16, "{width}: {drawn}");
+        // Once in the strip of what its agents do not see, and twice in
+        // doctor's, by the folder's path and among the folders.
+        assert_eq!(drawn.matches('技').count(), 48, "{width}: {drawn}");
         assert!(drawn.contains("until"), "{width}: {drawn}");
         assert!(drawn.contains("pointed"), "{width}: {drawn}");
     }
