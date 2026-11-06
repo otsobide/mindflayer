@@ -1,0 +1,176 @@
+[
+  {
+    "preview": {
+      "confirm": [],
+      "lines": [
+        "mindweaver -W /home/you/Serving add --command npx --arg=-y --arg @acme/server --secret-env ACME_TOKEN mcp acme 'Acme'\\''s tools'"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "mindweaver -W /home/you/Serving add --command npx --arg=-y --arg @acme/server --secret-env ACME_TOKEN mcp acme 'Acme'\\''s tools'"
+      ],
+      "outcome": {
+        "ok": true,
+        "runs": [
+          {
+            "command": "mindweaver -W /home/you/Serving add --command npx --arg=-y --arg @acme/server --secret-env ACME_TOKEN mcp acme 'Acme'\\''s tools'",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "created mcp acme at /home/you/Serving/.mindweaver/library/mcp/acme.toml\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "description": "Acme's tools",
+      "holder": {
+        "type": "workspace"
+      },
+      "kind": "mcp",
+      "name": "acme",
+      "server": {
+        "arg_env": [],
+        "args": [
+          "-y",
+          "@acme/server"
+        ],
+        "command": "npx",
+        "env": [],
+        "secret_env": [
+          "ACME_TOKEN"
+        ],
+        "type": "program"
+      },
+      "template": null,
+      "type": "add"
+    }
+  },
+  {
+    "preview": {
+      "confirm": [],
+      "lines": [
+        "mindweaver -W /home/you/Serving edit --command docker --arg run --arg=-i --arg ghcr.io/github/github-mcp-server --secret-env GITHUB_PERSONAL_ACCESS_TOKEN mcp:github"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "mindweaver -W /home/you/Serving edit --command docker --arg run --arg=-i --arg ghcr.io/github/github-mcp-server --secret-env GITHUB_PERSONAL_ACCESS_TOKEN mcp:github"
+      ],
+      "outcome": {
+        "ok": true,
+        "runs": [
+          {
+            "command": "mindweaver -W /home/you/Serving edit --command docker --arg run --arg=-i --arg ghcr.io/github/github-mcp-server --secret-env GITHUB_PERSONAL_ACCESS_TOKEN mcp:github",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "edited mcp github: ok\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "holder": {
+        "type": "workspace"
+      },
+      "name": "github",
+      "server": {
+        "arg_env": [],
+        "args": [
+          "run",
+          "-i",
+          "ghcr.io/github/github-mcp-server"
+        ],
+        "command": "docker",
+        "env": [],
+        "secret_env": [
+          "GITHUB_PERSONAL_ACCESS_TOKEN"
+        ],
+        "type": "program"
+      },
+      "type": "edit_server"
+    }
+  },
+  {
+    "preview": {
+      "confirm": [],
+      "lines": [
+        "mindweaver -W /home/you/Serving install -p /home/you/Serving/web --from load:../team mcp:sentry"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "mindweaver -W /home/you/Serving install -p /home/you/Serving/web --from load:../team mcp:sentry"
+      ],
+      "outcome": {
+        "ok": true,
+        "runs": [
+          {
+            "command": "mindweaver -W /home/you/Serving install -p /home/you/Serving/web --from load:../team mcp:sentry",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "would install mcp sentry into web, from load:../team\n  claude runs: npx -y @sentry/mcp-server\n  opencode runs: npx -y @sentry/mcp-server\nnothing installed: it comes from elsewhere than this workspace's library, so add --yes to go ahead\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "changes": [
+        {
+          "from": "load:../team",
+          "kind": "mcp",
+          "name": "sentry",
+          "projects": [
+            "web"
+          ],
+          "type": "install",
+          "yes": false
+        }
+      ],
+      "type": "apply_install"
+    }
+  },
+  {
+    "preview": {
+      "confirm": [],
+      "lines": [
+        "mindweaver -W /home/you/Serving install -p /home/you/Serving/web --from load:../team --yes mcp:sentry"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "mindweaver -W /home/you/Serving install -p /home/you/Serving/web --from load:../team --yes mcp:sentry"
+      ],
+      "outcome": {
+        "ok": true,
+        "runs": [
+          {
+            "command": "mindweaver -W /home/you/Serving install -p /home/you/Serving/web --from load:../team --yes mcp:sentry",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "installed mcp sentry into web, from load:../team\n  claude runs: npx -y @sentry/mcp-server\n  opencode runs: npx -y @sentry/mcp-server\n  set SENTRY_ACCESS_TOKEN (a secret) where the agents run: each reads it there, and no file holds it\n  claude asks to approve it before it starts it in a session, though a run with `-p` starts it unasked\n  opencode starts it without asking\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "changes": [
+        {
+          "from": "load:../team",
+          "kind": "mcp",
+          "name": "sentry",
+          "projects": [
+            "web"
+          ],
+          "type": "install",
+          "yes": true
+        }
+      ],
+      "type": "apply_install"
+    }
+  }
+]

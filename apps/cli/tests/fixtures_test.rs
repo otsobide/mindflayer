@@ -1549,3 +1549,248 @@ fn write_what_each_change_authoring_sends_is_answered_with() {
     let json = serde_json::to_string_pretty(&written).unwrap() + "\n";
     write("authored", &json);
 }
+
+/// `you/Serving`, a workspace keeping MCP servers, which the panel's page
+/// of them draws, built as somebody would build it:
+///
+/// - its library holds `github`, a program started with a secret its
+///   environment is given, `linear`, an address reached with a bearer
+///   token, and `events`, an address reached over server-sent events,
+///   which Codex and OpenCode cannot reach;
+/// - it loads `team`, beside it, whose own server `sentry` it offers too,
+///   which waits for a yes before it is installed;
+/// - `api`, for every agent, received `github`, written into each agent's
+///   config file;
+/// - `web`, for Claude and OpenCode and shared, received nothing yet.
+fn serving(home: &Path) -> PathBuf {
+    let root = home.join("Serving");
+    let team = home.join("team");
+    for workspace in [&root, &team] {
+        fs::create_dir_all(workspace).unwrap();
+        weaver(workspace, &["init"]).unwrap();
+    }
+    let servers: [(&Path, &[&str]); 4] = [
+        (
+            &root,
+            &[
+                "github",
+                "GitHub's issues, pull requests and code",
+                "--command",
+                "npx",
+                "--arg=-y",
+                "--arg",
+                "@modelcontextprotocol/server-github",
+                "--secret-env",
+                "GITHUB_PERSONAL_ACCESS_TOKEN",
+            ],
+        ),
+        (
+            &root,
+            &[
+                "linear",
+                "Linear's issues",
+                "--url",
+                "https://mcp.linear.app/mcp",
+                "--bearer-env",
+                "LINEAR_API_KEY",
+            ],
+        ),
+        (
+            &root,
+            &[
+                "events",
+                "An older server, reached over server-sent events",
+                "--url",
+                "https://events.example.com/sse",
+                "--sse",
+            ],
+        ),
+        (
+            &team,
+            &[
+                "sentry",
+                "Sentry's issues, as the team runs it",
+                "--command",
+                "npx",
+                "--arg=-y",
+                "--arg",
+                "@sentry/mcp-server",
+                "--secret-env",
+                "SENTRY_ACCESS_TOKEN",
+            ],
+        ),
+    ];
+    for (workspace, server) in servers {
+        let mut line = vec!["add", "mcp"];
+        line.extend_from_slice(server);
+        weaver(workspace, &line).unwrap();
+    }
+    weaver(&root, &["load", "../team"]).unwrap();
+
+    project(&root, "api", &["--agents", "claude,codex,opencode"]);
+    // Codex is given it all the same in a project nothing marks trusted,
+    // which the line warns of, so its outcome is not looked at here.
+    weaver(&root, &["install", "-p", "api", "mcp:github"]).unwrap();
+    for file in [".mcp.json", ".codex/config.toml", "opencode.json"] {
+        assert!(root.join("api").join(file).is_file(), "{file}");
+    }
+    project(&root, "web", &["--agents", "claude,opencode", "--shared"]);
+
+    pin_times(&root);
+    root
+}
+
+/// The workspace [`serving`] builds, as the panel is answered with it: what
+/// its page of MCP servers draws.
+#[test]
+fn write_the_snapshot_of_a_workspace_serving_mcp_servers() {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("you");
+    let root = serving(&home);
+
+    let json = answered(&root, &Lookup::default());
+
+    let json = pinned(&json, dir.path(), Some(&root));
+    assert!(!json.contains(&*dir.path().to_string_lossy()), "{json}");
+    write("serving", &json);
+}
+
+/// How a server is started, as the page's form sends it.
+fn started(command: &str, args: &[&str], secret: &str) -> Value {
+    json!({
+        "type": "program", "command": command, "args": args, "env": [],
+        "secret_env": [secret], "arg_env": [],
+    })
+}
+
+/// What the panel's page of MCP servers asks of the workspace [`serving`]
+/// builds, with what the backend answers (`servers.json`): its form
+/// judging a server to add, one that would be written and one whose
+/// secret is read from a variable no agent can refer to, and `github`
+/// given another transport; and the matrix planning `sentry`, the team's,
+/// into `web`, which waits for a yes, and the library's `linear` into
+/// `web`, which does not.
+///
+/// No token: a fixture is a file of the repository, which holds none for
+/// a scanner to stop, so what core refuses here is a variable's name.
+#[test]
+fn write_what_the_page_of_mcp_servers_asks_is_answered_with() {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("you");
+    let root = serving(&home);
+    let backend = PanelBackend::launch(&root, &Lookup::default()).unwrap();
+    let own = json!({"type": "workspace"});
+    let leaky = started("npx", &["-y", "@acme/server"], "ACME-TOKEN");
+    let server = started("npx", &["-y", "@acme/server"], "ACME_TOKEN");
+
+    let answers: Vec<Value> = [
+        json!({
+            "type": "validate", "holder": own,
+            "draft": {
+                "type": "add", "kind": "mcp", "name": "acme", "description": "Acme's tools",
+                "template": null, "server": server,
+            },
+        }),
+        json!({
+            "type": "validate", "holder": own,
+            "draft": {
+                "type": "add", "kind": "mcp", "name": "acme", "description": "Acme's tools",
+                "template": null, "server": leaky,
+            },
+        }),
+        json!({
+            "type": "validate", "holder": own,
+            "draft": {
+                "type": "edit_server", "name": "github",
+                "server": started("docker", &["run", "-i", "ghcr.io/github/github-mcp-server"], "GITHUB_PERSONAL_ACCESS_TOKEN"),
+            },
+        }),
+        json!({"type": "plan", "selection": [cell("web", "mcp:sentry", "load:../team", true)]}),
+        json!({"type": "plan", "selection": [cell("web", "mcp:linear", "workspace", true)]}),
+    ]
+    .into_iter()
+    .map(|query| asked(&backend, query))
+    .collect();
+
+    assert_eq!(
+        answers[0]["answer"]["refused"],
+        Value::Null,
+        "{}",
+        answers[0]
+    );
+    assert_eq!(answers[1]["answer"]["refused"]["code"], "add_mcp_unfit");
+    assert_eq!(
+        answers[2]["answer"]["refused"],
+        Value::Null,
+        "{}",
+        answers[2]
+    );
+    assert_eq!(answers[3]["answer"]["asks"][0]["confirmed"]["yes"], true);
+    assert_eq!(answers[4]["answer"]["asks"], json!([]));
+    let json = serde_json::to_string_pretty(&answers).unwrap() + "\n";
+    let json = pinned(&json, dir.path(), Some(&root));
+    assert!(!json.contains(&*dir.path().to_string_lossy()), "{json}");
+    write("servers", &json);
+}
+
+/// What each change the panel's page of MCP servers and its matrix send is
+/// answered with, previewed and run each on the workspace [`serving`]
+/// builds (`served.json`): a server added from the form, `github` given
+/// another transport, and `sentry`, the team's, into `web`, by the plan's
+/// task, which installs nothing, then by the task its confirmation
+/// carries.
+#[test]
+fn write_what_each_change_the_page_of_mcp_servers_sends_is_answered_with() {
+    let sent = [
+        json!({
+            "type": "add", "holder": {"type": "workspace"}, "kind": "mcp", "name": "acme",
+            "description": "Acme's tools", "template": null,
+            "server": started("npx", &["-y", "@acme/server"], "ACME_TOKEN"),
+        }),
+        json!({
+            "type": "edit_server", "holder": {"type": "workspace"}, "name": "github",
+            "server": started("docker", &["run", "-i", "ghcr.io/github/github-mcp-server"], "GITHUB_PERSONAL_ACCESS_TOKEN"),
+        }),
+        // The plan's task as the matrix sends it before anybody says yes,
+        // whose line installs nothing, then its confirmation.
+        json!({
+            "type": "apply_install",
+            "changes": [{
+                "type": "install", "projects": ["web"], "kind": "mcp", "name": "sentry",
+                "from": "load:../team", "yes": false,
+            }],
+        }),
+        json!({
+            "type": "apply_install",
+            "changes": [{
+                "type": "install", "projects": ["web"], "kind": "mcp", "name": "sentry",
+                "from": "load:../team", "yes": true,
+            }],
+        }),
+    ];
+
+    let mut written = Vec::new();
+    for sent in sent {
+        let dir = TempDir::new().unwrap();
+        let home = dir.path().join("you");
+        let root = serving(&home);
+        let backend = PanelBackend::launch(&root, &Lookup::default()).unwrap();
+        let task: Task = serde_json::from_value(sent.clone()).unwrap();
+        let preview = backend
+            .preview(&task)
+            .unwrap_or_else(|refusal| panic!("{sent}: {}: {}", refusal.code, refusal.message));
+        let outcome = backend.run(task).unwrap();
+        assert!(
+            outcome.runs.iter().all(|run| run.error.is_none()),
+            "{sent}: {outcome:?}"
+        );
+        let ran = json!({"lines": preview.lines, "outcome": outcome});
+        let answer = json!({"task": sent, "preview": preview, "ran": ran});
+        let json = serde_json::to_string(&answer).unwrap();
+        let json = pinned(&json, dir.path(), Some(&root));
+        assert!(!json.contains(&*dir.path().to_string_lossy()), "{json}");
+        written.push(serde_json::from_str::<Value>(&json).unwrap());
+    }
+    let json = serde_json::to_string_pretty(&written).unwrap() + "\n";
+    write("served", &json);
+}
