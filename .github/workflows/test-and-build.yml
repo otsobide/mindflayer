@@ -33,6 +33,18 @@ jobs:
     name: fmt and clippy
     runs-on: [self-hosted, Linux, X64]
     steps:
+      # Root writes in a folder whose write permission is taken away, which
+      # is how the suites make a write fail to see what is put back after
+      # it: under root those tests fail, or pass without holding anything.
+      # Said here, before anything compiles, rather than by the first of
+      # them, a quarter of an hour into `test (core)`.
+      - name: Check the runner does not run as root
+        run: |
+          if [ "$(id -u)" -eq 0 ]; then
+            echo "::error::the runner runs as root, which writes where a test takes the permission away; run it as a user of its own, with sudo"
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v6
 
