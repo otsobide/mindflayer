@@ -9,7 +9,8 @@ code; a **weaver workspace** (`.mindweaver/weaver.toml`, or the
 holds artifacts of its own, gathers skills from git onto a shelf and installs
 them into projects. `README.md` is the first page a newcomer reads: short,
 friendly and centred on the control panel (`mindweaver ui`), with screenshots
-`make docs/screenshots` takes and no command's output. `docs/reference.md`
+`make docs/screenshots` takes and no command's output but one, what an MCP
+server's install prints (#95). `docs/reference.md`
 is the user-facing reference: every command with its literal output, the
 formats, `--json`, the TUI, the panel in full and upgrading.
 `docs/api.md` is the guide to the HTTP API `mindweaver ui` serves, every
@@ -1930,9 +1931,11 @@ These are easy to break from a single file without noticing.
   them, updates `docs/api.md` too, whose answers `api_guide_test` holds to
   the server's. Literal output belongs in the reference, never in the
   README, which says what Mindweaver is and tours the panel in a few
-  screens. A change to what the panel shows, a page, a view or its look,
-  runs `make docs/screenshots`, and its PR carries the images it wrote; a
-  change to what the README says of the panel goes with it.
+  screens: its one example is what an MCP server's install prints, re-run
+  with the reference's when that changes. A change to what the panel
+  shows, a page, a view or its look, runs `make docs/screenshots`, and its
+  PR carries the images it wrote; a change to what the README says of the
+  panel goes with it.
 
 ## Style
 
