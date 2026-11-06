@@ -620,6 +620,11 @@ impl Candidate {
         self.offer.comes_from(from)
     }
 
+    /// Whether installing it waits for a yes ([`asks_first`]).
+    pub fn asks_first(&self) -> bool {
+        asks_first(self.kind(), &self.origin())
+    }
+
     /// The directory it is copied from.
     fn source(&self, workspace: &WeaverWorkspace) -> PathBuf {
         self.offer.source(workspace)
@@ -1409,6 +1414,21 @@ pub const fn installs(kind: Kind) -> bool {
     match kind {
         Kind::Skill | Kind::Rule => true,
         Kind::Mcp => false,
+    }
+}
+
+/// Whether an install of `kind` from `origin`, as `--from` takes it, waits
+/// for somebody to say yes before it writes: an MCP server whose definition
+/// does not come from the workspace's own library, a loaded workspace's or
+/// the shelf's (#95). A server is a command every agent in the project
+/// runs, or an address each sends what it is given to, and one written
+/// somewhere else is somebody else's to have written; the library's own is
+/// the workspace's, written by whoever keeps it, and installed as a skill
+/// is. Matched on the kind, so a kind added says whether it waits.
+pub fn asks_first(kind: Kind, origin: &str) -> bool {
+    match kind {
+        Kind::Skill | Kind::Rule => false,
+        Kind::Mcp => origin != WORKSPACE_ORIGIN,
     }
 }
 
@@ -2421,6 +2441,14 @@ pub enum Installed {
         name: ArtifactName,
         paths: Vec<PathBuf>,
     },
+    /// An MCP server that does not come from the workspace's own library,
+    /// asked for with no yes ([`asks_first`]): nothing written, and what it
+    /// would write into each of `paths` said beside it
+    /// ([`Installation::entries`], [`mcp::preview`]).
+    Unconfirmed {
+        name: ArtifactName,
+        paths: Vec<PathBuf>,
+    },
 }
 
 impl Installed {
@@ -2431,7 +2459,9 @@ impl Installed {
             Installed::Added { unhashed, .. }
             | Installed::Updated { unhashed, .. }
             | Installed::Unchanged { unhashed, .. } => unhashed.as_deref(),
-            Installed::Foreign { .. } | Installed::Edited { .. } => None,
+            Installed::Foreign { .. }
+            | Installed::Edited { .. }
+            | Installed::Unconfirmed { .. } => None,
         }
     }
 
@@ -2444,6 +2474,8 @@ impl Installed {
             }
             Installed::Foreign { .. } => Some(Refused::Foreign),
             Installed::Edited { .. } => Some(Refused::Edited),
+            // Not refused but asked about: nothing is wrong with it.
+            Installed::Unconfirmed { .. } => None,
         }
     }
 }

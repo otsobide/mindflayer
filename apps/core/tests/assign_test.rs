@@ -79,6 +79,7 @@ fn installed(parts: &[Part<Install>]) -> Vec<(String, String)> {
                     Installed::Unchanged { .. } => String::from("unchanged"),
                     Installed::Foreign { .. } => String::from("foreign"),
                     Installed::Edited { .. } => String::from("edited"),
+                    Installed::Unconfirmed { .. } => String::from("unconfirmed"),
                 },
                 Ok(Offered {
                     installed: Err(error),

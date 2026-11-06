@@ -60,14 +60,15 @@ use crate::copy;
 use crate::exclude;
 use crate::kind::Kind;
 use crate::ledger::{Action, EntryTarget, InstallRecord, Ledger, Outcome};
-use crate::mcp::McpDefinition;
+use crate::mcp::{McpDefinition, Runs};
 use crate::opencode_mcp::{self, OpenCodeMcpError, Shape};
 use crate::paths;
-use crate::value::{ArtifactName, ContentHash};
+use crate::value::{ArtifactName, ContentHash, VariableName};
 use crate::workspace::{replace_bytes_unresolved, MindProject, WeaverWorkspace, WorkspaceError};
 
 /// What installing an MCP server did, agent by agent
-/// ([`Installation::entries`]).
+/// ([`Installation::entries`]), or, for one asked of without a yes, would do
+/// ([`preview`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Rendered {
     /// Each entry written, or found holding what it would be written as,
@@ -78,20 +79,38 @@ pub struct Rendered {
     /// whose file is not Mindweaver's to edit, and Codex in a project it
     /// does not trust, which is given its entry all the same.
     pub unreached: Vec<Unreached>,
+    /// Each variable an agent given it reads where it runs, for an input of
+    /// the server's, in the order the definition declares them, each once:
+    /// what somebody sets there before an agent starts it, since no file
+    /// holds a value (D-11).
+    pub variables: Vec<Variable>,
 }
 
-/// One entry an install gave an agent.
+/// One entry an install gave an agent, or would give it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Given {
     pub agent: Agent,
     /// The agent's config file.
     pub file: PathBuf,
     /// What became of the file: made, changed, or left as it was when it
-    /// held the entry already.
-    pub written: Written,
+    /// held the entry already. None in a [`preview`], which writes nothing.
+    pub written: Option<Written>,
+    /// What the agent runs or reaches, read off the entry its renderer
+    /// writes ([`Runs`]).
+    pub runs: Runs,
     /// What its renderer said of the entry, each by its code: what it is
     /// written without, and a transport the agent calls deprecated.
     pub warnings: Vec<Said>,
+}
+
+/// A variable an agent reads for one of a server's inputs where it runs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Variable {
+    pub name: VariableName,
+    /// Whether an input read from it is a secret.
+    pub secret: bool,
+    /// Whether an input read from it is one the server needs.
+    pub required: bool,
 }
 
 /// An agent the project names that an MCP server does not reach, and why,
@@ -201,33 +220,35 @@ struct Reach {
     held: bool,
 }
 
-/// [`install`], with the workspace's lock held already, as
-/// [`super::install_held`] is for a skill: for an update, which writes
-/// several installations under one hold of it.
-///
-/// Who is given what is decided before anything is written: the agents
-/// whose renderers take the definition, less those whose file is not
-/// Mindweaver's to edit, each file read for a server of the name somebody
-/// keeps there and for an entry changed since it was written. Then each is
-/// written in report order, and the first that fails puts back the files
-/// written before it, as they were, with the folder made on the way, and
-/// leaves the record as it was.
-///
-/// An agent its renderer now refuses loses the entry an earlier install
-/// recorded for it, taken out of its file as an uninstall takes it, and
-/// out of the record: left, the agent would go on running what the library
-/// no longer gives it, outdated for good, since no install can write it
-/// again. One whose file is not Mindweaver's to edit keeps it, recorded
-/// still, since nothing here may take it out, and dropping its record
-/// would make it nobody's to take out.
-pub(crate) fn install_held(
+/// Who an install of a server gives what, decided before anything is
+/// written ([`decide`]): what a [`preview`] says and an install writes.
+struct Decided {
+    name: ArtifactName,
+    definition: McpDefinition,
+    /// The installation the ledger records already, when it does.
+    before: Option<InstallRecord>,
+    /// Each agent whose entry is written, in report order.
+    reached: Vec<Reach>,
+    unreached: Vec<Unreached>,
+    /// Each agent whose renderer refuses the definition, of those
+    /// unreached.
+    refused: Vec<Agent>,
+}
+
+/// Who an install of `candidate` into `project` gives what, every file read
+/// and nothing written: the agents whose renderers take the definition,
+/// less those whose file is not Mindweaver's to edit, each file read for a
+/// server of the name somebody keeps there and for an entry changed since
+/// it was written. Somebody's, or one edited and not forced, is the
+/// [`Installed`] refusal the install answers with, nothing written.
+fn decide(
     workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     candidate: &Candidate,
     homes: &AgentHomes,
     edits: Edits,
-) -> Result<Installation, InstallError> {
+) -> Result<Result<Decided, Installed>, InstallError> {
     receives(project)?;
     let root = project.root();
     let name = candidate.name().to_owned();
@@ -242,7 +263,6 @@ pub(crate) fn install_held(
     };
 
     let mut unreached: Vec<Unreached> = Vec::new();
-    // Each agent whose renderer refuses the definition, of those unreached.
     let mut refused: Vec<Agent> = Vec::new();
     let mut reached: Vec<Reach> = Vec::new();
     for agent in agents(project) {
@@ -287,23 +307,140 @@ pub(crate) fn install_held(
             .iter()
             .any(|held| held.name == name.as_str());
         if reach.held && !recorded(reach.agent, reach.route) {
-            return Ok(Installed::Foreign {
+            return Ok(Err(Installed::Foreign {
                 name,
                 path: reach.file.clone(),
-            }
-            .into());
+            }));
         }
     }
     // And an entry changed since it was written is theirs as much, unless
     // the install is forced: wherever the record has it, as for a copy.
     let edited = edited(workspace, ledger, project, Kind::Mcp, &name)?;
     if edits == Edits::Kept && !edited.is_empty() {
-        return Ok(Installed::Edited {
+        return Ok(Err(Installed::Edited {
             name,
             paths: edited,
-        }
-        .into());
+        }));
     }
+    Ok(Ok(Decided {
+        name,
+        definition,
+        before,
+        reached,
+        unreached,
+        refused,
+    }))
+}
+
+/// What installing `candidate`, an MCP server, into `project` would give
+/// each agent the project names, decided as the install decides it
+/// ([`decide`]) and each entry made as its renderer would make it there
+/// ([`planned`]), with nothing written and nothing recorded: what a front
+/// end shows before it asks whether to write a server that does not come
+/// from the workspace's own library ([`super::asks_first`]).
+///
+/// [`Installed::Unconfirmed`] with what each agent would run and why each
+/// not reached is not, or the refusal the install would meet: somebody's
+/// server of the name, an entry edited since and not forced, a file that
+/// cannot be read, or no agent reached at all. A read: no lock is taken,
+/// as a survey takes none.
+pub fn preview(
+    workspace: &WeaverWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+    candidate: &Candidate,
+    homes: &AgentHomes,
+    edits: Edits,
+) -> Result<Installation, InstallError> {
+    let decided = match decide(workspace, ledger, project, candidate, homes, edits)? {
+        Ok(decided) => decided,
+        Err(refused) => return Ok(refused.into()),
+    };
+    let root = project.root();
+    let Decided {
+        name,
+        definition,
+        reached,
+        mut unreached,
+        ..
+    } = decided;
+    let mut given: Vec<Given> = Vec::new();
+    for reach in &reached {
+        let done = match planned(reach.agent, root, &definition, homes) {
+            Ok(done) => done,
+            Err(refusal) if refuses_agent(&refusal) => {
+                unreached.push(Unreached {
+                    agent: reach.agent,
+                    why: Said::of(refusal.code(), &refusal),
+                });
+                continue;
+            }
+            Err(error) => return Err(config(error)),
+        };
+        unreached.extend(done.unread.into_iter().map(|why| Unreached {
+            agent: reach.agent,
+            why,
+        }));
+        given.push(Given {
+            agent: reach.agent,
+            file: reach.file.clone(),
+            written: None,
+            runs: done.runs,
+            warnings: done.warnings,
+        });
+    }
+    unreached.sort_by_key(|unreached| unreached.agent);
+    if given.is_empty() {
+        return Err(unreached_by_all(&name, project, unreached));
+    }
+    let paths = given.iter().map(|given| given.file.clone()).collect();
+    Ok(Installation {
+        entries: Some(Rendered {
+            given,
+            unreached,
+            variables: variables(&definition),
+        }),
+        ..Installation::from(Installed::Unconfirmed { name, paths })
+    })
+}
+
+/// [`install`], with the workspace's lock held already, as
+/// [`super::install_held`] is for a skill: for an update, which writes
+/// several installations under one hold of it.
+///
+/// Who is given what is decided before anything is written ([`decide`]),
+/// as a [`preview`] decides it. Then each is written in report order, and the first that fails puts back the files
+/// written before it, as they were, with the folder made on the way, and
+/// leaves the record as it was.
+///
+/// An agent its renderer now refuses loses the entry an earlier install
+/// recorded for it, taken out of its file as an uninstall takes it, and
+/// out of the record: left, the agent would go on running what the library
+/// no longer gives it, outdated for good, since no install can write it
+/// again. One whose file is not Mindweaver's to edit keeps it, recorded
+/// still, since nothing here may take it out, and dropping its record
+/// would make it nobody's to take out.
+pub(crate) fn install_held(
+    workspace: &WeaverWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+    candidate: &Candidate,
+    homes: &AgentHomes,
+    edits: Edits,
+) -> Result<Installation, InstallError> {
+    let Decided {
+        name,
+        definition,
+        before,
+        reached,
+        mut unreached,
+        mut refused,
+    } = match decide(workspace, ledger, project, candidate, homes, edits)? {
+        Ok(decided) => decided,
+        Err(refused) => return Ok(refused.into()),
+    };
+    let root = project.root();
+    let entry = project_entry(workspace, project);
 
     // Out of git before anything lands, each file an entry makes in a local
     // project, as an install's copies are, and only those: one somebody
@@ -384,7 +521,8 @@ pub(crate) fn install_held(
         given.push(Given {
             agent: reach.agent,
             file: reach.file.clone(),
-            written: done.written,
+            written: Some(done.written),
+            runs: done.runs,
             warnings: done.warnings,
         });
         written.push(was);
@@ -515,7 +653,11 @@ pub(crate) fn install_held(
     };
     Ok(Installation {
         excluded,
-        entries: Some(Rendered { given, unreached }),
+        entries: Some(Rendered {
+            given,
+            unreached,
+            variables: variables(&definition),
+        }),
         ..Installation::from(installed)
     })
 }
@@ -783,14 +925,31 @@ fn entry_for(agent: Agent, definition: &McpDefinition) -> Result<(), ConfigUnrea
     Ok(())
 }
 
-/// What one agent's renderer did.
+/// What one agent's renderer did, or would do.
 struct Done {
     written: Written,
     fingerprint: ContentHash,
+    runs: Runs,
     warnings: Vec<Said>,
     /// What is said of the project beside the entry, that the agent may not
     /// read the file at all: Codex's, in a project it does not trust.
     unread: Vec<Said>,
+}
+
+/// What one agent's renderer would write and say, with nothing written.
+struct Planned {
+    runs: Runs,
+    warnings: Vec<Said>,
+    /// As [`Done::unread`].
+    unread: Vec<Said>,
+}
+
+/// Each of `warnings`, by its code.
+fn said<W: std::fmt::Display>(warnings: &[W], code: impl Fn(&W) -> &'static str) -> Vec<Said> {
+    warnings
+        .iter()
+        .map(|warning| Said::of(code(warning), warning))
+        .collect()
 }
 
 /// Write `definition`'s entry into `agent`'s config file in the project at
@@ -809,12 +968,8 @@ fn render(
             Done {
                 written: rendered.written,
                 fingerprint: rendered.entry.fingerprint(),
-                warnings: rendered
-                    .entry
-                    .warnings
-                    .iter()
-                    .map(|warning| Said::of(warning.code(), warning))
-                    .collect(),
+                runs: rendered.entry.runs(),
+                warnings: said(&rendered.entry.warnings, claude_mcp::Warning::code),
                 unread: Vec::new(),
             }
         }
@@ -823,17 +978,9 @@ fn render(
             Done {
                 written: rendered.written,
                 fingerprint: rendered.entry.fingerprint(),
-                warnings: rendered
-                    .entry
-                    .warnings
-                    .iter()
-                    .map(|warning| Said::of(warning.code(), warning))
-                    .collect(),
-                unread: rendered
-                    .warnings
-                    .iter()
-                    .map(|warning| Said::of(warning.code(), warning))
-                    .collect(),
+                runs: rendered.entry.runs(),
+                warnings: said(&rendered.entry.warnings, codex_mcp::Warning::code),
+                unread: said(&rendered.warnings, codex_mcp::Warning::code),
             }
         }
         Agent::OpenCode => {
@@ -841,16 +988,75 @@ fn render(
             Done {
                 written: rendered.written,
                 fingerprint: rendered.entry.fingerprint(),
-                warnings: rendered
-                    .entry
-                    .warnings
-                    .iter()
-                    .map(|warning| Said::of(warning.code(), warning))
-                    .collect(),
+                runs: rendered.entry.runs(),
+                warnings: said(&rendered.entry.warnings, opencode_mcp::Warning::code),
                 unread: Vec::new(),
             }
         }
     })
+}
+
+/// What [`render`] would write into `agent`'s config file in the project at
+/// `root`, and say, through the renderer's own plan of it, with nothing
+/// written. Claude's is its entry, all its render decides beyond whether
+/// the file holds the name already, which [`decide`] has read it for.
+fn planned(
+    agent: Agent,
+    root: &Path,
+    definition: &McpDefinition,
+    homes: &AgentHomes,
+) -> Result<Planned, ConfigUnread> {
+    // Matched on the agent, so one added says how its entry is planned
+    // before it compiles.
+    Ok(match agent {
+        Agent::Claude => {
+            let entry = claude_mcp::entry(definition)?;
+            Planned {
+                runs: entry.runs(),
+                warnings: said(&entry.warnings, claude_mcp::Warning::code),
+                unread: Vec::new(),
+            }
+        }
+        Agent::Codex => {
+            let planned = codex_mcp::planned(root, definition, homes)?;
+            Planned {
+                runs: planned.entry.runs(),
+                warnings: said(&planned.entry.warnings, codex_mcp::Warning::code),
+                unread: said(&planned.warnings, codex_mcp::Warning::code),
+            }
+        }
+        Agent::OpenCode => {
+            let planned = opencode_mcp::planned(root, definition, homes)?;
+            Planned {
+                runs: planned.entry.runs(),
+                warnings: said(&planned.entry.warnings, opencode_mcp::Warning::code),
+                unread: Vec::new(),
+            }
+        }
+    })
+}
+
+/// Each variable `definition`'s inputs are read from, in the order they are
+/// declared, each once, secret or required when any input read from it is.
+fn variables(definition: &McpDefinition) -> Vec<Variable> {
+    let mut variables: Vec<Variable> = Vec::new();
+    for input in &definition.inputs {
+        let Some(name) = &input.env_var else {
+            continue;
+        };
+        match variables.iter_mut().find(|seen| seen.name == *name) {
+            Some(seen) => {
+                seen.secret |= input.secret;
+                seen.required |= input.required;
+            }
+            None => variables.push(Variable {
+                name: name.clone(),
+                secret: input.secret,
+                required: input.required,
+            }),
+        }
+    }
+    variables
 }
 
 /// Whether `error` is a renderer refusing its agent the definition, the

@@ -62,7 +62,8 @@ fn written(world: &World, installed: &Installed) -> Vec<String> {
         Installed::Added { paths, .. }
         | Installed::Updated { paths, .. }
         | Installed::Unchanged { paths, .. }
-        | Installed::Edited { paths, .. } => paths.iter().map(|p| world.spelled(p)).collect(),
+        | Installed::Edited { paths, .. }
+        | Installed::Unconfirmed { paths, .. } => paths.iter().map(|p| world.spelled(p)).collect(),
         Installed::Foreign { path, .. } => vec![world.spelled(path)],
     }
 }

@@ -161,6 +161,11 @@ fn install_said(
             "{} in {into} was already current\n",
             named(kind, &name)
         )),
+        // Asked about rather than written: nothing is wrong with it.
+        Installed::Unconfirmed { name, .. } => Outcome::plain(format!(
+            "would install {} into {into}, from {origin}\n",
+            named(kind, &name)
+        )),
         // Refused rather than obeyed: somebody wrote that one.
         Installed::Foreign { name, path } => Outcome {
             stdout: String::new(),

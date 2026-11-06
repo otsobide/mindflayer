@@ -319,6 +319,9 @@ fn installed(
         Installed::Unchanged { .. } => {
             let _ = writeln!(outcome.stdout, "{what} in {into} was already current");
         }
+        // Never what an update comes to: it writes through the install's
+        // body once `--yes` is said, which asks nothing more.
+        Installed::Unconfirmed { .. } => {}
         // Looked at again under the lock, and somebody's after all.
         Installed::Foreign { path, .. } => {
             outcome.stderr.push(Warning {
