@@ -515,7 +515,7 @@ pub fn load_project(directory: &Path, lookup: &Lookup) -> Result<View, CliError>
 /// there are none, which no snapshot holds, being a scan of the disk.
 fn workspace_view(resolved: &Resolved, lookup: &Lookup, roots: &[PathBuf]) -> Workspace {
     let workspace = &resolved.workspace;
-    let snapshot = Snapshot::of(resolved, lookup.home.as_deref());
+    let snapshot = Snapshot::of(resolved, lookup.home.as_deref(), &lookup.machine());
     let mut members = vec![own(&snapshot)];
     members.extend(
         snapshot

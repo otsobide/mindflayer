@@ -8,6 +8,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+use mindweaver_core::doctor::Machine;
 use mindweaver_core::resolve::{Reason, Resolved};
 use mindweaver_core::view::Snapshot;
 use mindweaver_core::watch::{self, Scope, Watched};
@@ -316,7 +317,7 @@ fn reading_a_snapshot_changes_nothing_watched() {
         workspace: WeaverWorkspace::open(fixture.hub.root()).unwrap(),
         reason: Reason::Explicit,
     };
-    Snapshot::of(&resolved, Some(&fixture.home()));
+    Snapshot::of(&resolved, Some(&fixture.home()), &Machine::default());
 
     assert_eq!(seen(&watched), before);
     let ledger = fixture.hub.root().join(WEAVER_DIR).join(LEDGER_FILE);

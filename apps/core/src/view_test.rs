@@ -45,7 +45,9 @@ fn building_a_snapshot_runs_no_scan() {
     let dir = fixture();
     let before = scan::scans();
 
-    let snapshot = Snapshot::read(&naming(dir.path())).unwrap().unwrap();
+    let snapshot = Snapshot::read(&naming(dir.path()), &Machine::default())
+        .unwrap()
+        .unwrap();
 
     assert_eq!(scan::scans(), before, "the snapshot scanned");
     assert_eq!(snapshot.projects.len(), 1);

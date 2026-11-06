@@ -134,6 +134,80 @@
       "held": []
     }
   ],
+  "doctor": [
+    {
+      "entry": "api",
+      "failures": [],
+      "findings": [],
+      "name": "api",
+      "path": "/home/you/Projects/api"
+    },
+    {
+      "entry": "web",
+      "failures": [],
+      "findings": [
+        {
+          "agents": [
+            "opencode"
+          ],
+          "code": "doctor_copies_differ",
+          "fix": "make the copies hold the same, or keep one and remove the others",
+          "message": "/home/you/Projects/web/.agents/skills/review: `review` is also at /home/you/Projects/web/.claude/skills/review, which OpenCode reads too, and the copies differ, so it loads one of them",
+          "path": "/home/you/Projects/web/.agents/skills/review"
+        }
+      ],
+      "name": "web",
+      "path": "/home/you/Projects/web"
+    },
+    {
+      "entry": "docs",
+      "failures": [],
+      "findings": [
+        {
+          "agents": [
+            "codex"
+          ],
+          "code": "doctor_unreached",
+          "fix": "point them at one of those folders, or install skills where they read with `mind targets reset skill`",
+          "message": "/home/you/Projects/docs/.skills: Codex reads none of the folders the project installs skills in (.skills), so what is installed there reaches it nowhere until it is pointed at one",
+          "path": "/home/you/Projects/docs/.skills"
+        }
+      ],
+      "name": "docs",
+      "path": "/home/you/Projects/docs"
+    },
+    {
+      "entry": "gone",
+      "failures": [
+        {
+          "code": "not_a_project",
+          "message": "/home/you/Projects/gone: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
+        }
+      ],
+      "findings": [],
+      "name": null,
+      "path": "/home/you/Projects/gone"
+    },
+    {
+      "entry": "old",
+      "failures": [
+        {
+          "code": "not_a_project",
+          "message": "/home/you/Projects/old: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
+        }
+      ],
+      "findings": [],
+      "name": null,
+      "path": "/home/you/Projects/old"
+    },
+    {
+      "entry": "legacy",
+      "failures": [],
+      "findings": [],
+      "name": "legacy",
+      "path": "/home/you/Projects/legacy"
+    }
+  ],
   "format": 1,
   "healths": [
     "ok",

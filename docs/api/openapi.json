@@ -1109,6 +1109,51 @@
           }
         ]
       },
+      "Examined": {
+        "description": "One project doctor examined, and what it found.",
+        "properties": {
+          "entry": {
+            "description": "The workspace's entry for it, as the marker spells it; none for a\nproject no workspace links.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "failures": {
+            "description": "What could not be read to tell, by its code: why its entry opens no\nproject, or a file a check needed.",
+            "items": {
+              "$ref": "#/components/schemas/Said"
+            },
+            "type": "array"
+          },
+          "findings": {
+            "description": "What keeps one of its agents from what it is given, in the order\nthe checks are made.",
+            "items": {
+              "$ref": "#/components/schemas/Finding"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "What its marker calls it; none for an entry that opens no project.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "path": {
+            "description": "Where it is.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entry",
+          "name",
+          "path",
+          "findings",
+          "failures"
+        ],
+        "type": "object"
+      },
       "Files": {
         "description": "Every file and folder of an artifact, as a front end may list them.",
         "properties": {
@@ -1141,6 +1186,42 @@
           "manifest",
           "entries",
           "truncated"
+        ],
+        "type": "object"
+      },
+      "Finding": {
+        "description": "One thing doctor found, as a report says it: what it is, by its code,\nthe agents it keeps something from, the path it is about and what fixes\nit.",
+        "properties": {
+          "agents": {
+            "description": "The agents it keeps something from, in report order: never empty\nbut for what keeps nothing from an agent yet, a leftover of an\ninstall.",
+            "items": {
+              "$ref": "#/components/schemas/Agent"
+            },
+            "type": "array"
+          },
+          "code": {
+            "description": "The [`Symptom`]'s code, unique across core.",
+            "type": "string"
+          },
+          "fix": {
+            "description": "What to do about it.",
+            "type": "string"
+          },
+          "message": {
+            "description": "What is wrong, naming that path.",
+            "type": "string"
+          },
+          "path": {
+            "description": "The file or folder it is about, absolute: the one the fix acts on.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "agents",
+          "path",
+          "message",
+          "fix"
         ],
         "type": "object"
       },
@@ -2702,6 +2783,13 @@
             },
             "type": "array"
           },
+          "doctor": {
+            "description": "What doctor finds of each entry in the registry, in the order\n`projects` lists them: what keeps its agents from what it gives\nthem, as `mindweaver doctor` says it ([`crate::doctor`]), with the\nagent homes and the names of the variables set the front end told\nthe snapshot ([`Machine`]).",
+            "items": {
+              "$ref": "#/components/schemas/Examined"
+            },
+            "type": "array"
+          },
           "format": {
             "description": "[`FORMAT`].",
             "format": "uint32",
@@ -2814,6 +2902,7 @@
           "sources",
           "offers",
           "boxes",
+          "doctor",
           "known",
           "history",
           "warnings"

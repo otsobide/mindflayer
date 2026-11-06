@@ -705,7 +705,7 @@ impl Backend for PanelBackend {
                 workspace,
                 reason: pin.reason,
             };
-            Snapshot::of(&resolved, self.lookup.home.as_deref())
+            Snapshot::of(&resolved, self.lookup.home.as_deref(), &self.lookup.machine())
         };
         match query {
             Query::Snapshot {} => {
