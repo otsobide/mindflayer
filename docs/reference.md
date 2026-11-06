@@ -1297,8 +1297,7 @@ project has), one row an agent: the `agent`, the `file`, the server's
 `name`, its `state` and, for one Mindweaver installed, its `origin`. A
 server somebody keeps there that Mindweaver did not install is `foreign`,
 and one it installed stands as an installed skill does, `edited` once what
-the file holds under its name has changed. Nothing installs a server yet, so
-for now every entry it lists is `foreign`. A config file holding an entry
+the file holds under its name has changed. A config file holding an entry
 Mindweaver installed that cannot be read is a warning beside the report,
 the entry `missing`; one holding none it installed is passed over, a link
 included, and nothing in it is listed. The text lists each `foreign` one
@@ -3274,13 +3273,28 @@ agents:
 `mindweaver rename mcp:github octocat` moves the file and rewrites its `name`
 and nothing else, and `mindweaver remove mcp:github --yes` takes it away;
 `mindweaver edit` opens it, and `--contents` refuses a definition that does
-not read or names another server. Installing one into a project is not done
-yet, and is refused, saying so:
+not read or names another server.
+
+Installing one into a project, named as `mcp:github`, writes it into the
+config file of each agent the project names, an entry each, every other
+server and setting there kept, all of them or none:
 
 ```
 $ mindweaver install -p collapse mcp:github
-error: MCP servers cannot be installed into a project yet
+installed mcp github into collapse, from workspace
 ```
+
+An agent that cannot be given it, or whose file git tracks in a local
+project without `edit_tracked`, is passed over and the rest are given it;
+one that reaches none of them is refused, saying why of each. A server of
+the name somebody keeps in one of those files refuses the install, as a
+skill somebody keeps does, and so does an entry changed since it was
+written, until `--force`. In a local project, a config file the install
+makes is kept out of git, and goes with its last server.
+`mindweaver uninstall -p collapse mcp:github` takes out each entry it
+wrote, and nothing else. `rename`, `edit` and `remove` aimed at a server a
+project received are refused there: uninstall it, or change its definition
+in the library and `update`.
 
 A project keeps MCP servers of its own only where its settings name a folder
 for them, under `[directories]` as `mcp = "mcp"`, and `mind add mcp` writes

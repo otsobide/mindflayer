@@ -10,7 +10,7 @@ reaches the block (#44), the names a suggestion ranks a repository by (#58),
 what an MCP server's definition is held to for each agent (#87), the
 entry Claude's `.mcp.json` is given of one (#90), the one Codex's
 `.codex/config.toml` is (#91) and the one OpenCode's `opencode.json` is
-(#92), and the MCP installs to come (#93, #94).
+(#92), and the MCP installs they serve (#93, #94).
 [docs/architecture.md](architecture.md) says what Mindweaver does with these
 facts and why; this page says what the agents do.
 

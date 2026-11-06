@@ -175,7 +175,9 @@ under `apps/` with its own `Makefile`:
   Claude reads that block and the `@AGENTS.md` import in a project's
   `CLAUDE.md` that makes it (`claude_md`), installing a rule through those
   three, or as a copy into a project a `mind.toml` marks (`install::rules`),
-  changing a project's agents or share mode and carrying its installs along
+  installing an MCP server as an entry in the config file of each agent a
+  project names, through those renderers, and taking it out
+  (`install::mcp`), changing a project's agents or share mode and carrying its installs along
   (`reapply`), what each project holds, from where and for which agents,
   each MCP server's entry in its agents' config files among it, as it stands
   (`status`, `status::EntryStatus`, told in `install::entries`), finding a project that moved again by its id and giving a
@@ -683,9 +685,10 @@ These are easy to break from a single file without noticing.
     `# mindweaver:begin`/`# mindweaver:end` in
     `$GIT_COMMON_DIR/info/exclude` (`exclude`), where an edit rewrites only its
     own project's `# project <key>` group: an install writes one entry per
-    copy for a local project, keyed by its id, before the copies land, and
-    a render of Claude's rule files one per file, and neither opens the file
-    for a shared project or one a `mind.toml` marks. A
+    copy for a local project, keyed by its id, before the copies land, an
+    install of an MCP server one per config file it makes, before the file
+    lands, and a render of Claude's rule files one per file, and none opens
+    the file for a shared project or one a `mind.toml` marks. A
     project turning shared has its whole group forgotten (`exclude::forget`),
     and one turning local an entry written for each copy in place. No entry
     is written for a copy git tracks (`install::untracked`), by an install,
@@ -840,11 +843,34 @@ These are easy to break from a single file without noticing.
   rules in one render that keeps an orphaned rule as it is
   (`install::rules::update_held`); it leaves an `Edited` one, every copy of
   it, unless forced, and says an `Orphaned` one without failing. An
-  uninstall removes the copies its record names and nothing else. No
-  install writes an MCP server yet (`install::installs`, refused as
-  `not_installable` wherever a project is asked where one goes, which every
-  project's boxes in the snapshot say), nor does an adoption or a gather;
-  `add` writes a definition where its holder keeps servers, as it writes a
+  uninstall removes the copies its record names and nothing else. An MCP
+  server is installed as entries (`install::mcp`): one installation, an
+  entry in the config file of each agent the project names, written through
+  the agent's renderer and recorded by its fingerprint, all of them or none,
+  a file that fails putting back each written before it and recording
+  nothing. An agent its renderer refuses the definition (one it cannot
+  express, an input read from no variable, a name the user's Codex config
+  holds), one whose file git tracks in a local project without
+  `edit_tracked`, and Codex in a project it does not trust, which is written
+  all the same, are said as not reached by their code
+  (`install::mcp::Rendered`), the others given it; one reaching none is
+  refused (`mcp_unreached`). A server of the name nothing records in a file
+  it writes is `Standing::Foreign` and refuses the whole install
+  (`Installed::Foreign`), and an edited entry refuses an install or an
+  uninstall unless forced, forcing never reaching an entry nothing records.
+  An agent left out keeps the entry an earlier install recorded for it. An
+  uninstall takes out only the entries its record names, from the file
+  each names (`opencode_mcp::remove_from`), every other server kept, and a
+  file Mindweaver made with its last server; one in a file git tracks in a
+  local project without `edit_tracked` refuses it (`mcp_entry_unedited`).
+  An update writes one through `install_held`, as a skill. A local project
+  keeps out of git only the config files an install makes, a line each
+  written before the file lands, noted in `created_files`. The front ends
+  step through no MCP server yet (`install::installs`, which `survey`,
+  `receives` and a name typed bare follow, so the snapshot's boxes say
+  `not_installable`): one is named qualified (`mcp:github`,
+  `install::offered`) until #95. No adoption or gather writes one; `add`
+  writes a definition where its holder keeps servers, as it writes a
   skill, and records nothing, writing nothing into an agent's config. No copy
   holds a skill's top-level `.claude-plugin`
   (`install::LeftOut`), and none lands inside an agent's own folder
@@ -903,7 +929,9 @@ These are easy to break from a single file without noticing.
   ledger and the block (`status`, D-23), never by discovery, which reads no
   block, and a front end finds what to change through
   `lifecycle::find_to_change`, which refuses such a rule as received rather
-  than as nothing.
+  than as nothing, and an MCP server the ledger records as one the project
+  received too (`LifecycleError::ReceivedServer`), with a hint to uninstall
+  it or change the library's definition and update.
 - **Strict when writing, lenient when reading.** A skill's front matter is
   the Agent Skills format. `mind add`, `rename`, `install`, `mindweaver adopt`
   and `edit --contents` (`lifecycle::replace_contents`, which also refuses
@@ -1053,8 +1081,8 @@ These are easy to break from a single file without noticing.
     redacted where it is written.
 - **Writers take turns; readers never wait.** Core's writers hold the
   workspace's `.mindweaver/lock` (`WeaverWorkspace::lock`) while they change
-  it: `edit_array`, `install::install` and `uninstall`,
-  `install::rules::render`, `gather::gather`,
+  it: `edit_array`, `install::install` and `uninstall`, an MCP server's
+  among them (`install::mcp`), `install::rules::render`, `gather::gather`,
   `gather::scrub`, which `WeaverWorkspace::ledger_to_write` runs, when it has
   clones to rewrite, `migrate::library`, from its plan to its rewrite of
   the marker, `migrate::names`, from its plan to the rename of the folder
@@ -1072,7 +1100,7 @@ These are easy to break from a single file without noticing.
   `install::rules::update_held`, which take none of their own. A new
   writer takes it the same way, inside core; `config_entry::ConfigFile`,
   `claude_mcp::render` and `remove`, `codex_mcp::render` and `remove`,
-  `opencode_mcp::render` and `remove`, `agents_md::render`, `claude_rules::render`, `claude_md::render` and
+  `opencode_mcp::render`, `remove` and `remove_from`, `agents_md::render`, `claude_rules::render`, `claude_md::render` and
   `MindProject::change_settings` take none, since
   the writers that call them hold it, and `assign::install` and
   `uninstall` none across their batch, leaving it to each project's
