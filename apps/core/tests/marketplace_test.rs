@@ -1137,3 +1137,208 @@ fn a_plugin_s_url_naming_a_folder_on_this_machine_is_refused() {
     assert!(ledger.gathered().unwrap().is_empty());
     assert_eq!(report.catalog.failures[0].name(), Some("local"));
 }
+
+// ---------------------------------------------------------------------------
+// Codex's dialect (#104)
+// ---------------------------------------------------------------------------
+
+/// A Codex entry for the plugin in `path`, called `name`, with the policy
+/// and the category Codex requires.
+fn codex_entry(name: &str, path: &str) -> String {
+    format!(
+        r#"{{"name": "{name}", "source": {{"source": "local", "path": "{path}"}}, "policy": {{"installation": "AVAILABLE", "authentication": "ON_INSTALL"}}, "category": "Productivity"}}"#
+    )
+}
+
+/// A Codex plugin's manifest, as openai/plugins writes each, naming its
+/// skills' folder, its MCP servers and its app connectors.
+fn codex_manifest(name: &str) -> String {
+    format!(
+        r#"{{"name": "{name}", "version": "1.0.0", "description": "{name} for Codex", "skills": "./skills/", "mcpServers": "./.mcp.json", "apps": "./.app.json", "interface": {{"displayName": "{name}"}}}}"#
+    )
+}
+
+/// A marketplace as openai/plugins keeps one: its catalog at Codex's
+/// place, each plugin a folder of its own under `plugins/` with a
+/// `.codex-plugin/plugin.json`, some with skills, one with servers and an
+/// app connector alone, and one entry whose path Codex does not resolve.
+fn openai() -> TempDir {
+    let entries = [
+        codex_entry("linear", "./plugins/linear"),
+        codex_entry("figma", "./plugins/figma"),
+        codex_entry("notion", "./plugins/notion"),
+        codex_entry("retired", "plugins/retired"),
+    ];
+    let catalog = format!(
+        r#"{{"name": "openai-curated", "interface": {{"displayName": "OpenAI"}}, "plugins": [{}]}}"#,
+        entries.join(",")
+    );
+    let manifests: Vec<(String, String)> = ["linear", "figma", "notion", "retired"]
+        .into_iter()
+        .map(|name| {
+            (
+                format!("plugins/{name}/.codex-plugin/plugin.json"),
+                codex_manifest(name),
+            )
+        })
+        .collect();
+    let mut files: Vec<(&str, &str)> = manifests
+        .iter()
+        .map(|(path, text)| (path.as_str(), text.as_str()))
+        .collect();
+    let linear = skill("linear", "Work with Linear issues");
+    let design = skill("figma-design", "Read a Figma design");
+    let code = skill("figma-code", "Turn a Figma frame into code");
+    let old = skill("old", "Never resolved");
+    files.extend([
+        (".agents/plugins/marketplace.json", catalog.as_str()),
+        ("plugins/linear/skills/linear/SKILL.md", linear.as_str()),
+        ("plugins/linear/.mcp.json", r#"{"mcpServers": {}}"#),
+        ("plugins/linear/.app.json", r#"{"apps": {}}"#),
+        (
+            "plugins/figma/skills/figma-design/SKILL.md",
+            design.as_str(),
+        ),
+        ("plugins/figma/skills/figma-code/SKILL.md", code.as_str()),
+        ("plugins/notion/.mcp.json", r#"{"mcpServers": {}}"#),
+        ("plugins/notion/.app.json", r#"{"apps": {}}"#),
+        ("plugins/retired/skills/old/SKILL.md", old.as_str()),
+        ("README.md", "Codex plugins\n"),
+    ]);
+    repository(&files)
+}
+
+#[test]
+fn a_codex_marketplace_like_openais_lists_its_plugins_and_skips_one_codex_does_not_resolve() {
+    let market = openai();
+    let routes = Arc::new(Routes::default().to(MARKET, &market));
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let report =
+        marketplace::gather(&workspace, &ledger, &request(&routes, Pick::Listing)).unwrap();
+
+    assert_eq!(report.catalog.name, "openai-curated");
+    assert_eq!(report.catalog.dialect, marketplace::Dialect::Codex);
+    assert_eq!(report.catalog.listed, 4);
+    let listed: Vec<(&str, &str, &str)> = report
+        .catalog
+        .entries
+        .iter()
+        .map(|entry| {
+            (
+                entry.name.as_str(),
+                entry.plugin.kind(),
+                entry.plugin.path(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        listed,
+        [
+            ("linear", "local", "plugins/linear"),
+            ("figma", "local", "plugins/figma"),
+            ("notion", "local", "plugins/notion"),
+        ]
+    );
+    let failed: Vec<(Option<&str>, &str)> = report
+        .catalog
+        .failures
+        .iter()
+        .map(|failure| (failure.name(), failure.code()))
+        .collect();
+    assert_eq!(failed, [(Some("retired"), "marketplace_entry_unresolved")]);
+    assert!(report.children.is_empty());
+    assert_eq!(routes.asked(), [MARKET]);
+}
+
+#[test]
+fn every_plugin_of_a_codex_marketplace_is_gathered_from_its_clone_and_the_unresolved_one_skipped() {
+    let market = openai();
+    let routes = Arc::new(Routes::default().to(MARKET, &market));
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let report = marketplace::gather(&workspace, &ledger, &request(&routes, Pick::All)).unwrap();
+
+    let gathered: Vec<(&str, usize)> = report
+        .children
+        .iter()
+        .map(|child| {
+            (
+                child.entry.as_str(),
+                child.outcome.as_ref().unwrap().added.len(),
+            )
+        })
+        .collect();
+    assert_eq!(gathered, [("linear", 1), ("figma", 2), ("notion", 0)]);
+    assert_eq!(
+        shelf(&ledger),
+        pairs(&[
+            ("figma-code", "openai-curated.figma"),
+            ("figma-design", "openai-curated.figma"),
+            ("linear", "openai-curated.linear"),
+        ])
+    );
+    assert_eq!(
+        report.catalog.failures[0].code(),
+        "marketplace_entry_unresolved"
+    );
+    // Its servers are said by the file they are in, and never taken.
+    assert_eq!(report.children[0].holds, [Holding::McpServers]);
+    assert_eq!(report.children[0].mcp_files, [".mcp.json"]);
+    assert_eq!(report.children[2].mcp_files, [".mcp.json"]);
+    // Every plugin is in the marketplace's own repository: one fetch.
+    assert_eq!(routes.asked(), [MARKET]);
+    let sources = ledger.sources().unwrap();
+    let parent = sources
+        .iter()
+        .find(|source| source.name == "openai-curated")
+        .unwrap();
+    assert_eq!(parent.kind, SourceKind::Marketplace);
+    let children: Vec<String> = ledger
+        .children(parent.id)
+        .unwrap()
+        .into_iter()
+        .map(|child| child.subdirectory)
+        .collect();
+    assert_eq!(
+        children,
+        ["plugins/figma", "plugins/linear", "plugins/notion"]
+    );
+}
+
+#[test]
+fn a_catalog_in_the_other_dialects_shape_is_refused_whichever_place_it_is_at_and_nothing_recorded()
+{
+    let openai_at_claudes = repository(&[
+        (
+            ".claude-plugin/marketplace.json",
+            &catalog("c", &[codex_entry("linear", "./plugins/linear")]),
+        ),
+        (
+            "plugins/linear/skills/linear/SKILL.md",
+            &skill("linear", "Linear"),
+        ),
+    ]);
+    let anthropic_at_codexs = repository(&[
+        (
+            ".agents/plugins/marketplace.json",
+            &catalog("c", &[String::from(r#"{"name": "kit", "source": "./"}"#)]),
+        ),
+        ("skills/kit/SKILL.md", &skill("kit", "Kit")),
+    ]);
+
+    for market in [&openai_at_claudes, &anthropic_at_codexs] {
+        let routes = Arc::new(Routes::default().to(MARKET, market));
+        let (_dir, workspace) = workspace();
+        let ledger = workspace.ledger().unwrap();
+
+        let error =
+            marketplace::gather(&workspace, &ledger, &request(&routes, Pick::All)).unwrap_err();
+
+        assert_eq!(error.code(), "marketplace_catalog_other_dialect");
+        assert!(ledger.sources().unwrap().is_empty());
+        assert!(ledger.gathered().unwrap().is_empty());
+    }
+}

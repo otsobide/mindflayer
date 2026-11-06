@@ -324,7 +324,8 @@ fn a_repository_holding_no_catalog_is_said_to_be_no_marketplace() {
     assert_eq!(failure.error.code(), "marketplace_catalog_missing");
     assert_eq!(
         failure.error.to_string(),
-        ".claude-plugin/marketplace.json: no such file, so this is no Claude Code marketplace"
+        ".claude-plugin/marketplace.json: no such file, nor .agents/plugins/marketplace.json, so \
+         this is no Claude Code or Codex marketplace"
     );
     let sources = weaver(dir.path(), &["gather", "sources"]).unwrap();
     assert!(
@@ -530,5 +531,93 @@ fn gather_remove_of_a_marketplace_says_each_plugin_of_it_and_takes_them_with_it(
         sources.stdout.starts_with("no sources yet"),
         "{}",
         sources.stdout
+    );
+}
+
+/// A Codex marketplace as openai/plugins keeps one (#104): its catalog at
+/// Codex's place, a plugin holding a skill and its MCP servers, and an
+/// entry Codex does not resolve.
+fn codex_marketplace() -> TempDir {
+    repository(&[
+        (
+            ".agents/plugins/marketplace.json",
+            r#"{
+  "name": "openai-curated",
+  "interface": {"displayName": "OpenAI"},
+  "plugins": [
+    {"name": "linear", "source": {"source": "local", "path": "./plugins/linear"}, "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"}, "category": "Productivity"},
+    {"name": "retired", "source": {"source": "local", "path": "plugins/retired"}, "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"}, "category": "Productivity"}
+  ]
+}"#,
+        ),
+        (
+            "plugins/linear/.codex-plugin/plugin.json",
+            r#"{"name": "linear", "skills": "./skills/", "mcpServers": "./.mcp.json"}"#,
+        ),
+        (
+            "plugins/linear/skills/linear/SKILL.md",
+            &skill_file("linear", "Work with Linear issues"),
+        ),
+        ("plugins/linear/.mcp.json", r#"{"mcpServers": {}}"#),
+        (
+            "plugins/retired/skills/old/SKILL.md",
+            &skill_file("old", "Never resolved"),
+        ),
+    ])
+}
+
+#[test]
+fn a_codex_marketplace_is_listed_and_gathered_as_a_claude_code_one_is() {
+    let market = codex_marketplace();
+    let dir = workspace();
+    let url = market.path().to_string_lossy().into_owned();
+    let head = short_head(&market);
+    let skipped = "warning: openai-curated: `retired`: its path `plugins/retired` does not start \
+                   with `./`, so Codex does not resolve it, and it is skipped";
+
+    let listed = weaver(dir.path(), &["gather", "marketplace", &url, "--list"]).unwrap();
+
+    assert_eq!(
+        listed.stdout,
+        format!(
+            "openai-curated: {url} at {head}\n\
+             \x20 linear  local  plugins/linear\n\
+             \n\
+             2 plugins listed; nothing gathered: gather some with --plugin <name>, or every one \
+             with --all\n"
+        )
+    );
+    assert_eq!(listed.stderr, [skipped]);
+    assert_eq!(
+        stderr_codes(&listed),
+        [Some(String::from("marketplace_entry_unresolved"))]
+    );
+
+    let gathered = weaver(
+        dir.path(),
+        &["gather", "marketplace", &url, "--plugin", "linear"],
+    )
+    .unwrap();
+
+    assert_eq!(
+        gathered.stdout,
+        format!(
+            "openai-curated: {url} at {head}\n\
+             \n\
+             openai-curated.linear: {url} at {head}\n\
+             \x20 added  linear  Work with Linear issues\n\
+             \n\
+             1 skill: 1 added, 0 updated, 0 unchanged\n"
+        )
+    );
+    assert_eq!(
+        gathered.stderr,
+        [
+            String::from(skipped),
+            String::from(
+                "note: openai-curated.linear: its plugin holds MCP servers in `.mcp.json` too, \
+                 which are not gathered"
+            ),
+        ]
     );
 }

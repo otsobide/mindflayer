@@ -837,7 +837,7 @@ fn entries(catalog: &Listed) -> String {
         .map(|entry| {
             let at = match &entry.plugin {
                 Plugin::Relative { route } if route.is_empty() => String::from("."),
-                Plugin::Relative { route } => route.clone(),
+                Plugin::Relative { route } | Plugin::Local { route } => route.clone(),
                 Plugin::Github { repo, .. } => repo.clone(),
                 Plugin::Url { url, .. } => redacted(url).into_owned(),
                 Plugin::GitSubdir { url, path, .. } => format!("{} {path}", redacted(url)),

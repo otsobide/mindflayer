@@ -2,7 +2,7 @@
 //! no repository on the disk can make, since a plugin in a repository of
 //! its own is fetched from another machine.
 
-use mindweaver_core::marketplace::{Child, Entry};
+use mindweaver_core::marketplace::{Child, Dialect, Entry};
 use mindweaver_core::value::{Redacted, SourceName};
 
 use super::*;
@@ -30,6 +30,7 @@ fn a_plugins_url_its_catalog_gives_is_said_in_printable_text() {
             listed: 1,
             entries: vec![entry],
             failures: Vec::new(),
+            dialect: Dialect::Claude,
         },
         children: vec![Child {
             entry: String::from("tools"),

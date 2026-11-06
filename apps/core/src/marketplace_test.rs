@@ -32,7 +32,7 @@ const ANTHROPIC: &str = r#"{
 
 #[test]
 fn a_catalog_like_anthropics_lists_each_plugin_in_its_own_folder_with_the_skills_it_names() {
-    let catalog = Catalog::parse(ANTHROPIC).unwrap();
+    let catalog = Catalog::parse(ANTHROPIC, Dialect::Claude).unwrap();
 
     assert_eq!(catalog.name.as_deref(), Some("anthropic-agent-skills"));
     assert_eq!(catalog.listed, 2);
@@ -65,6 +65,156 @@ fn a_catalog_like_anthropics_lists_each_plugin_in_its_own_folder_with_the_skills
             },
         ]
     );
+}
+
+/// A catalog as openai/plugins writes one (#104): each plugin a folder of
+/// the marketplace's own repository, named by a `local` source, beside the
+/// `policy` and the `category` Codex requires.
+const OPENAI: &str = r#"{
+  "name": "openai-curated",
+  "interface": {"displayName": "OpenAI Curated"},
+  "plugins": [
+    {
+      "name": "linear",
+      "source": {"source": "local", "path": "./plugins/linear"},
+      "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
+      "category": "Productivity"
+    },
+    {
+      "name": "figma",
+      "source": {"source": "local", "path": "./plugins/figma/"},
+      "policy": {"installation": "AVAILABLE", "authentication": "ON_USE"},
+      "category": "Design"
+    }
+  ]
+}"#;
+
+/// What a Codex catalog's entry in `route` lists, called `name`.
+fn local(name: &str, route: &str) -> Entry {
+    Entry {
+        name: name.to_owned(),
+        description: None,
+        plugin: Plugin::Local {
+            route: route.to_owned(),
+        },
+        skills: None,
+        license: None,
+        declares: Vec::new(),
+    }
+}
+
+#[test]
+fn a_catalog_like_openais_lists_each_plugin_in_a_folder_of_its_repository_reading_past_its_policy()
+{
+    let catalog = Catalog::parse(OPENAI, Dialect::Codex).unwrap();
+
+    assert_eq!(catalog.name.as_deref(), Some("openai-curated"));
+    assert_eq!(catalog.dialect, Dialect::Codex);
+    assert_eq!(catalog.listed, 2);
+    assert!(catalog.failures.is_empty(), "{:?}", catalog.failures);
+    assert_eq!(
+        catalog.entries,
+        [
+            local("linear", "plugins/linear"),
+            local("figma", "plugins/figma")
+        ]
+    );
+}
+
+#[test]
+fn an_entry_codex_would_not_resolve_is_skipped_with_why_and_the_rest_listed() {
+    let catalog = Catalog::parse(
+        r#"{"name": "c", "plugins": [
+            {"name": "fine", "source": {"source": "local", "path": "./plugins/fine"}, "policy": {}, "category": "x"},
+            {"name": "no-dot", "source": {"source": "local", "path": "plugins/no-dot"}},
+            {"name": "root", "source": {"source": "local", "path": "./"}},
+            {"name": "climbs", "source": {"source": "local", "path": "./../elsewhere"}},
+            {"name": "absolute", "source": {"source": "local", "path": ".//etc"}},
+            {"name": "remote", "source": {"source": "git", "url": "https://example.com/x.git"}},
+            {"name": "no-path", "source": {"source": "local"}},
+            {"name": "no-kind", "source": {"path": "./x"}},
+            {"name": "as-claude", "source": "./plugins/fine"},
+            {"name": "no-source"},
+            {"name": "keys", "source": {"source": "local", "path": "./plugins/keys"}, "skills": ["./x"], "license": "MIT", "hooks": {}},
+            {"description": "no name"}
+        ]}"#,
+        Dialect::Codex,
+    )
+    .unwrap();
+
+    // What only Claude Code's format gives an entry is read past.
+    assert_eq!(
+        catalog.entries,
+        [local("fine", "plugins/fine"), local("keys", "plugins/keys")]
+    );
+    let failed: Vec<(Option<&str>, &str)> = catalog
+        .failures
+        .iter()
+        .map(|failure| (failure.name(), failure.code()))
+        .collect();
+    assert_eq!(
+        failed,
+        [
+            (Some("no-dot"), "marketplace_entry_unresolved"),
+            (Some("root"), "marketplace_entry_unresolved"),
+            (Some("climbs"), "marketplace_entry_outside"),
+            (Some("absolute"), "marketplace_entry_outside"),
+            (Some("remote"), "marketplace_entry_unresolved"),
+            (Some("no-path"), "marketplace_entry_unresolved"),
+            (Some("no-kind"), "marketplace_entry_unresolved"),
+            (Some("as-claude"), "marketplace_entry_unresolved"),
+            (Some("no-source"), "marketplace_entry_unresolved"),
+            (None, "marketplace_entry_unreadable"),
+        ]
+    );
+    let said: Vec<String> = catalog.failures[..2]
+        .iter()
+        .chain(&catalog.failures[4..5])
+        .map(ToString::to_string)
+        .collect();
+    assert_eq!(
+        said,
+        [
+            "`no-dot`: its path `plugins/no-dot` does not start with `./`, so Codex does not \
+             resolve it, and it is skipped",
+            "`root`: its path `./` names the marketplace's own folder, and no folder below it, so \
+             Codex does not resolve it, and it is skipped",
+            "`remote`: its `source` is a `git` one, not a `local` one, so Codex does not resolve \
+             it, and it is skipped",
+        ]
+    );
+}
+
+#[test]
+fn a_catalog_written_wholly_in_the_other_dialects_shape_is_read_as_neither() {
+    // Codex's shape at Claude Code's place, and Claude Code's at Codex's.
+    assert_eq!(
+        Catalog::parse(OPENAI, Dialect::Claude),
+        Err(Unparsed::Shaped(Dialect::Codex))
+    );
+    assert_eq!(
+        Catalog::parse(ANTHROPIC, Dialect::Codex),
+        Err(Unparsed::Shaped(Dialect::Claude))
+    );
+    assert_eq!(
+        Catalog::parse(&mixed(), Dialect::Codex),
+        Err(Unparsed::Shaped(Dialect::Claude))
+    );
+    // Neither its place alone nor its shape alone: each is read where its
+    // own dialect keeps it, and one whose entries say no shape, or both,
+    // is read as its place says.
+    assert!(Catalog::parse(OPENAI, Dialect::Codex).is_ok());
+    assert!(Catalog::parse(ANTHROPIC, Dialect::Claude).is_ok());
+    for text in [
+        r#"{"plugins": []}"#,
+        r#"{"plugins": [{"name": "x"}, "y", {"name": "z", "source": {"source": "pip"}}]}"#,
+        r#"{"plugins": [{"name": "a", "source": "./a"}, {"name": "b", "source": {"source": "local", "path": "./b"}}]}"#,
+    ] {
+        for dialect in Dialect::ALL {
+            let catalog = Catalog::parse(text, dialect).unwrap();
+            assert_eq!(catalog.dialect, dialect, "{text}");
+        }
+    }
 }
 
 /// A catalog mixing every kind of source, and entries that are none.
@@ -107,7 +257,7 @@ fn mixed() -> String {
 
 #[test]
 fn every_kind_of_source_a_catalog_names_is_read_and_what_no_gather_makes_is_said_on_its_own() {
-    let catalog = Catalog::parse(&mixed()).unwrap();
+    let catalog = Catalog::parse(&mixed(), Dialect::Claude).unwrap();
 
     assert_eq!(catalog.listed, 25);
     let plugins: Vec<(&str, &Plugin)> = catalog
@@ -203,7 +353,7 @@ fn every_kind_of_source_a_catalog_names_is_read_and_what_no_gather_makes_is_said
 
 #[test]
 fn a_command_entry_is_refused_with_a_message_saying_it_is_never_run() {
-    let catalog = Catalog::parse(&mixed()).unwrap();
+    let catalog = Catalog::parse(&mixed(), Dialect::Claude).unwrap();
 
     let refused = catalog
         .failures
@@ -220,7 +370,7 @@ fn a_command_entry_is_refused_with_a_message_saying_it_is_never_run() {
 
 #[test]
 fn an_entry_that_cannot_be_read_is_said_by_where_it_is_in_the_list() {
-    let catalog = Catalog::parse(&mixed()).unwrap();
+    let catalog = Catalog::parse(&mixed(), Dialect::Claude).unwrap();
     let said: Vec<String> = catalog
         .failures
         .iter()
@@ -251,6 +401,7 @@ fn an_entry_whose_name_no_list_shows_as_it_is_is_unreadable_and_said_by_its_name
             {"name": "a\u001b[2Jb", "source": "./c"},
             {"name": "two words", "source": "./d"}
         ]}"#,
+        Dialect::Claude,
     )
     .unwrap();
 
@@ -287,6 +438,7 @@ fn a_url_a_failure_names_is_said_without_the_credential_it_carries() {
             {"name": "packed", "source": {"source": "url", "url": "https://me:s3cret@example.com/p.zip"}},
             {"name": "local", "source": {"source": "url", "url": "file://me:s3cret@localhost/srv/x"}}
         ]}"#,
+        Dialect::Claude,
     )
     .unwrap();
 
@@ -306,7 +458,9 @@ fn what_is_no_catalog_is_said_as_such() {
         ("{\"plugins\": [] // a comment\n}", "it is not JSON"),
         (r#"{"plugins": [],}"#, "it is not JSON"),
     ] {
-        let said = Catalog::parse(text).unwrap_err();
+        let Err(Unparsed::Unreadable(said)) = Catalog::parse(text, Dialect::Claude) else {
+            panic!("{text}: read");
+        };
         assert!(said.starts_with(reason), "{text}: {said}");
     }
 }
@@ -319,14 +473,15 @@ fn a_catalog_nested_deeper_than_the_parser_goes_is_no_catalog_rather_than_an_ove
         "]".repeat(100_000)
     );
 
-    assert!(Catalog::parse(&deep)
-        .unwrap_err()
-        .starts_with("it is not JSON"));
+    assert!(matches!(
+        Catalog::parse(&deep, Dialect::Claude),
+        Err(Unparsed::Unreadable(said)) if said.starts_with("it is not JSON")
+    ));
 }
 
 #[test]
 fn a_catalog_without_a_name_is_read_with_none() {
-    let catalog = Catalog::parse(r#"{"name": 7, "plugins": []}"#).unwrap();
+    let catalog = Catalog::parse(r#"{"name": 7, "plugins": []}"#, Dialect::Claude).unwrap();
 
     assert_eq!(catalog.name, None);
     assert_eq!(catalog.listed, 0);
@@ -364,6 +519,12 @@ fn an_entry_and_its_plugin_serialize_each_field_by_its_name_and_a_url_without_it
                 route: String::from("plugins/a"),
             },
             r#"{"kind":"relative","url":null,"path":"plugins/a","reference":null,"sha":null}"#,
+        ),
+        (
+            Plugin::Local {
+                route: String::from("plugins/linear"),
+            },
+            r#"{"kind":"local","url":null,"path":"plugins/linear","reference":null,"sha":null}"#,
         ),
         (
             Plugin::Github {
@@ -417,6 +578,65 @@ fn a_catalog_is_read_from_the_folder_the_marketplace_is_in() {
 }
 
 #[test]
+fn a_codex_catalog_is_read_from_its_own_place_its_folders_held_to_the_repository() {
+    let at = clone(&[
+        (
+            CODEX_CATALOG,
+            r#"{"name": "c", "plugins": [
+                {"name": "linear", "source": {"source": "local", "path": "./plugins/linear"}},
+                {"name": "gone", "source": {"source": "local", "path": "./plugins/gone"}}
+            ]}"#,
+        ),
+        ("plugins/linear/skills/x/SKILL.md", "---\nname: x\n---\n"),
+    ]);
+
+    let catalog = Catalog::read(at.path(), "").unwrap();
+
+    assert_eq!(catalog.dialect, Dialect::Codex);
+    assert_eq!(catalog.entries, [local("linear", "plugins/linear")]);
+    assert_eq!(
+        catalog.failures,
+        [EntryFailure::Missing {
+            name: String::from("gone"),
+            path: String::from("plugins/gone"),
+        }]
+    );
+}
+
+#[test]
+fn a_folder_holding_both_catalogs_is_read_as_claude_code_reads_it() {
+    let at = clone(&[(CATALOG, ANTHROPIC), (CODEX_CATALOG, OPENAI)]);
+
+    let catalog = Catalog::read(at.path(), "").unwrap();
+
+    assert_eq!(catalog.dialect, Dialect::Claude);
+    assert_eq!(catalog.name.as_deref(), Some("anthropic-agent-skills"));
+}
+
+#[test]
+fn a_catalog_at_one_dialects_place_in_the_others_shape_is_refused() {
+    let codex_at_claudes = clone(&[(CATALOG, OPENAI), ("plugins/linear/SKILL.md", "")]);
+    let claude_at_codexs = clone(&[(CODEX_CATALOG, ANTHROPIC)]);
+
+    let refused = Catalog::read(codex_at_claudes.path(), "").unwrap_err();
+    let reverse = Catalog::read(claude_at_codexs.path(), "").unwrap_err();
+
+    assert_eq!(refused.code(), "marketplace_catalog_other_dialect");
+    assert_eq!(
+        refused.to_string(),
+        ".claude-plugin/marketplace.json: lists its plugins as a Codex catalog does, not as a \
+         Claude Code one, so it is not read: a Codex catalog is .agents/plugins/marketplace.json"
+    );
+    assert_eq!(reverse.code(), "marketplace_catalog_other_dialect");
+    assert_eq!(
+        reverse.to_string(),
+        ".agents/plugins/marketplace.json: lists its plugins as a Claude Code catalog does, not \
+         as a Codex one, so it is not read: a Claude Code catalog is \
+         .claude-plugin/marketplace.json"
+    );
+}
+
+#[test]
 fn a_repository_with_no_catalog_is_no_marketplace() {
     let at = clone(&[("README.md", "hello")]);
 
@@ -425,7 +645,8 @@ fn a_repository_with_no_catalog_is_no_marketplace() {
     assert_eq!(error.code(), "marketplace_catalog_missing");
     assert_eq!(
         error.to_string(),
-        ".claude-plugin/marketplace.json: no such file, so this is no Claude Code marketplace"
+        ".claude-plugin/marketplace.json: no such file, nor .agents/plugins/marketplace.json, so \
+         this is no Claude Code or Codex marketplace"
     );
 }
 
@@ -552,6 +773,7 @@ fn a_listed_catalog_serializes_each_field_by_its_name_and_leaves_its_failures_to
         failures: vec![EntryFailure::Command {
             name: String::from("run-me"),
         }],
+        dialect: Dialect::Claude,
     };
 
     assert_eq!(
@@ -561,7 +783,7 @@ fn a_listed_catalog_serializes_each_field_by_its_name_and_leaves_its_failures_to
             r#""reference":"main","revision":"4f9c2a7","listed":2,"#,
             r#""entries":[{"name":"pdf","description":null,"#,
             r#""plugin":{"kind":"relative","url":null,"path":"","reference":null,"sha":null},"#,
-            r#""skills":null,"license":null,"declares":[]}]}"#
+            r#""skills":null,"license":null,"declares":[]}],"dialect":"claude"}"#
         )
     );
 }
@@ -576,9 +798,18 @@ fn gathering_every_plugin_waits_for_a_yes_only_beyond_twenty_five() {
         listed: count,
         entries: Vec::new(),
         failures: Vec::new(),
+        dialect: Dialect::Codex,
     };
 
     assert_eq!(UNCONFIRMED, 25);
     assert!(!listed(25).needs_confirming());
     assert!(listed(26).needs_confirming());
+}
+
+#[test]
+fn a_dialect_serializes_as_its_word() {
+    assert_eq!(
+        serde_json::to_string(&Dialect::ALL).unwrap(),
+        r#"["claude","codex"]"#
+    );
 }

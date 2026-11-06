@@ -1,6 +1,8 @@
-//! A Claude Code plugin marketplace (#103): a repository whose
-//! `.claude-plugin/marketplace.json` lists plugins, each in a folder of the
-//! marketplace's own repository or in a repository of its own.
+//! A plugin marketplace: a repository whose catalog lists plugins, each in
+//! a folder of the marketplace's own repository or in a repository of its
+//! own. Claude Code's (#103) is `.claude-plugin/marketplace.json`, and
+//! Codex's (#104) `.agents/plugins/marketplace.json`, whose plugins are all
+//! folders of the marketplace's repository ([`Dialect`]).
 //!
 //! Its catalog is read here, an entry at a time ([`Catalog`]). It is JSON
 //! somebody else wrote, so nothing in it is trusted: an entry that cannot be
@@ -41,9 +43,73 @@ use crate::url::{fetched, is_remote, redacted};
 use crate::value::{Redacted, Revision, SourceName};
 use crate::workspace::WeaverWorkspace;
 
-/// Where a marketplace's catalog is, from the folder the marketplace is in:
-/// the root of its repository, unless a tree URL or `--path` names another.
+/// Where a Claude Code marketplace's catalog is, from the folder the
+/// marketplace is in: the root of its repository, unless a tree URL or
+/// `--path` names another.
 pub const CATALOG: &str = ".claude-plugin/marketplace.json";
+
+/// Where a Codex marketplace's catalog is, from the same folder (#104), as
+/// openai/plugins keeps one (docs/agents.md, "Codex").
+pub const CODEX_CATALOG: &str = ".agents/plugins/marketplace.json";
+
+/// Which format a marketplace's catalog is written in: Claude Code's, or
+/// Codex's (#104).
+///
+/// Decided by where the catalog is and by how its entries are written,
+/// both ([`Catalog::read`]): a file at one's place whose entries are all
+/// written as the other's are is read as neither
+/// (`marketplace_catalog_other_dialect`), since which format somebody meant
+/// is not a guess to make, and each agent would skip every entry of it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Dialect {
+    Claude,
+    Codex,
+}
+
+impl Dialect {
+    /// Each, in the order a marketplace's folder is looked in for its
+    /// catalog: Claude Code's first, as #103 read it, so a marketplace
+    /// gathered before reads the catalog it read then, and a folder holding
+    /// both is read as Claude Code reads it.
+    pub const ALL: [Dialect; 2] = [Dialect::Claude, Dialect::Codex];
+
+    /// Where its catalog is, from the folder the marketplace is in.
+    pub const fn catalog(self) -> &'static str {
+        match self {
+            Dialect::Claude => CATALOG,
+            Dialect::Codex => CODEX_CATALOG,
+        }
+    }
+
+    /// The word a serialization says it by.
+    pub const fn slug(self) -> &'static str {
+        match self {
+            Dialect::Claude => "claude",
+            Dialect::Codex => "codex",
+        }
+    }
+
+    /// The agent whose format it is, as a message names it.
+    pub const fn agent(self) -> &'static str {
+        match self {
+            Dialect::Claude => "Claude Code",
+            Dialect::Codex => "Codex",
+        }
+    }
+}
+
+/// By its word rather than its variant's Rust name, as a kind is.
+impl Serialize for Dialect {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.slug())
+    }
+}
+
+impl fmt::Display for Dialect {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.agent())
+    }
+}
 
 /// How much of a catalog is read: more than any marketplace lists (the
 /// largest known, claude-community, lists some two thousand plugins in
@@ -58,6 +124,8 @@ pub struct Catalog {
     /// The name the catalog gives the marketplace, as written: what the
     /// source is called unless somebody names it.
     pub name: Option<String>,
+    /// Which format it is written in.
+    pub dialect: Dialect,
     /// How many entries its `plugins` list holds, read or not.
     pub listed: usize,
     /// Each entry that can be gathered, in the order it lists them.
@@ -105,6 +173,11 @@ pub enum Plugin {
     /// a folder of the marketplace's repository, by its route from the
     /// marketplace's folder, empty for that folder itself.
     Relative { route: String },
+    /// `{"source": "local", "path": "./x"}`, a Codex catalog's (#104): a
+    /// folder of the marketplace's repository, by its route from the
+    /// marketplace's folder, as Codex resolves it, never that folder
+    /// itself.
+    Local { route: String },
     /// `{"source": "github", "repo": "owner/repo"}`: a GitHub repository.
     Github {
         repo: String,
@@ -133,6 +206,7 @@ impl Plugin {
     pub fn kind(&self) -> &'static str {
         match self {
             Plugin::Relative { .. } => "relative",
+            Plugin::Local { .. } => "local",
             Plugin::Github { .. } => "github",
             Plugin::Url { .. } => "url",
             Plugin::GitSubdir { .. } => "git-subdir",
@@ -143,26 +217,36 @@ impl Plugin {
     /// `https://github.com/<repo>` for a GitHub one, its URL otherwise.
     pub fn url(&self) -> Option<Cow<'_, str>> {
         match self {
-            Plugin::Relative { .. } => None,
+            Plugin::Relative { .. } | Plugin::Local { .. } => None,
             Plugin::Github { repo, .. } => Some(fetched(repo)),
             Plugin::Url { url, .. } | Plugin::GitSubdir { url, .. } => Some(Cow::Borrowed(url)),
         }
     }
 
-    /// Its folder in its repository: a relative one's route from the
-    /// marketplace's folder, a `git-subdir`'s path, empty for the root.
+    /// Its folder in its repository: a relative or local one's route from
+    /// the marketplace's folder, a `git-subdir`'s path, empty for the root.
     pub fn path(&self) -> &str {
         match self {
-            Plugin::Relative { route } => route,
+            Plugin::Relative { route } | Plugin::Local { route } => route,
             Plugin::GitSubdir { path, .. } => path,
             Plugin::Github { .. } | Plugin::Url { .. } => "",
+        }
+    }
+
+    /// Its route from the marketplace's folder, for one in a folder of the
+    /// marketplace's own repository, relative or local: what is gathered
+    /// from the marketplace's clone rather than a clone of its own.
+    pub fn route(&self) -> Option<&str> {
+        match self {
+            Plugin::Relative { route } | Plugin::Local { route } => Some(route),
+            Plugin::Github { .. } | Plugin::Url { .. } | Plugin::GitSubdir { .. } => None,
         }
     }
 
     /// The branch or tag the catalog names, if any.
     pub fn reference(&self) -> Option<&str> {
         match self {
-            Plugin::Relative { .. } => None,
+            Plugin::Relative { .. } | Plugin::Local { .. } => None,
             Plugin::Github { reference, .. }
             | Plugin::Url { reference, .. }
             | Plugin::GitSubdir { reference, .. } => reference.as_deref(),
@@ -172,7 +256,7 @@ impl Plugin {
     /// The commit the catalog pins it to, if any, as written.
     pub fn sha(&self) -> Option<&str> {
         match self {
-            Plugin::Relative { .. } => None,
+            Plugin::Relative { .. } | Plugin::Local { .. } => None,
             Plugin::Github { sha, .. }
             | Plugin::Url { sha, .. }
             | Plugin::GitSubdir { sha, .. } => sha.as_deref(),
@@ -321,29 +405,46 @@ fn options() -> ParseOptions {
 
 impl Catalog {
     /// Read the catalog of the marketplace in `folder` of the repository
-    /// cloned at `clone` ([`CATALOG`]), and hold each relative entry to a
-    /// folder the repository holds: one that is not there, or that leads
-    /// out of the clone through a link, is a failure of its own.
+    /// cloned at `clone`, and hold each entry in a folder of it to a folder
+    /// the repository holds: one that is not there, or that leads out of
+    /// the clone through a link, is a failure of its own.
+    ///
+    /// The catalog is the first of each dialect's ([`Dialect::ALL`]) that
+    /// is there, read in the dialect its place is: one whose entries are
+    /// all written in the other's shape is refused
+    /// (`marketplace_catalog_other_dialect`), rather than read by its place
+    /// alone, which would refuse every entry of it, or by its shape alone,
+    /// which would read a file neither agent reads as a catalog. With
+    /// neither there, it is no marketplace (`marketplace_catalog_missing`).
     ///
     /// The catalog itself is held to the clone the same way: one that is a
     /// link leading out of it, or in a folder that does, is refused rather
     /// than read, since a repository can link it to any file on this
     /// machine (`marketplace_catalog_outside`).
     pub fn read(clone: &Path, folder: &str) -> Result<Catalog, MarketplaceError> {
-        let path = clone.join(folder).join(CATALOG);
+        let at = |dialect: Dialect| clone.join(folder).join(dialect.catalog());
+        let mut found = None;
+        for dialect in Dialect::ALL {
+            let path = at(dialect);
+            match fs::symlink_metadata(&path) {
+                Ok(_) => {
+                    found = Some((dialect, path));
+                    break;
+                }
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Err(source) => return Err(MarketplaceError::Read { path, source }),
+            }
+        }
+        let Some((dialect, path)) = found else {
+            return Err(MarketplaceError::CatalogMissing {
+                claude: route_in(clone, &at(Dialect::Claude)),
+                codex: route_in(clone, &at(Dialect::Codex)),
+            });
+        };
         let failed = |source| MarketplaceError::Read {
             path: path.clone(),
             source,
         };
-        match fs::symlink_metadata(&path) {
-            Ok(_) => {}
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                return Err(MarketplaceError::CatalogMissing {
-                    path: route_in(clone, &path),
-                })
-            }
-            Err(error) => return Err(failed(error)),
-        }
         let bound = fs::canonicalize(clone).map_err(failed)?;
         let (resolved, inside) =
             copy::followed(&path, std::slice::from_ref(&bound)).map_err(failed)?;
@@ -366,40 +467,58 @@ impl Catalog {
             path: route_in(clone, &path),
             reason: String::from("it is not UTF-8"),
         })?;
-        let catalog =
-            Catalog::parse(&text).map_err(|reason| MarketplaceError::CatalogUnreadable {
+        let catalog = Catalog::parse(&text, dialect).map_err(|unparsed| match unparsed {
+            Unparsed::Unreadable(reason) => MarketplaceError::CatalogUnreadable {
                 path: route_in(clone, &path),
                 reason,
-            })?;
+            },
+            Unparsed::Shaped(shaped) => MarketplaceError::CatalogOtherDialect {
+                path: route_in(clone, &path),
+                dialect,
+                shaped,
+            },
+        })?;
         Ok(catalog.held_to(clone, folder, &bound))
     }
 
-    /// What `text`, a catalog, says, each entry read on its own: or, when
-    /// it is not a catalog at all, why, which is no JSON object with a
-    /// `plugins` list.
+    /// What `text`, a catalog in `dialect`, says, each entry read on its
+    /// own: or, when it is not a catalog at all, why, which is no JSON
+    /// object with a `plugins` list, or one whose entries are all written
+    /// as another dialect's are ([`Unparsed::Shaped`]).
     ///
     /// A key it does not know is passed over, as Claude Code passes it
-    /// over. Two entries of one name are neither listed, each a failure
+    /// over, and so are the `policy` and the `category` a Codex entry
+    /// carries, which Codex requires and no gather acts on. Two entries of
+    /// one name are neither listed, each a failure
     /// (`marketplace_entry_duplicate`): which one `--plugin` would mean is
     /// not a guess to make, as two skills of one name in one source are
     /// neither gathered.
-    pub fn parse(text: &str) -> Result<Catalog, String> {
+    pub fn parse(text: &str, dialect: Dialect) -> Result<Catalog, Unparsed> {
+        let unreadable = |reason: &str| Unparsed::Unreadable(reason.to_owned());
         let value = jsonc_parser::parse_to_value(text, &options())
-            .map_err(|error| format!("it is not JSON: {error}"))?;
+            .map_err(|error| Unparsed::Unreadable(format!("it is not JSON: {error}")))?;
         let Some(JsonValue::Object(root)) = value else {
-            return Err(String::from("it is not a JSON object"));
+            return Err(unreadable("it is not a JSON object"));
         };
         let Some(plugins) = root.get_array("plugins") else {
-            return Err(String::from("it has no `plugins` list"));
+            return Err(unreadable("it has no `plugins` list"));
         };
-        let plugin_root = root
-            .get_object("metadata")
-            .and_then(|metadata| metadata.get_string("pluginRoot"))
-            .map(|root| root.to_string());
+        if let Some(shaped) = shape(plugins).filter(|shaped| *shaped != dialect) {
+            return Err(Unparsed::Shaped(shaped));
+        }
+        // Claude Code's alone: Codex reads every path from the
+        // marketplace's folder.
+        let plugin_root = match dialect {
+            Dialect::Claude => root
+                .get_object("metadata")
+                .and_then(|metadata| metadata.get_string("pluginRoot"))
+                .map(|root| root.to_string()),
+            Dialect::Codex => None,
+        };
         let mut read: Vec<Result<Entry, EntryFailure>> = plugins
             .iter()
             .enumerate()
-            .map(|(at, value)| entry(at, value, plugin_root.as_deref()))
+            .map(|(at, value)| entry(at, value, dialect, plugin_root.as_deref()))
             .collect();
         let names: Vec<Option<String>> = read
             .iter()
@@ -420,6 +539,7 @@ impl Catalog {
         }
         let mut catalog = Catalog {
             name: root.get_string("name").map(|name| name.to_string()),
+            dialect,
             listed: plugins.len(),
             entries: Vec::new(),
             failures: Vec::new(),
@@ -433,19 +553,20 @@ impl Catalog {
         Ok(catalog)
     }
 
-    /// The same catalog, each relative entry that names no folder of the
-    /// repository cloned at `clone`, its folder `folder` being the
-    /// marketplace's, among the failures: one that is not there, and one
-    /// leading out of the clone (`bound`, resolved) through a link.
+    /// The same catalog, each entry in a folder of the marketplace's own
+    /// repository that names no folder of the repository cloned at
+    /// `clone`, its folder `folder` being the marketplace's, among the
+    /// failures: one that is not there, and one leading out of the clone
+    /// (`bound`, resolved) through a link.
     fn held_to(mut self, clone: &Path, folder: &str, bound: &Path) -> Catalog {
         let mut kept = Vec::with_capacity(self.entries.len());
         for entry in self.entries {
-            let Plugin::Relative { route } = &entry.plugin else {
+            let Some(route) = entry.plugin.route().map(str::to_owned) else {
                 kept.push(entry);
                 continue;
             };
-            let at = clone.join(folder).join(route);
-            let shown = paths::as_route(&paths::normalize(&Path::new(folder).join(route)));
+            let at = clone.join(folder).join(&route);
+            let shown = paths::as_route(&paths::normalize(&Path::new(folder).join(&route)));
             match copy::followed(&at, std::slice::from_ref(&bound.to_path_buf())) {
                 Ok((_, false)) => self.failures.push(EntryFailure::Outside {
                     name: entry.name,
@@ -478,6 +599,17 @@ impl Catalog {
     }
 }
 
+/// Why a catalog's text is no catalog of the dialect it was read in
+/// ([`Catalog::parse`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Unparsed {
+    /// It is no JSON object with a `plugins` list, and why.
+    Unreadable(String),
+    /// Every entry whose shape says a dialect is written in this one's
+    /// shape, another than the one it was read in ([`shape`]).
+    Shaped(Dialect),
+}
+
 /// A route as a person reads one, `.` for the root.
 fn displayed(route: &str) -> String {
     if route.is_empty() {
@@ -502,11 +634,13 @@ enum Unfit {
     Failure(EntryFailure),
 }
 
-/// The entry at `at` in a catalog's `plugins` list, `plugin_root` being
-/// what its `metadata.pluginRoot` names, or why it cannot be gathered.
+/// The entry at `at` in a catalog's `plugins` list, the catalog being in
+/// `dialect` and `plugin_root` what its `metadata.pluginRoot` names, or
+/// why it cannot be gathered.
 fn entry(
     at: usize,
     value: &JsonValue<'_>,
+    dialect: Dialect,
     plugin_root: Option<&str>,
 ) -> Result<Entry, EntryFailure> {
     let unreadable = |name: Option<&str>, reason: &str| EntryFailure::Unreadable {
@@ -532,6 +666,20 @@ fn entry(
             "its name has a control character or a space at either end, which no list shows as \
              it is",
         ));
+    }
+    if dialect == Dialect::Codex {
+        // Its name and its source are all Codex's format gives an entry
+        // that a gather reads: the rest, its `policy` and its `category`
+        // among it, is read past, and so is any key Claude Code's format
+        // gives, which Codex does not read.
+        return Ok(Entry {
+            description: text(object, "description"),
+            plugin: local(&name, object.get("source"))?,
+            name,
+            skills: None,
+            license: None,
+            declares: Vec::new(),
+        });
     }
     let plugin = match object.get("source") {
         Some(JsonValue::String(path)) => relative(&name, path, plugin_root)?,
@@ -571,6 +719,90 @@ fn entry(
         plugin,
         skills,
     })
+}
+
+/// A Codex entry's plugin, `source` being its `source`: `{"source":
+/// "local", "path": "./x"}`, a folder below the marketplace's, by its
+/// route from there, as Codex resolves one; or why Codex would not
+/// resolve it (`marketplace_entry_unresolved`), skipped as Codex skips it.
+///
+/// Its path starts `./`, as Codex requires, and names a folder below the
+/// marketplace's rather than that folder itself; one that climbs out of
+/// it, or is absolute past its `./`, is refused as a relative entry's is
+/// (`marketplace_entry_outside`).
+fn local(name: &str, source: Option<&JsonValue<'_>>) -> Result<Plugin, EntryFailure> {
+    let unresolved = |reason: String| EntryFailure::Unresolved {
+        name: name.to_owned(),
+        reason,
+    };
+    let source = match source {
+        Some(JsonValue::Object(source)) => source,
+        Some(_) => return Err(unresolved(String::from("its `source` is not an object"))),
+        None => return Err(unresolved(String::from("it has no `source`"))),
+    };
+    match source.get_string("source") {
+        Some(kind) if kind == "local" => {}
+        Some(kind) => {
+            return Err(unresolved(format!(
+                "its `source` is a `{kind}` one, not a `local` one"
+            )))
+        }
+        None => return Err(unresolved(String::from("its `source` names no kind"))),
+    }
+    let Some(path) = source.get_string("path") else {
+        return Err(unresolved(String::from("its `source` names no `path`")));
+    };
+    let Some(below) = path.strip_prefix("./") else {
+        return Err(unresolved(format!(
+            "its path `{path}` does not start with `./`"
+        )));
+    };
+    if crate::gather::outside(below) {
+        return Err(EntryFailure::Outside {
+            name: name.to_owned(),
+            path: path.to_string(),
+        });
+    }
+    let route = paths::as_route(&paths::normalize(Path::new(below)));
+    if route.is_empty() {
+        return Err(unresolved(format!(
+            "its path `{path}` names the marketplace's own folder, and no folder below it"
+        )));
+    }
+    Ok(Plugin::Local { route })
+}
+
+/// The kinds of source Claude Code's catalog names, as #103 reads them: an
+/// entry naming one is written in Claude Code's shape.
+const CLAUDE_KINDS: [&str; 6] = ["github", "url", "git-subdir", "npm", "archive", "command"];
+
+/// The dialect the entry `value`'s `source` is written in, when it is one
+/// dialect's alone: a path, or an object of a kind Claude Code names, is
+/// Claude Code's, and an object of the kind `local`, which Claude Code
+/// names none of, Codex's. Anything else says nothing of either.
+fn shaped(value: &JsonValue<'_>) -> Option<Dialect> {
+    let JsonValue::Object(object) = value else {
+        return None;
+    };
+    match object.get("source")? {
+        JsonValue::String(_) => Some(Dialect::Claude),
+        JsonValue::Object(source) => match source.get_string("source")?.as_ref() {
+            "local" => Some(Dialect::Codex),
+            kind if CLAUDE_KINDS.contains(&kind) => Some(Dialect::Claude),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// The dialect a catalog's `plugins` are written in, when every entry
+/// whose shape says one says the same: one entry of the other's among the
+/// rest is that entry's failure, not the catalog's, and a catalog whose
+/// entries say none, an empty one among them, is read as its place says.
+fn shape(plugins: &JsonArray<'_>) -> Option<Dialect> {
+    let mut shapes = plugins.iter().filter_map(shaped);
+    let first = shapes.next()?;
+    shapes.all(|other| other == first).then_some(first)
 }
 
 /// The string `object` holds under `key`, when it holds one there that is
@@ -800,6 +1032,8 @@ pub struct Listed {
     /// a warning, as a gather's failures are.
     #[serde(skip)]
     pub failures: Vec<EntryFailure>,
+    /// Which format its catalog is written in: added after the rest (#104).
+    pub dialect: Dialect,
 }
 
 impl Listed {
@@ -818,6 +1052,7 @@ impl Listed {
             listed: catalog.listed,
             entries: catalog.entries,
             failures: catalog.failures,
+            dialect: catalog.dialect,
         }
     }
 
@@ -901,7 +1136,7 @@ pub fn gather(
     let mut children: Vec<Option<Child>> = picked.iter().map(|_| None).collect();
     let mut cancelled = false;
     for (at, entry) in picked.iter().enumerate() {
-        let Plugin::Relative { route } = &entry.plugin else {
+        let Some(route) = entry.plugin.route() else {
             continue;
         };
         let child = if cancelled {
@@ -1421,6 +1656,12 @@ pub enum EntryFailure {
     /// A kind of source this build does not know.
     #[error("`{name}`: a `{kind}` source, which this build does not know, so it is not gathered")]
     Unknown { name: String, kind: String },
+    /// An entry of a Codex catalog that Codex would not resolve to a
+    /// folder (#104): its `source` is no `local` one, or its path does not
+    /// start with `./`, or names no folder below the marketplace's.
+    /// Skipped, as Codex skips it.
+    #[error("`{name}`: {reason}, so Codex does not resolve it, and it is skipped")]
+    Unresolved { name: String, reason: String },
     /// A plugin gathered before that the catalog lists no more: its source
     /// and what it put on the shelf are kept as they were, for `gather
     /// remove` to take away when nobody wants them.
@@ -1438,6 +1679,7 @@ codes!(EntryFailure {
     Self::Archive { .. } => "marketplace_archive_not_gathered",
     Self::Command { .. } => "marketplace_command_refused",
     Self::Unknown { .. } => "marketplace_source_unknown",
+    Self::Unresolved { .. } => "marketplace_entry_unresolved",
     Self::Unlisted { .. } => "marketplace_entry_unlisted",
 });
 
@@ -1454,6 +1696,7 @@ impl EntryFailure {
             | EntryFailure::Archive { name, .. }
             | EntryFailure::Command { name }
             | EntryFailure::Unknown { name, .. }
+            | EntryFailure::Unresolved { name, .. }
             | EntryFailure::Unlisted { name } => Some(name),
         }
     }
@@ -1488,9 +1731,20 @@ pub enum MarketplaceError {
         marketplace: SourceName,
         listed: usize,
     },
-    /// The repository holds no catalog where the marketplace is.
-    #[error("{}: no such file, so this is no Claude Code marketplace", .path.display())]
-    CatalogMissing { path: PathBuf },
+    /// The repository holds no catalog where the marketplace is, of
+    /// either dialect.
+    #[error("{}: no such file, nor {}, so this is no Claude Code or Codex marketplace", .claude.display(), .codex.display())]
+    CatalogMissing { claude: PathBuf, codex: PathBuf },
+    /// The catalog at one dialect's place lists its plugins as the other's
+    /// lists them (#104), so it is read as neither.
+    #[error("{}: lists its plugins as a {shaped} catalog does, not as a {dialect} one, so it is not read: a {shaped} catalog is {}", .path.display(), .shaped.catalog())]
+    CatalogOtherDialect {
+        path: PathBuf,
+        /// The dialect whose place it is at.
+        dialect: Dialect,
+        /// The dialect its entries are written in.
+        shaped: Dialect,
+    },
     /// The catalog is a link leading out of the repository, or in a folder
     /// that does.
     #[error("{}: links to {}, outside the repository, so it is not read", .path.display(), .to.display())]
@@ -1514,6 +1768,7 @@ codes!(MarketplaceError {
     Self::NotListed { .. } => "marketplace_plugin_not_listed",
     Self::Unconfirmed { .. } => "marketplace_all_unconfirmed",
     Self::CatalogMissing { .. } => "marketplace_catalog_missing",
+    Self::CatalogOtherDialect { .. } => "marketplace_catalog_other_dialect",
     Self::CatalogOutside { .. } => "marketplace_catalog_outside",
     Self::CatalogTooLarge { .. } => "marketplace_catalog_too_large",
     Self::CatalogUnreadable { .. } => "marketplace_catalog_unreadable",
