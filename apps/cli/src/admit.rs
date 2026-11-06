@@ -71,7 +71,7 @@ impl Admission<'_> {
             // The network, which no front end without a terminal runs
             // (`Refusal::Unwatched`); what a URL may be is the gather's to
             // say when #112 brings one to the server.
-            Task::Gather { .. } => {}
+            Task::Gather { .. } | Task::ListPlugins { .. } | Task::GatherPlugins { .. } => {}
             // A source by its name, which names nothing on the disk: core
             // finds it among those the ledger keeps, and deletes only the
             // folders it records as the source's own. Gathering one again

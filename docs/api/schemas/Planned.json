@@ -1029,6 +1029,69 @@
           ]
         },
         {
+          "description": "`mindweaver gather marketplace --list [--path <folder>] [--ref <ref>]\n<url>`: a Claude Code marketplace's catalog fetched, recorded and\nlisted, and no plugin of it gathered, for one to pick from (#103).",
+          "type": "object",
+          "properties": {
+            "folder": {
+              "type": "string"
+            },
+            "reference": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "list_plugins"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "url",
+            "folder",
+            "reference"
+          ]
+        },
+        {
+          "description": "`mindweaver gather marketplace [--path <folder>] [--ref <ref>]\n--plugin <name>... <url>`: the plugins picked of a marketplace, each\ngathered into a source of its own under it.",
+          "type": "object",
+          "properties": {
+            "folder": {
+              "type": "string"
+            },
+            "plugins": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "reference": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "gather_plugins"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "url",
+            "folder",
+            "reference",
+            "plugins"
+          ]
+        },
+        {
           "description": "`… targets set --yes <kind> <dir>...`, or `… targets reset --yes\n<kind>` when no folder is named: what the targets form amounts to.",
           "type": "object",
           "properties": {

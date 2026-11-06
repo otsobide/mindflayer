@@ -4330,6 +4330,69 @@
             "type": "object"
           },
           {
+            "description": "`mindweaver gather marketplace --list [--path <folder>] [--ref <ref>]\n<url>`: a Claude Code marketplace's catalog fetched, recorded and\nlisted, and no plugin of it gathered, for one to pick from (#103).",
+            "properties": {
+              "folder": {
+                "type": "string"
+              },
+              "reference": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "type": {
+                "const": "list_plugins",
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "url",
+              "folder",
+              "reference"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "`mindweaver gather marketplace [--path <folder>] [--ref <ref>]\n--plugin <name>... <url>`: the plugins picked of a marketplace, each\ngathered into a source of its own under it.",
+            "properties": {
+              "folder": {
+                "type": "string"
+              },
+              "plugins": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "reference": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "type": {
+                "const": "gather_plugins",
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "url",
+              "folder",
+              "reference",
+              "plugins"
+            ],
+            "type": "object"
+          },
+          {
             "description": "`… targets set --yes <kind> <dir>...`, or `… targets reset --yes\n<kind>` when no folder is named: what the targets form amounts to.",
             "properties": {
               "folders": {
@@ -5223,6 +5286,69 @@
               "type",
               "source",
               "yes"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "`mindweaver gather marketplace --list [--path <folder>] [--ref <ref>]\n<url>`: a Claude Code marketplace's catalog fetched, recorded and\nlisted, and no plugin of it gathered, for one to pick from (#103).",
+            "properties": {
+              "folder": {
+                "type": "string"
+              },
+              "reference": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "type": {
+                "const": "list_plugins",
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "url",
+              "folder"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "`mindweaver gather marketplace [--path <folder>] [--ref <ref>]\n--plugin <name>... <url>`: the plugins picked of a marketplace, each\ngathered into a source of its own under it.",
+            "properties": {
+              "folder": {
+                "type": "string"
+              },
+              "plugins": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "reference": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "type": {
+                "const": "gather_plugins",
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "url",
+              "folder",
+              "plugins"
             ],
             "type": "object"
           },

@@ -1308,6 +1308,153 @@ fn removing_a_source_from_the_shelf_asks_first_and_then_takes_it_off() {
         .contains("$ mindweaver gather remove --yes acme\n"));
 }
 
+/// A workspace in a folder of its own whose shelf is filled from a
+/// marketplace, `m`, listing `a`, `b` and `c`, each a plugin of a folder of
+/// its repository, listed and none gathered yet; and the marketplace.
+fn marketplace_listed() -> (TempDir, TempDir, String) {
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+    let market = repository(&[
+        (
+            ".claude-plugin/marketplace.json",
+            r#"{"name": "m", "plugins": [
+                {"name": "a", "source": "./a"},
+                {"name": "b", "source": "./b"},
+                {"name": "c", "source": {"source": "github", "repo": "acme/c"}}
+            ]}"#,
+        ),
+        ("a/skills/one/SKILL.md", &skill_file("one", "First")),
+        ("b/skills/two/SKILL.md", &skill_file("two", "Second")),
+    ]);
+    let url = market.path().to_string_lossy().into_owned();
+    weaver(dir.path(), &["gather", "marketplace", &url, "--list"]).unwrap();
+    (dir, market, url)
+}
+
+#[test]
+fn the_shelf_lists_a_marketplaces_plugins_and_gathers_the_two_ticked_through_lines_that_parse_back()
+{
+    let (dir, _market, url) = marketplace_listed();
+    let mut app = tui_in(dir.path());
+    press_and_run(&mut app, KeyCode::Char('s'));
+    assert!(matches!(app.mode, Mode::Shelf(_)), "{:?}", app.mode);
+
+    // The marketplace picked is the one to list, where its lines name it.
+    press_key(&mut app, KeyCode::Char('m'));
+    let Mode::Gathering(form) = &app.mode else {
+        panic!("{:?}", app.mode);
+    };
+    assert!(form.marketplace);
+    assert_eq!(form.url.text(), url);
+    let listing = press_and_run(&mut app, KeyCode::Enter).unwrap();
+
+    assert_eq!(
+        listing,
+        Task::ListPlugins {
+            url: url.clone(),
+            folder: String::new(),
+            reference: None,
+        }
+    );
+    assert!(listing.runs_apart());
+    assert!(matches!(
+        gather_line(&listing),
+        GatherCommand::Marketplace { source, list: true, plugins, all: false, .. }
+            if source == url && plugins.is_empty()
+    ));
+    let Mode::Plugins(plugins) = &app.mode else {
+        panic!("{:?}", app.mode);
+    };
+    let names: Vec<&str> = plugins
+        .entries
+        .iter()
+        .map(|(name, _, _)| name.as_str())
+        .collect();
+    assert_eq!(names, ["a", "b", "c"]);
+    assert!(tui_drawn(&app).contains("Plugins of the marketplace m"));
+
+    // Two ticked, the first and the third, the one between left as it is.
+    press_key(&mut app, KeyCode::Char(' '));
+    press_key(&mut app, KeyCode::Down);
+    press_key(&mut app, KeyCode::Down);
+    press_key(&mut app, KeyCode::Char(' '));
+    assert!(tui_drawn(&app).contains("[x]"));
+    let TuiStep::Run(gathering) = press_key(&mut app, KeyCode::Enter) else {
+        panic!("{:?}", app.mode);
+    };
+
+    assert_eq!(
+        gathering,
+        Task::GatherPlugins {
+            url: url.clone(),
+            folder: String::new(),
+            reference: None,
+            plugins: vec![String::from("a"), String::from("c")],
+        }
+    );
+    assert!(gathering.runs_apart() && gathering.writes());
+    assert!(matches!(
+        gather_line(&gathering),
+        GatherCommand::Marketplace { source, list: false, plugins, all: false, yes: false, .. }
+            if source == url && plugins == ["a", "c"]
+    ));
+}
+
+#[test]
+fn the_plugins_ticked_on_the_shelf_are_gathered_apart_and_said() {
+    let (dir, _market, url) = marketplace_listed();
+    let mut app = tui_in(dir.path());
+    press_and_run(&mut app, KeyCode::Char('s'));
+    press_key(&mut app, KeyCode::Char('m'));
+    press_and_run(&mut app, KeyCode::Enter);
+    // Nothing ticked is nothing to gather, said in the screen.
+    assert_eq!(press_key(&mut app, KeyCode::Enter), TuiStep::Stay);
+    assert!(tui_drawn(&app).contains("tick a plugin to gather with space"));
+    press_key(&mut app, KeyCode::Down);
+    press_key(&mut app, KeyCode::Char(' '));
+
+    let task = press_and_run(&mut app, KeyCode::Enter);
+
+    assert!(matches!(task, Some(Task::GatherPlugins { .. })), "{task:?}");
+    let Mode::Reading(reader) = &app.mode else {
+        panic!("{:?}", app.mode);
+    };
+    assert!(
+        reader
+            .lines
+            .iter()
+            .any(|(_, line)| line.contains("added  two")),
+        "{:?}",
+        reader.lines
+    );
+    assert_eq!(app.workspace().unwrap().shelf, 1);
+    assert!(app
+        .workspace()
+        .unwrap()
+        .sources
+        .contains(&String::from("m.b")));
+    assert!(app.transcript().contains(&format!(
+        "$ mindweaver gather marketplace --plugin b {url}\n"
+    )));
+}
+
+#[test]
+fn a_marketplace_is_typed_on_the_shelf_when_none_is_picked() {
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+    let mut app = tui_in(dir.path());
+    press_and_run(&mut app, KeyCode::Char('s'));
+
+    press_key(&mut app, KeyCode::Char('m'));
+
+    let Mode::Gathering(form) = &app.mode else {
+        panic!("{:?}", app.mode);
+    };
+    assert!(form.marketplace && form.url.text().is_empty());
+    assert!(tui_drawn(&app).contains("List the plugins of a Claude Code marketplace"));
+    assert_eq!(press_key(&mut app, KeyCode::Enter), TuiStep::Stay);
+}
+
 #[test]
 fn an_empty_shelf_leaves_its_keys_nothing_to_do() {
     let dir = TempDir::new().unwrap();

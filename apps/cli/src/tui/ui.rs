@@ -17,8 +17,8 @@ use ratatui::Frame;
 use super::minds::{self, Minds};
 use super::state::{
     AddField, AddForm, App, Confirm, Focus, GatherForm, Input, Item, LinkForm, LoadForm, Member,
-    Mode, Reader, RenameForm, Running, Scope, SettingsForm, Shelf, TargetsForm, Task, Tone, View,
-    Workspace, GATHER_FIELDS,
+    Mode, Plugins, Reader, RenameForm, Running, Scope, SettingsForm, Shelf, TargetsForm, Task,
+    Tone, View, Workspace, GATHER_FIELDS,
 };
 use crate::commands::project::worth_linking;
 use crate::install::ui::{centred, pane, selected};
@@ -48,6 +48,7 @@ pub fn draw(app: &App, frame: &mut Frame) {
             Mode::Confirming(confirm) => confirming(confirm, frame, area),
             Mode::Reading(reader) => reading(reader, frame, area),
             Mode::Shelf(shelf) => page(&shelf.reader, &shelving(shelf), frame, area),
+            Mode::Plugins(plugins) => picking(plugins, frame, area),
             Mode::Minds(screen) => minds_screen(app, screen, frame, area),
             Mode::Settings(form) => setting(app, form, frame, area),
             Mode::Targets(form) => targeting(app, form, frame, area),
@@ -1052,7 +1053,12 @@ fn loading(app: &App, form: &LoadForm, frame: &mut Frame, area: Rect) {
 }
 
 fn gathering(form: &GatherForm, frame: &mut Frame, area: Rect) {
-    let inner = popup(frame, area, "Gather skills from a git repository", 78, 9);
+    let title = if form.marketplace {
+        "List the plugins of a Claude Code marketplace"
+    } else {
+        "Gather skills from a git repository"
+    };
+    let inner = popup(frame, area, title, 78, 9);
     let rows = lines(inner, 7);
 
     for (index, name) in GATHER_FIELDS.iter().enumerate() {
@@ -1072,7 +1078,78 @@ fn gathering(form: &GatherForm, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(hint), rows[3]);
     runs(frame, rows[4], form.task().as_ref());
     error(frame, rows[5], form.error.as_deref());
-    keys(frame, rows[6], "enter gather   tab next   esc cancel");
+    let enter = if form.marketplace {
+        "enter list its plugins   tab next   esc cancel"
+    } else {
+        "enter gather   tab next   esc cancel"
+    };
+    keys(frame, rows[6], enter);
+}
+
+/// How many of a marketplace's plugins are drawn at once: a screen's worth,
+/// the rest scrolled to.
+const PLUGINS_SHOWN: usize = 12;
+
+/// A marketplace's plugins, each ticked or not, a screen's worth around the
+/// one the keyboard is on, and the line gathering the ticked ones.
+fn picking(plugins: &Plugins, frame: &mut Frame, area: Rect) {
+    let shown = plugins.entries.len().clamp(1, PLUGINS_SHOWN);
+    let height = u16::try_from(shown).unwrap_or(1) + 6;
+    let inner = popup(
+        frame,
+        area,
+        &format!("Plugins of the marketplace {}", printable(&plugins.name)),
+        96,
+        height,
+    );
+    let rows = lines(inner, shown + 4);
+    let first = plugins.cursor.saturating_sub(shown - 1);
+    let width = plugins
+        .entries
+        .iter()
+        .map(|(name, _, _)| name.chars().count())
+        .max()
+        .unwrap_or(0);
+    if plugins.entries.is_empty() {
+        frame.render_widget(
+            Paragraph::new(Span::styled(
+                "it lists no plugin that can be gathered",
+                dim(),
+            )),
+            rows[0],
+        );
+    }
+    for (row, at) in (first..plugins.entries.len()).take(shown).enumerate() {
+        let (name, kind, place) = &plugins.entries[at];
+        let here = at == plugins.cursor;
+        let style = if here {
+            bold().fg(Color::Cyan)
+        } else {
+            Style::default()
+        };
+        let line = Line::from(vec![
+            tick(plugins.ticked[at]),
+            Span::styled(format!(" {name:<width$}"), style),
+            Span::styled(format!("  {kind:<10}  {place}"), dim()),
+        ]);
+        frame.render_widget(Paragraph::new(line), rows[row]);
+    }
+    let said = match plugins.warnings.len() {
+        0 => None,
+        count => Some(format!(
+            "{count} of its entries cannot be gathered, as listing it said"
+        )),
+    };
+    if let Some(said) = said.filter(|_| plugins.error.is_none()) {
+        frame.render_widget(Paragraph::new(Span::styled(said, warn())), rows[shown + 1]);
+    }
+    runs(frame, rows[shown], plugins.task().as_ref());
+    error(frame, rows[shown + 1], plugins.error.as_deref());
+    keys(
+        frame,
+        rows[shown + 3],
+        "space tick   enter gather the ticked ones   ↑↓ move   esc close",
+    );
 }
 
 fn confirming(confirm: &Confirm, frame: &mut Frame, area: Rect) {
@@ -1145,10 +1222,10 @@ fn reading(reader: &Reader, frame: &mut Frame, area: Rect) {
 fn shelving(shelf: &Shelf) -> String {
     match shelf.sources.get(shelf.picked) {
         Some(source) => format!(
-            " ←→ source: {}   u update it   U update all   d remove it   ↑↓ scroll   esc close ",
+            " ←→ source: {}   u update it   U update all   d remove it   m marketplace   ↑↓ scroll   esc close ",
             printable(source)
         ),
-        None => String::from(" ↑↓ scroll   esc close "),
+        None => String::from(" m marketplace   ↑↓ scroll   esc close "),
     }
 }
 

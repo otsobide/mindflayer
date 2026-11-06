@@ -277,6 +277,23 @@ pub enum Task {
     /// installed from it left orphaned; without `yes`, the dry run, which
     /// says so and removes nothing.
     RemoveSource { source: String, yes: bool },
+    /// `mindweaver gather marketplace --list [--path <folder>] [--ref <ref>]
+    /// <url>`: a Claude Code marketplace's catalog fetched, recorded and
+    /// listed, and no plugin of it gathered, for one to pick from (#103).
+    ListPlugins {
+        url: String,
+        folder: String,
+        reference: Option<String>,
+    },
+    /// `mindweaver gather marketplace [--path <folder>] [--ref <ref>]
+    /// --plugin <name>... <url>`: the plugins picked of a marketplace, each
+    /// gathered into a source of its own under it.
+    GatherPlugins {
+        url: String,
+        folder: String,
+        reference: Option<String>,
+        plugins: Vec<String>,
+    },
     /// `… targets set --yes <kind> <dir>...`, or `… targets reset --yes
     /// <kind>` when no folder is named: what the targets form amounts to.
     Targets {
@@ -743,6 +760,28 @@ impl Task {
                 Some(source) => vec![words(&["mindweaver", "gather", "update"], &[source])],
                 None => vec![words(&["mindweaver", "gather", "update", "--all"], &[])],
             },
+            Task::ListPlugins {
+                url,
+                folder,
+                reference,
+            } => {
+                let at = sourced(folder, reference.as_deref());
+                let mut head = vec!["mindweaver", "gather", "marketplace", "--list"];
+                head.extend(at.iter().map(String::as_str));
+                vec![words(&head, &[url])]
+            }
+            Task::GatherPlugins {
+                url,
+                folder,
+                reference,
+                plugins,
+            } => {
+                let mut at = sourced(folder, reference.as_deref());
+                at.extend(plugins.iter().flat_map(|plugin| option("--plugin", plugin)));
+                let mut head = vec!["mindweaver", "gather", "marketplace"];
+                head.extend(at.iter().map(String::as_str));
+                vec![words(&head, &[url])]
+            }
             // `--yes` before the name, as `remove` has it, so a name a `--`
             // has to keep from being read as a flag leaves it a flag.
             Task::RemoveSource { source, yes } => {
@@ -905,6 +944,8 @@ impl Task {
                 | Task::Gather { .. }
                 | Task::UpdateSource { .. }
                 | Task::RemoveSource { yes: true, .. }
+                | Task::ListPlugins { .. }
+                | Task::GatherPlugins { .. }
                 | Task::Minds { .. }
                 | Task::Marks { .. }
                 | Task::Settings { .. }
@@ -942,12 +983,18 @@ impl Task {
     }
 
     /// Whether it runs on a thread of its own while the screen goes on
-    /// drawing what it reports: a gather, or a source gathered again, which
-    /// is the network, and can take long enough to want watching.
-    /// Everything else is the local disk, over before anybody could read a
-    /// count.
+    /// drawing what it reports: a gather, a source gathered again, or a
+    /// marketplace's catalog listed or its plugins gathered, which is the
+    /// network, and can take long enough to want watching. Everything else
+    /// is the local disk, over before anybody could read a count.
     pub fn runs_apart(&self) -> bool {
-        matches!(self, Task::Gather { .. } | Task::UpdateSource { .. })
+        matches!(
+            self,
+            Task::Gather { .. }
+                | Task::UpdateSource { .. }
+                | Task::ListPlugins { .. }
+                | Task::GatherPlugins { .. }
+        )
     }
 
     /// What to say while it runs.
@@ -993,6 +1040,20 @@ impl Task {
             .into_iter()
             .find_map(|line| refused(&line).map(|refusal| (line, refusal)))
     }
+}
+
+/// What a marketplace's lines say of where its catalog is beside its URL:
+/// the folder after `--path`, left unsaid for the repository's root as
+/// `gather git`'s line leaves it, and the branch after `--ref`.
+fn sourced(folder: &str, reference: Option<&str>) -> Vec<String> {
+    let mut at = Vec::new();
+    if folder != DEFAULT_SUBDIRECTORY {
+        at.extend(option("--path", folder));
+    }
+    if let Some(reference) = reference {
+        at.extend(option("--ref", reference));
+    }
+    at
 }
 
 /// Why a front end with no terminal of its own, the panel's server first

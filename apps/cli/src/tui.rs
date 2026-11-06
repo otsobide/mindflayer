@@ -23,12 +23,15 @@ use std::time::Duration;
 
 use mindweaver_core::code::Said;
 use mindweaver_core::doctor::Examined;
-use mindweaver_core::gather::Watch;
+use mindweaver_core::gather::{Request, Watch};
+use mindweaver_core::marketplace::{self, Plugin};
 use mindweaver_core::resolve::{self, resolve, Intent, Resolved};
 use mindweaver_core::status::{EntryStatus, State};
+use mindweaver_core::url::redacted;
 use mindweaver_core::view::{self, Directory, Held, LoadedWorkspace, Snapshot};
 use mindweaver_core::{
-    scan, AgentHomes, Kind, MarkerFile, MindProject, Template, WeaverWorkspace, WorkspaceError,
+    scan, AgentHomes, Kind, MarkerFile, MindProject, SourceKind, Template, WeaverWorkspace,
+    WorkspaceError,
 };
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::crossterm::terminal::{self, EnterAlternateScreen};
@@ -38,11 +41,12 @@ use crate::commands::project::scan_warnings;
 use crate::commands::status::{unread, unseen};
 use crate::commands::workspace::same_directory;
 use crate::commands::{consulted, run_line, Ran};
+use crate::render::printable;
 use crate::task::{shell, Refusal, Task};
 use crate::{install, CliError, Failure, Lookup, Outcome};
 use state::{
-    App, Choice, Done, Holdings, Item, LoadedSource, Member, Mode, Performed, Runner, Running,
-    Scope, Step, Unlinked, Update, View, Workspace,
+    App, Choice, Done, Holdings, Item, LoadedSource, Marketplace, Member, Mode, Performed, Plugins,
+    Runner, Running, Scope, Step, Unlinked, Update, View, Workspace,
 };
 
 /// How long the loop waits for a key before drawing again, so a resize
@@ -266,7 +270,24 @@ fn start(app: &mut App, task: Task) {
 }
 
 /// Show what came of a task, with the disk read again when it asked for that.
+///
+/// A marketplace's catalog listed goes on to its plugins, read from the
+/// clone the line left, as core reads what it recorded
+/// ([`marketplace::recorded`]): the screen reads, and the line wrote.
 fn conclude(app: &mut App, task: &Task, performed: Performed) {
+    let performed = match (task, performed) {
+        (
+            Task::ListPlugins {
+                url,
+                folder,
+                reference,
+            },
+            Performed::Ran(dones),
+        ) if dones.iter().all(|done| done.error.is_none()) => {
+            listed(app.base(), url, folder, reference.as_deref(), dones)
+        }
+        (_, performed) => performed,
+    };
     let view = task.reloads().then(|| {
         match app.opened {
             Scope::Workspace => load_under(&app.directory, &app.lookup, &app.roots),
@@ -275,6 +296,73 @@ fn conclude(app: &mut App, task: &Task, performed: Performed) {
         .map_err(|error| error.to_string())
     });
     app.finish(task, performed, view);
+}
+
+/// The plugins of the marketplace at `url`, `folder` and `reference`, as
+/// its catalog was listed into the workspace at `base`, with what listing
+/// it said (`dones`), to tick: or what it said, and why they cannot be read,
+/// when they cannot.
+fn listed(
+    base: &Path,
+    url: &str,
+    folder: &str,
+    reference: Option<&str>,
+    dones: Vec<Done>,
+) -> Performed {
+    let request = Request::addressed(url, reference.map(str::to_owned), Some(folder.to_owned()))
+        .map_err(CliError::from);
+    let read = request.and_then(|request| {
+        let workspace = WeaverWorkspace::open(base)?;
+        let ledger = workspace.ledger_for_reading()?;
+        marketplace::recorded(&workspace, &ledger, &request).map_err(CliError::from)
+    });
+    let warnings: Vec<String> = dones.iter().flat_map(|done| done.stderr.clone()).collect();
+    match read {
+        Ok(Some(listed)) => Performed::Plugins {
+            plugins: Plugins {
+                name: listed.name.to_string(),
+                url: url.to_owned(),
+                folder: folder.to_owned(),
+                reference: reference.map(str::to_owned),
+                ticked: vec![false; listed.entries.len()],
+                entries: listed
+                    .entries
+                    .iter()
+                    .map(|entry| {
+                        (
+                            printable(&entry.name),
+                            entry.plugin.kind().to_owned(),
+                            printable(&plugin_place(&entry.plugin)),
+                        )
+                    })
+                    .collect(),
+                cursor: 0,
+                warnings,
+                error: None,
+            },
+            dones,
+        },
+        Ok(None) => Performed::Ran(dones),
+        Err(error) => {
+            let mut dones = dones;
+            dones.push(Done::failed(
+                String::from("reading its plugins"),
+                error.to_string(),
+            ));
+            Performed::Ran(dones)
+        }
+    }
+}
+
+/// Where a plugin is, as `gather marketplace --list` says it.
+fn plugin_place(plugin: &Plugin) -> String {
+    match plugin {
+        Plugin::Relative { route } if route.is_empty() => String::from("."),
+        Plugin::Relative { route } => route.clone(),
+        Plugin::Github { repo, .. } => repo.clone(),
+        Plugin::Url { url, .. } => redacted(url).into_owned(),
+        Plugin::GitSubdir { url, path, .. } => format!("{} {path}", redacted(url)),
+    }
 }
 
 /// Do the work a task names.
@@ -495,6 +583,7 @@ pub fn load_project(directory: &Path, lookup: &Lookup) -> Result<View, CliError>
         scan_warnings: Vec::new(),
         shelf: 0,
         sources: Vec::new(),
+        marketplaces: Vec::new(),
         // What `mind load` has put into the workspace above, so the load form
         // can show it and unload it from here too.
         loaded: above
@@ -561,6 +650,17 @@ fn workspace_view(resolved: &Resolved, lookup: &Lookup, roots: &[PathBuf]) -> Wo
             .sources
             .iter()
             .map(|source| source.source.name.to_string())
+            .collect(),
+        marketplaces: snapshot
+            .sources
+            .iter()
+            .filter(|source| source.source.kind == SourceKind::Marketplace)
+            .map(|source| Marketplace {
+                name: source.source.name.to_string(),
+                url: source.source.url.to_string(),
+                folder: source.source.subdirectory.clone(),
+                reference: source.source.reference.clone(),
+            })
             .collect(),
         loaded: snapshot.loaded.iter().map(loaded_source).collect(),
         scope: Scope::Workspace,

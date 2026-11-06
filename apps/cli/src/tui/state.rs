@@ -83,6 +83,9 @@ pub struct Workspace {
     /// The sources it is filled from, by the names `gather sources` lists
     /// them by, in its order: what the shelf's page picks one of.
     pub sources: Vec<String>,
+    /// The marketplaces among them (#103), each with where its catalog is,
+    /// as its lines name it again.
+    pub marketplaces: Vec<Marketplace>,
     /// The workspaces it loads, in marker order.
     pub loaded: Vec<LoadedSource>,
     pub scope: Scope,
@@ -254,6 +257,20 @@ impl Item {
     pub fn reference(&self) -> String {
         qualified(self.kind, &self.name)
     }
+}
+
+/// A marketplace the shelf is filled from, as the screen names it: by the
+/// name `gather sources` lists it by, and where its catalog is, as a line
+/// of `gather marketplace` is given it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Marketplace {
+    pub name: String,
+    /// Its URL, as the ledger records it.
+    pub url: String,
+    /// The folder of its repository its catalog is in, empty for the root.
+    pub folder: String,
+    /// The branch or tag it was gathered at, if one was asked for.
+    pub reference: Option<String>,
 }
 
 /// A workspace this one loads, as the screen shows it.
@@ -470,6 +487,9 @@ pub enum Performed {
     /// A directory that exists but is not a mind project. Linking it needs
     /// `mind init` first, and whether to run that is asked, not assumed.
     NeedsInit { path: String },
+    /// A marketplace's catalog listed, what its line said, and the plugins
+    /// it lists, to tick.
+    Plugins { dones: Vec<Done>, plugins: Plugins },
 }
 
 // ---------------------------------------------------------------------------
@@ -547,6 +567,9 @@ pub enum Mode {
     /// The shelf's page: what `gather list` says, and the source picked
     /// among those it is filled from, to gather again or remove.
     Shelf(Shelf),
+    /// A marketplace's plugins, as its catalog lists them, ticked, to
+    /// gather in one pass.
+    Plugins(Plugins),
     /// The install screen, embedded as it is.
     Installing(InstallScreen),
     /// Which minds the workspace manages, ticked, to change in one pass.
@@ -788,7 +811,8 @@ impl App {
             Mode::Gathering(form) => gathering(form, key),
             Mode::Confirming(confirm) => confirming(confirm, key),
             Mode::Reading(reader) => reading(reader, key),
-            Mode::Shelf(shelf) => shelving(shelf, key),
+            Mode::Shelf(shelf) => shelving(shelf, key, self.workspace()),
+            Mode::Plugins(plugins) => picking(plugins, key),
             Mode::Installing(screen) => self.installing(screen, key),
             Mode::Minds(screen) => self.in_minds(screen, key),
             Mode::Settings(form) => self.setting(form, key),
@@ -1690,6 +1714,13 @@ impl App {
                 self.mode = Mode::Confirming(Confirm::init_and_link(path, back));
                 return;
             }
+            // Listed, and recorded: what the line said is in the
+            // transcript, and the plugins are on screen to tick.
+            Performed::Plugins { dones, plugins } => {
+                self.done.extend(dones);
+                self.mode = Mode::Plugins(plugins);
+                return;
+            }
             Performed::Ran(dones) => dones,
         };
 
@@ -1728,7 +1759,14 @@ impl App {
                 | Task::Minds { .. },
                 _,
             )
-            | (Task::Gather { .. } | Task::Settings { .. } | Task::Targets { .. }, None) => {
+            | (
+                Task::Gather { .. }
+                | Task::ListPlugins { .. }
+                | Task::GatherPlugins { .. }
+                | Task::Settings { .. }
+                | Task::Targets { .. },
+                None,
+            ) => {
                 self.mode = Mode::Reading(Reader::of(&dones));
             }
             (_, Some(error)) => {
@@ -1798,6 +1836,7 @@ impl App {
             Mode::Linking(form) => &mut form.error,
             Mode::Loading(form) => &mut form.error,
             Mode::Gathering(form) => &mut form.error,
+            Mode::Plugins(plugins) => &mut plugins.error,
             Mode::Settings(form) => &mut form.error,
             Mode::Targets(form) => &mut form.error,
             _ => return false,
@@ -1973,11 +2012,23 @@ fn reading(mut reader: Reader, key: KeyEvent) -> (Mode, Step) {
 
 /// The shelf's own keys, over the page's: a source picked, gathered again,
 /// every one gathered again, or removed once somebody says yes, each the
-/// line `gather update` or `gather remove` is; and the page's keys for the
-/// rest. Nothing to pick leaves them nothing to do.
-fn shelving(mut shelf: Shelf, key: KeyEvent) -> (Mode, Step) {
+/// line `gather update` or `gather remove` is; a marketplace's plugins
+/// listed to pick from, the one picked, or one typed, which `gather
+/// marketplace --list` lists; and the page's keys for the rest. Nothing to
+/// pick leaves the first three nothing to do.
+fn shelving(mut shelf: Shelf, key: KeyEvent, workspace: Option<&Workspace>) -> (Mode, Step) {
     let count = shelf.sources.len();
     let picked = shelf.sources.get(shelf.picked).cloned();
+    if key.code == KeyCode::Char('m') {
+        let marketplace = workspace.and_then(|workspace| {
+            workspace
+                .marketplaces
+                .iter()
+                .find(|marketplace| Some(&marketplace.name) == picked.as_ref())
+        });
+        let form = marketplace.map_or_else(GatherForm::marketplace, GatherForm::of_marketplace);
+        return (Mode::Gathering(form), Step::Stay);
+    }
     match (key.code, picked) {
         (KeyCode::Tab | KeyCode::Right, Some(_)) => {
             shelf.picked = (shelf.picked + 1) % count;
@@ -2223,6 +2274,9 @@ pub struct GatherForm {
     /// Which of [`GATHER_FIELDS`] the keyboard is on.
     pub field: usize,
     pub error: Option<String>,
+    /// Whether it is a marketplace's catalog to list (#103), the folder its
+    /// `.claude-plugin` is in, rather than a repository to gather from.
+    pub marketplace: bool,
 }
 
 impl Default for GatherForm {
@@ -2233,11 +2287,30 @@ impl Default for GatherForm {
             reference: Input::default(),
             field: 0,
             error: None,
+            marketplace: false,
         }
     }
 }
 
 impl GatherForm {
+    /// A marketplace to list, typed.
+    pub fn marketplace() -> Self {
+        Self {
+            marketplace: true,
+            ..Self::default()
+        }
+    }
+
+    /// The marketplace `marketplace` to list again, where its lines name it.
+    fn of_marketplace(marketplace: &Marketplace) -> Self {
+        Self {
+            url: Input::with(&marketplace.url),
+            folder: Input::with(&marketplace.folder),
+            reference: Input::with(marketplace.reference.as_deref().unwrap_or("")),
+            ..Self::marketplace()
+        }
+    }
+
     /// The input the keyboard is on.
     pub fn input(&self, field: usize) -> &Input {
         match field {
@@ -2268,12 +2341,93 @@ impl GatherForm {
         let reference = Some(self.reference.text().trim())
             .filter(|reference| !reference.is_empty())
             .map(str::to_owned);
-        Some(Task::Gather {
-            url: url.to_owned(),
-            folder: folder.to_owned(),
-            reference,
+        let (url, folder) = (url.to_owned(), folder.to_owned());
+        Some(if self.marketplace {
+            Task::ListPlugins {
+                url,
+                folder,
+                reference,
+            }
+        } else {
+            Task::Gather {
+                url,
+                folder,
+                reference,
+            }
         })
     }
+}
+
+/// A marketplace's plugins, as its catalog listed them, each ticked or not:
+/// what `m` on the shelf's page lists, for `gather marketplace --plugin` to
+/// gather the ticked ones.
+#[derive(Debug, Clone)]
+pub struct Plugins {
+    /// What the marketplace is called.
+    pub name: String,
+    /// Where its catalog is, as its line names it.
+    pub url: String,
+    pub folder: String,
+    pub reference: Option<String>,
+    /// Each plugin it lists that can be gathered, in its order: its name,
+    /// its kind of source and where it is, as `--list` says them.
+    pub entries: Vec<(String, String, String)>,
+    /// Whether each is ticked.
+    pub ticked: Vec<bool>,
+    /// Which one the keyboard is on.
+    pub cursor: usize,
+    /// What its listing warned of, as `--list` says it.
+    pub warnings: Vec<String>,
+    pub error: Option<String>,
+}
+
+impl Plugins {
+    /// The line gathering the ticked plugins: none while none is.
+    pub fn task(&self) -> Option<Task> {
+        let plugins: Vec<String> = self
+            .entries
+            .iter()
+            .zip(&self.ticked)
+            .filter(|(_, ticked)| **ticked)
+            .map(|((name, _, _), _)| name.clone())
+            .collect();
+        (!plugins.is_empty()).then(|| Task::GatherPlugins {
+            url: self.url.clone(),
+            folder: self.folder.clone(),
+            reference: self.reference.clone(),
+            plugins,
+        })
+    }
+}
+
+/// A marketplace's plugins' keys: the cursor moved, a plugin ticked or not,
+/// and the ticked ones gathered, `gather marketplace --plugin` the line.
+fn picking(mut plugins: Plugins, key: KeyEvent) -> (Mode, Step) {
+    plugins.error = None;
+    let count = plugins.entries.len();
+    match key.code {
+        KeyCode::Esc | KeyCode::Char('q') => return (Mode::Browse, Step::Stay),
+        KeyCode::Down | KeyCode::Char('j') if count > 0 => {
+            plugins.cursor = (plugins.cursor + 1) % count;
+        }
+        KeyCode::Up | KeyCode::Char('k') if count > 0 => {
+            plugins.cursor = (plugins.cursor + count - 1) % count;
+        }
+        KeyCode::Char(' ') if count > 0 => {
+            plugins.ticked[plugins.cursor] = !plugins.ticked[plugins.cursor];
+        }
+        KeyCode::Enter => {
+            return match plugins.task() {
+                Some(task) => (Mode::Plugins(plugins), Step::Run(task)),
+                None => {
+                    plugins.error = Some(String::from("tick a plugin to gather with space"));
+                    (Mode::Plugins(plugins), Step::Stay)
+                }
+            };
+        }
+        _ => {}
+    }
+    (Mode::Plugins(plugins), Step::Stay)
 }
 
 /// A project's agents and share mode, toggled: what `t` opens.
@@ -2517,7 +2671,7 @@ impl Reader {
 
     /// Every key, and the command it runs.
     pub fn help() -> Self {
-        let rows: [(&str, &str, &[&str]); 22] = [
+        let rows: [(&str, &str, &[&str]); 23] = [
             (
                 "a",
                 "add a skill or a rule",
@@ -2618,6 +2772,15 @@ impl Reader {
                     "mindweaver gather update <source>",
                     "mindweaver gather update --all, with U",
                     "mindweaver gather remove --yes <source>, with d",
+                ],
+            ),
+            (
+                "s m",
+                "a Claude Code marketplace's plugins, the one picked or one typed: space ticks \
+                 each, enter gathers the ticked ones",
+                &[
+                    "mindweaver gather marketplace --list <url>",
+                    "mindweaver gather marketplace --plugin <name>... <url>",
                 ],
             ),
             (

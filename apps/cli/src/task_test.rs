@@ -12,7 +12,7 @@ use crate::{Cli, WeaverCli};
 /// Every task's name in JSON, as a front end sends it: a contract, pinned
 /// here word for word, so renaming a variant fails a test rather than every
 /// front end that sends the old name.
-const TAGS: [&str; 38] = [
+const TAGS: [&str; 40] = [
     "init_workspace",
     "init_project",
     "link",
@@ -39,6 +39,8 @@ const TAGS: [&str; 38] = [
     "gather",
     "update_source",
     "remove_source",
+    "list_plugins",
+    "gather_plugins",
     "targets",
     "settings",
     "toggled",
@@ -144,6 +146,28 @@ fn every(value: &str) -> Vec<Task> {
         Task::RemoveSource {
             source: owned(),
             yes: true,
+        },
+        Task::ListPlugins {
+            url: owned(),
+            folder: owned(),
+            reference: Some(owned()),
+        },
+        Task::ListPlugins {
+            url: owned(),
+            folder: String::from(DEFAULT_SUBDIRECTORY),
+            reference: None,
+        },
+        Task::GatherPlugins {
+            url: owned(),
+            folder: owned(),
+            reference: Some(owned()),
+            plugins: vec![owned(), String::from("plain")],
+        },
+        Task::GatherPlugins {
+            url: owned(),
+            folder: String::from(DEFAULT_SUBDIRECTORY),
+            reference: None,
+            plugins: vec![owned()],
         },
         Task::Install {
             projects: vec![owned(), String::from("plain")],
@@ -1519,7 +1543,10 @@ fn a_task_is_refused_for_the_first_of_its_lines_that_is() {
         let expected = match &task {
             Task::OpenInstall => Some(Refusal::Screen),
             Task::Edit { .. } => Some(Refusal::Editor),
-            Task::Gather { .. } | Task::UpdateSource { .. } => Some(Refusal::Unwatched),
+            Task::Gather { .. }
+            | Task::UpdateSource { .. }
+            | Task::ListPlugins { .. }
+            | Task::GatherPlugins { .. } => Some(Refusal::Unwatched),
             Task::Show { .. } => Some(Refusal::Unheld),
             _ => None,
         };
