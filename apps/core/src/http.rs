@@ -4,7 +4,8 @@
 //! Catalogs (the MCP Registry, the skill directories) are HTTP APIs, and
 //! what is done with them is rules: which URLs a fetch may name, which
 //! redirects it follows and what goes along, how long an answer may take and
-//! how large it may be. Rules live in core, so the CLI,
+//! how large it may be, how it is read as JSON and how a listing pages
+//! ([`Paging`]). Rules live in core, so the CLI,
 //! the TUI and the server cannot disagree about them. What carries the bytes
 //! is not a rule, and is behind the port: [`crate::adapter::reqwest`] by
 //! default, and a fake in every test, so none goes online. Front ends
@@ -25,12 +26,17 @@ use std::net::IpAddr;
 use std::time::{Duration, Instant};
 
 use reqwest::Url;
+use serde::de::DeserializeOwned;
 use thiserror::Error;
 
 use crate::code::codes;
 use crate::port::Http;
 use crate::url::carries_credentials;
 use crate::value::Redacted;
+
+mod paging;
+
+pub use paging::{Page, Paged, Paging};
 
 /// Who Mindweaver says it is on every request: GitHub's API refuses one that
 /// does not say, and a service that wants to tell its callers apart reads it.
@@ -270,6 +276,21 @@ pub struct Fetched {
     pub status: u16,
     pub headers: Headers,
     pub body: Vec<u8>,
+}
+
+impl Fetched {
+    /// The body read as JSON, into the shape `T` a caller declares.
+    ///
+    /// Strict JSON, not the JSONC agents' config files are read as: an API
+    /// that answers with comments in it is answering with something other
+    /// than its own format. What serde says is kept, which names a line and
+    /// a column and never quotes the body.
+    pub fn json<T: DeserializeOwned>(&self) -> Result<T, HttpError> {
+        serde_json::from_slice(&self.body).map_err(|error| HttpError::Json {
+            url: Redacted::new(&self.url),
+            detail: error.to_string(),
+        })
+    }
 }
 
 /// What core fetches through: an [`Http`], and the limits every answer it
@@ -603,6 +624,12 @@ pub enum HttpError {
     /// More redirects than [`Limits::max_redirects`], a loop among them.
     #[error("{url}: redirected more than {limit} times")]
     TooManyRedirects { url: Redacted, limit: usize },
+    /// A body that is not the JSON its caller declared.
+    #[error("{url}: not the JSON expected: {detail}")]
+    Json { url: Redacted, detail: String },
+    /// A listing that went on past the most pages it was let run to.
+    #[error("{url}: read no further than {limit} pages, the most this listing is let run to")]
+    TooManyPages { url: Redacted, limit: usize },
 }
 
 codes!(HttpError {
@@ -618,6 +645,8 @@ codes!(HttpError {
     Self::Status { .. } => "http_status_unsuccessful",
     Self::Redirect { .. } => "http_redirect_refused",
     Self::TooManyRedirects { .. } => "http_too_many_redirects",
+    Self::Json { .. } => "http_json_invalid",
+    Self::TooManyPages { .. } => "http_too_many_pages",
 });
 
 #[cfg(test)]

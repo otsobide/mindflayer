@@ -12,9 +12,10 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use mindweaver_core::http::{Answer, Client, Headers, HttpError, Limits, Request};
+use mindweaver_core::http::{Answer, Client, Headers, HttpError, Limits, Page, Paging, Request};
 use mindweaver_core::value::Redacted;
 use mindweaver_core::Http;
+use serde::Deserialize;
 
 // ---------------------------------------------------------------------------
 // The fake
@@ -705,4 +706,258 @@ fn a_redirect_status_with_nowhere_to_go_is_a_failure() {
     let error = Client::new(&fake).get(&Request::get(CATALOG)).unwrap_err();
 
     assert_eq!(error.code(), "http_status_unsuccessful");
+}
+
+// ---------------------------------------------------------------------------
+// JSON
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize, PartialEq)]
+struct Server {
+    name: String,
+}
+
+#[test]
+fn an_answer_is_read_as_the_json_a_caller_declares() {
+    let fake = Fake::new().answering(CATALOG, Reply::ok(r#"[{"name":"github"}]"#));
+
+    let fetched = Client::new(&fake).get(&Request::get(CATALOG)).unwrap();
+
+    assert_eq!(
+        fetched.json::<Vec<Server>>().unwrap(),
+        [Server {
+            name: String::from("github")
+        }]
+    );
+}
+
+#[test]
+fn an_answer_that_is_not_the_json_declared_is_said_so() {
+    for body in ["<html>maintenance</html>", r#"{"name": 7}"#, "[1, 2"] {
+        let fake = Fake::new().answering(CATALOG, Reply::ok(body));
+        let fetched = Client::new(&fake).get(&Request::get(CATALOG)).unwrap();
+
+        let error = fetched.json::<Vec<Server>>().unwrap_err();
+
+        assert_eq!(error.code(), "http_json_invalid", "{body}");
+        assert!(
+            error
+                .to_string()
+                .starts_with(&format!("{CATALOG}: not the JSON expected: ")),
+            "{error}"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Paging
+// ---------------------------------------------------------------------------
+
+/// A page as GitHub's search answers it: the list inside an object.
+#[derive(Debug, Deserialize)]
+struct Search {
+    items: Vec<Server>,
+}
+
+impl Page for Search {
+    fn is_empty(&self) -> bool {
+        self.items.is_empty()
+    }
+}
+
+fn names(pages: &[Search]) -> Vec<&str> {
+    pages
+        .iter()
+        .flat_map(|page| &page.items)
+        .map(|server| server.name.as_str())
+        .collect()
+}
+
+fn search(names: &[&str]) -> String {
+    let items: Vec<String> = names
+        .iter()
+        .map(|name| format!(r#"{{"name":"{name}"}}"#))
+        .collect();
+    format!(r#"{{"items":[{}]}}"#, items.join(","))
+}
+
+const SEARCH: &str = "https://api.example/search?q=skill";
+
+#[test]
+fn a_listing_is_followed_from_link_to_link_until_one_names_no_next() {
+    let second = "https://api.example/search?q=skill&page=2";
+    let third = "https://api.example/search?q=skill&page=3";
+    let fake = Fake::new()
+        .answering(
+            SEARCH,
+            Reply::ok(&search(&["a", "b"])).with(
+                "Link",
+                &format!(r#"<{second}>; rel="next", <{third}>; rel="last""#),
+            ),
+        )
+        .answering(
+            second,
+            // Relative, as RFC 8288 lets a link be.
+            Reply::ok(&search(&["c"])).with("Link", r#"</search?q=skill&page=3>; rel="next""#),
+        )
+        .answering(
+            third,
+            Reply::ok(&search(&["d"])).with("Link", &format!(r#"<{SEARCH}>; rel="first""#)),
+        );
+
+    let paged = Client::new(&fake)
+        .pages::<Search>(&Request::get(SEARCH), &Paging::NextLink, 10)
+        .unwrap();
+
+    assert_eq!(names(&paged.pages), ["a", "b", "c", "d"]);
+    assert!(paged.cut.is_none());
+    let sent: Vec<String> = fake.sent().into_iter().map(|sent| sent.url).collect();
+    assert_eq!(sent, [SEARCH, second, third]);
+}
+
+/// A page past the last holds nothing, and is no page of the listing.
+#[test]
+fn a_listing_paged_by_number_ends_at_the_first_empty_page() {
+    let first = "https://catalog.example/v0/servers?limit=2";
+    let fake = Fake::new()
+        .answering(first, Reply::ok(r#"[{"name":"a"},{"name":"b"}]"#))
+        .answering(
+            "https://catalog.example/v0/servers?limit=2&page=2",
+            Reply::ok(r#"[{"name":"c"}]"#),
+        )
+        .answering(
+            "https://catalog.example/v0/servers?limit=2&page=3",
+            Reply::ok("[]"),
+        );
+
+    let paged = Client::new(&fake)
+        .pages::<Vec<Server>>(
+            &Request::get(first),
+            &Paging::Number {
+                param: String::from("page"),
+            },
+            10,
+        )
+        .unwrap();
+
+    let read: Vec<&str> = paged
+        .pages
+        .iter()
+        .flatten()
+        .map(|server| server.name.as_str())
+        .collect();
+    assert_eq!(read, ["a", "b", "c"]);
+    assert_eq!(paged.pages.len(), 2);
+    assert!(paged.cut.is_none());
+    assert_eq!(fake.sent().len(), 3);
+}
+
+/// A listing that never ends, as one linking a page to itself does, is read
+/// as far as the bound, what was read kept and the cut said.
+#[test]
+fn a_listing_is_read_no_further_than_its_bound() {
+    let fake = Fake::new().answering(
+        SEARCH,
+        Reply::ok(&search(&["again"])).with("Link", &format!("<{SEARCH}>; rel=next")),
+    );
+
+    let paged = Client::new(&fake)
+        .pages::<Search>(&Request::get(SEARCH), &Paging::NextLink, 3)
+        .unwrap();
+
+    assert_eq!(names(&paged.pages), ["again", "again", "again"]);
+    let cut = paged.cut.expect("the listing was cut");
+    assert_eq!(cut.code(), "http_too_many_pages");
+    assert_eq!(
+        cut.to_string(),
+        format!("{SEARCH}: read no further than 3 pages, the most this listing is let run to")
+    );
+    assert_eq!(fake.sent().len(), 3, "no page past the bound is asked for");
+}
+
+#[test]
+fn a_listing_by_number_is_bounded_too() {
+    let fake = Fake::new()
+        .answering(CATALOG, Reply::ok(r#"[{"name":"a"}]"#))
+        .answering(&format!("{CATALOG}?page=2"), Reply::ok(r#"[{"name":"b"}]"#));
+
+    let paged = Client::new(&fake)
+        .pages::<Vec<Server>>(
+            &Request::get(CATALOG),
+            &Paging::Number {
+                param: String::from("page"),
+            },
+            2,
+        )
+        .unwrap();
+
+    assert_eq!(paged.pages.len(), 2);
+    assert_eq!(paged.cut.unwrap().code(), "http_too_many_pages");
+}
+
+/// A next page elsewhere is fetched as a redirect there would be: the
+/// credential stays with the server it was given for.
+#[test]
+fn a_next_page_elsewhere_is_asked_without_the_credentials() {
+    let elsewhere = "https://mirror.example/search?page=2";
+    let fake = Fake::new()
+        .answering(
+            SEARCH,
+            Reply::ok(&search(&["a"])).with("Link", &format!(r#"<{elsewhere}>; rel="next""#)),
+        )
+        .answering(elsewhere, Reply::ok(&search(&["b"])));
+
+    Client::new(&fake)
+        .pages::<Search>(
+            &Request::get(SEARCH)
+                .header("Accept", "application/json")
+                .header("Authorization", "Bearer ghp_token"),
+            &Paging::NextLink,
+            10,
+        )
+        .unwrap();
+
+    let sent = fake.sent();
+    assert_eq!(sent[0].header("authorization"), Some("Bearer ghp_token"));
+    assert_eq!(sent[1].url, elsewhere);
+    assert_eq!(sent[1].header("accept"), Some("application/json"));
+    assert_eq!(sent[1].header("authorization"), None);
+}
+
+#[test]
+fn a_next_link_to_plain_http_elsewhere_is_refused() {
+    let fake = Fake::new().answering(
+        SEARCH,
+        Reply::ok(&search(&["a"])).with(
+            "Link",
+            r#"<http://mirror.example/search?page=2>; rel="next""#,
+        ),
+    );
+
+    let error = Client::new(&fake)
+        .pages::<Search>(&Request::get(SEARCH), &Paging::NextLink, 10)
+        .unwrap_err();
+
+    assert_eq!(error.code(), "http_url_refused");
+    assert_eq!(fake.sent().len(), 1);
+}
+
+/// What came before a page that failed is a listing cut short where nobody
+/// chose, so the failure is the listing's.
+#[test]
+fn a_page_that_fails_fails_the_listing() {
+    let second = "https://api.example/search?q=skill&page=2";
+    let fake = Fake::new()
+        .answering(
+            SEARCH,
+            Reply::ok(&search(&["a"])).with("Link", &format!(r#"<{second}>; rel="next""#)),
+        )
+        .answering(second, Reply::ok("<html>rate limited</html>"));
+
+    let error = Client::new(&fake)
+        .pages::<Search>(&Request::get(SEARCH), &Paging::NextLink, 10)
+        .unwrap_err();
+
+    assert_eq!(error.code(), "http_json_invalid");
+    assert!(error.to_string().starts_with(second), "{error}");
 }
