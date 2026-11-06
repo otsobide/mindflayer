@@ -1253,7 +1253,7 @@ pub(crate) fn place(
     let Offered {
         held,
         taken,
-        license: plugins,
+        licenses: plugins,
     } = offered(&clone.root, request, url, manifest, &mut report.failures)?;
 
     // The last moment a cancel is honoured, and the reason everything is read
@@ -1326,7 +1326,7 @@ pub(crate) fn place(
         // nearer to it than what its plugin says, and what a plugin says of
         // itself nearer than what a catalog says of the plugin it lists.
         let license = license_of(stated, &destination)
-            .or_else(|| plugins.clone())
+            .or_else(|| plugins.of(directory))
             .or_else(|| request.search.license().map(str::to_owned));
         let recorded = relative(workspace, &destination);
         ledger.record(
@@ -1404,9 +1404,67 @@ fn left_off_the_shelf(request: &Request, clone: &Path, directory: &Path) -> Vec<
 struct Offered {
     held: Vec<String>,
     taken: Vec<(PathBuf, String, Artifact)>,
-    /// The licence the manifest of the plugin or package searched gives,
-    /// when it has one that gives one (#104).
-    license: Option<String>,
+    /// What the plugins its skills are in say of their licence (#104).
+    licenses: Licenses,
+}
+
+/// The licences the manifests of the plugins a gather's skills are in give
+/// (#104): a skill's own for one that says none.
+struct Licenses {
+    /// The plugin's or the package's searched, when its manifest gives one.
+    searched: Option<String>,
+    /// Each package in the Agent Plugins format the search came to below
+    /// the folder searched, by its folder, with its licence as its
+    /// `plugin.json` gives it.
+    packages: Vec<(PathBuf, Option<String>)>,
+}
+
+impl Licenses {
+    /// What the plugins in `searched`, in the repository whose clone
+    /// resolves to `bound`, say of the licence of the skills `found`,
+    /// `plugin` the manifest of `searched` itself.
+    fn of_plugins(
+        found: &[PathBuf],
+        searched: &Path,
+        bound: &Path,
+        plugin: Option<Manifest>,
+    ) -> Licenses {
+        let mut packages: Vec<(PathBuf, Option<String>)> = Vec::new();
+        for package in found.iter().filter_map(|directory| package_of(directory)) {
+            if package == searched || packages.iter().any(|(seen, _)| seen == package) {
+                continue;
+            }
+            if let Ok(Some(manifest)) =
+                Manifest::read(package, bound, &[plugin::Format::AgentPlugins])
+            {
+                packages.push((package.to_path_buf(), manifest.license));
+            }
+        }
+        Licenses {
+            searched: plugin.and_then(|plugin| plugin.license),
+            packages,
+        }
+    }
+
+    /// The licence of the skill found at `directory`: its package's, when
+    /// it is one of a package the search came to and that gives one, as
+    /// the plugin nearest to it, and otherwise the one searched's.
+    fn of(&self, directory: &Path) -> Option<String> {
+        package_of(directory)
+            .and_then(|package| self.packages.iter().find(|(at, _)| at == package))
+            .and_then(|(_, license)| license.clone())
+            .or_else(|| self.searched.clone())
+    }
+}
+
+/// The folder whose `skills` folder `directory` is in: the package it is a
+/// skill of, when that folder is a package in the Agent Plugins format,
+/// whose skills are those alone ([`children`]).
+fn package_of(directory: &Path) -> Option<&Path> {
+    directory
+        .parent()
+        .filter(|skills| skills.file_name().is_some_and(|name| name == "skills"))
+        .and_then(Path::parent)
 }
 
 /// Read what the clone at `clone` offers ([`Offered`]), telling `request`'s
@@ -1472,7 +1530,7 @@ fn offered(
     Ok(Offered {
         held,
         taken,
-        license: plugin.and_then(|plugin| plugin.license),
+        licenses: Licenses::of_plugins(&found, &searched, &bound, plugin),
     })
 }
 

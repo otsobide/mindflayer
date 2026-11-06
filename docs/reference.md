@@ -917,10 +917,11 @@ says it: its `license`, else what a `LICENSE` or `LICENCE` file beside its
 `SKILL.md` names (the identifier a line tags with
 `SPDX-License-Identifier:`, else the file's first line, its title, which
 names no version), else, for a plugin [a marketplace](#from-a-plugin-marketplace)
-lists, the licence its own manifest gives it, then its catalog, else
-`unknown`. Nothing reads a licence out of the
-whole text, nor the repository's own licence at its root. The name of its
-source is what `--from` takes when two sources offer one name:
+lists or a package in the Agent Plugins format, the licence its own
+manifest gives it, then its catalog, else `unknown`. Nothing reads a
+licence out of the whole text, nor the repository's own licence at its
+root. The name of its source is what `--from` takes when two sources offer
+one name:
 
 ```
 $ mindweaver install -p collapse commit-style --from other-rules

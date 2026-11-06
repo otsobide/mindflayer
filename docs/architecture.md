@@ -3702,10 +3702,11 @@ it says (a name, an SPDX expression, `Complete terms in LICENSE.txt`); else
 what a licence file beside the manifest names, `LICENSE` or `LICENCE`,
 bare, as Markdown or as text, in any case, the bare one first; else, for a
 skill of a plugin a marketplace lists or of an Agent Plugins package, the
-plugin's licence as its own manifest gives it (#104), then as its catalog
-gives it (#103), what the skill says of itself being nearer to it than what
-its plugin says, and what a plugin says of itself nearer than what a
-catalog says of the plugin it lists; else none, which is unknown, and
+folder gathered or one its search comes to, the plugin's licence as its own
+manifest gives it (#104), the package's nearest the skill first, then as
+its catalog gives it (#103), what the skill says of itself being nearer to
+it than what its plugin says, and what a plugin says of itself nearer than
+what a catalog says of the plugin it lists; else none, which is unknown, and
 `gather list` says so. Of a file, the identifier a
 line of it tags with `SPDX-License-Identifier:`, since that is the licence
 named in the one spelling every tool reads, put there to be found; and

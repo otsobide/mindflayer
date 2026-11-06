@@ -1553,6 +1553,45 @@ fn a_package_the_search_of_a_repository_comes_to_offers_its_skills_children_alon
 }
 
 #[test]
+fn a_skill_of_a_package_the_search_comes_to_takes_that_packages_licence() {
+    let source = repository(&[
+        ("packages/kit/plugin.json", PACKAGE),
+        (
+            "packages/kit/skills/deploy/SKILL.md",
+            &skill("deploy", "Ship it"),
+        ),
+        (
+            "packages/bare/plugin.json",
+            r#"{"$schema": "https://example.org/agent-plugins/plugin.schema.json"}"#,
+        ),
+        (
+            "packages/bare/skills/lint/SKILL.md",
+            &skill("lint", "Says nothing"),
+        ),
+        ("skills/top/SKILL.md", &skill("top", "The repository's own")),
+    ]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap();
+
+    let licenses: Vec<(String, Option<String>)> = ledger
+        .gathered()
+        .unwrap()
+        .into_iter()
+        .map(|artifact| (artifact.name.to_string(), artifact.license))
+        .collect();
+    assert_eq!(
+        licenses,
+        [
+            (String::from("deploy"), Some(String::from("MIT"))),
+            (String::from("lint"), None),
+            (String::from("top"), None),
+        ]
+    );
+}
+
+#[test]
 fn a_plugin_a_catalog_lists_that_is_a_package_offers_its_skills_children_alone() {
     let source = repository(&[
         ("plugins/kit/plugin.json", PACKAGE),
