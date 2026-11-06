@@ -969,7 +969,7 @@
         "pin": null,
         "reference": null,
         "revision": "8d1c3f0a2b4e6d8f0a1c3e5b7d9f1a3c5e7b9d2f",
-        "subdirectory": "skills",
+        "subdirectory": "",
         "url": "https://github.com/acme/skills"
       },
       "summary": "Format the code the way the team does",
@@ -991,7 +991,7 @@
         "pin": null,
         "reference": null,
         "revision": "8d1c3f0a2b4e6d8f0a1c3e5b7d9f1a3c5e7b9d2f",
-        "subdirectory": "skills",
+        "subdirectory": "",
         "url": "https://github.com/acme/skills"
       },
       "summary": "Sort new issues by what they need",
@@ -1007,7 +1007,7 @@
       "pin": null,
       "reference": null,
       "revision": "8d1c3f0a2b4e6d8f0a1c3e5b7d9f1a3c5e7b9d2f",
-      "subdirectory": "skills",
+      "subdirectory": "",
       "url": "https://github.com/acme/skills"
     }
   ],

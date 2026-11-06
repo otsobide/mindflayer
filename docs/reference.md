@@ -2597,8 +2597,9 @@ machine knows it.
 summary or origin, each with the commit it was taken at, when, and its
 origin as `--from` takes it: the address it came from, with `#` and the
 branch when one was asked for. **Sources** lists where the shelf is filled
-from, each with that same origin, the branch, the folder harvested, the
-commit last gathered and what it supplied, and below them what happened
+from, each with that same origin, the branch, the folder harvested (the
+whole repository when none was named), the commit last gathered and what it
+supplied, and below them what happened
 lately: the latest gathers, installs, uninstalls, relinks and adoptions the
 ledger logged, newest first, with every URL in them shown without
 credentials. An empty shelf names `mindweaver gather git`.

@@ -121,7 +121,13 @@ function short(revision: string): string {
                   class="font-mono"
                   data-testid="subdirectory"
                 >
-                  {{ source.subdirectory }}
+                  <template v-if="source.subdirectory">
+                    {{ source.subdirectory }}
+                  </template>
+                  <span
+                    v-else
+                    class="font-sans text-muted"
+                  >the whole repository</span>
                 </dd>
                 <dt class="font-mono text-muted">
                   revision

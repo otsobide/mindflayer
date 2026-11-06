@@ -15,7 +15,7 @@ describe('the sources', () => {
     expect(card.get('[data-testid="kind"]').text()).toBe(source!.kind)
     expect(card.get('[data-testid="url"]').text()).toBe(source!.url)
     expect(card.get('[data-testid="origin"]').text()).toBe(source!.origin)
-    expect(card.get('[data-testid="subdirectory"]').text()).toBe(source!.subdirectory)
+    expect(card.get('[data-testid="subdirectory"]').text()).toBe('the whole repository')
     expect(card.get('[data-testid="directory"]').text()).toBe(source!.directory)
     expect(card.get('[data-testid="revision"] code').attributes('title')).toBe(source!.revision)
     expect(card.get('[data-testid="reference"]').text()).toBe('whatever the remote\'s HEAD points at')
@@ -29,6 +29,15 @@ describe('the sources', () => {
 
     expect(page.get('[data-testid="reference"]').text()).toBe('main')
     expect(page.get('[data-testid="origin"]').text()).toBe('https://github.com/acme/skills#main')
+  })
+
+  it('says the folder searched, when a source names one', async () => {
+    const snapshot = fixture('workspace')
+    Object.assign(snapshot.sources[0]!, { subdirectory: 'plugins/ops' })
+
+    const { page } = await render('/sources', snapshot)
+
+    expect(page.get('[data-testid="subdirectory"]').text()).toBe('plugins/ops')
   })
 
   it('names what each supplied of the shelf, and says when it supplied nothing still there', async () => {
