@@ -166,6 +166,8 @@
     "doctor_variable_unset",
     "doctor_leftover_stage",
     "doctor_leftover_beside",
+    "doctor_unreached",
+    "doctor_missed",
     "exclude_key_invalid",
     "exclude_pattern_invalid",
     "exclude_path_unnamable",

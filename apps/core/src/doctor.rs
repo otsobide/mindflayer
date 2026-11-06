@@ -50,6 +50,7 @@ use crate::mcp::McpDefinition;
 use crate::names::Names;
 use crate::opencode_mcp::{self, OpenCodeMcpError};
 use crate::paths;
+use crate::status::{Missed, ProjectStatus, Unreached};
 use crate::value::{ContentHash, VariableName};
 use crate::workspace::{same_directory, Member, MindProject, WeaverWorkspace};
 
@@ -96,7 +97,7 @@ impl Report {
                 continue;
             }
             seen.push(member.root.clone());
-            projects.push(Examined::of_member(&member, workspace, machine));
+            projects.push(Examined::of_member(&member, workspace, machine, None));
         }
         Report { projects }
     }
@@ -113,7 +114,7 @@ impl Report {
             .and_then(|workspace| workspace.linked_as(project.root()))
             .map(paths::as_route);
         Report {
-            projects: vec![Examined::of(project, entry, workspace, machine)],
+            projects: vec![Examined::of(project, entry, workspace, machine, None)],
         }
     }
 
@@ -149,14 +150,18 @@ pub struct Examined {
 
 impl Examined {
     /// The project `member` opens, or why it opens none.
+    ///
+    /// `told` is what `status` says its agents miss, for a caller that read
+    /// it already: read here when it is none.
     pub(crate) fn of_member(
         member: &Member,
         workspace: &WeaverWorkspace,
         machine: &Machine,
+        told: Option<(&[Unreached], &[Missed])>,
     ) -> Examined {
         let entry = Some(paths::as_route(&member.entry));
         match &member.project {
-            Ok(project) => Examined::of(project, entry, Some(workspace), machine),
+            Ok(project) => Examined::of(project, entry, Some(workspace), machine, told),
             Err(error) => Examined {
                 entry,
                 name: None,
@@ -167,12 +172,15 @@ impl Examined {
         }
     }
 
-    /// `project`, linked as `entry`.
+    /// `project`, linked as `entry`, what `status` says its agents miss
+    /// told by the caller that read it already (`told`), as a snapshot
+    /// has, or read here.
     fn of(
         project: &MindProject,
         entry: Option<String>,
         workspace: Option<&WeaverWorkspace>,
         machine: &Machine,
+        told: Option<(&[Unreached], &[Missed])>,
     ) -> Examined {
         let mut exam = Exam::new(project, machine);
         exam.codex_trust();
@@ -182,6 +190,13 @@ impl Examined {
         exam.user_skills();
         exam.servers(workspace);
         exam.leftovers();
+        match told {
+            Some((unreached, missed)) => exam.unreached(unreached, missed),
+            None => {
+                let (status, _) = ProjectStatus::read(project, &Kind::ALL, workspace);
+                exam.unreached(&status.unreached, &status.missed);
+            }
+        }
         Examined {
             entry,
             name: Some(project.name().to_owned()),
@@ -323,6 +338,30 @@ pub enum Symptom {
     /// load, a hidden folder OpenCode's first line globs (docs/agents.md).
     #[error("{path}: an install of an earlier version left it beside `{copy}` and did not finish, and an agent may load it as a skill")]
     LeftoverBeside { path: PathBuf, copy: String },
+    /// A kind the project installs only in folders some of its agents read
+    /// none of, as `status` says it ([`ProjectStatus::unreached`]): `path`
+    /// is the first of them.
+    #[error("{path}: {} read{} none of the folders the project installs {} in ({}), so what is installed there reaches {} until {} pointed at one", titled(.agents), if .agents.len() == 1 { "s" } else { "" }, .kind.plural(), .targets.join(", "), if .agents.len() == 1 { "it nowhere" } else { "none of them" }, if .agents.len() == 1 { "it is" } else { "they are" })]
+    Unreached {
+        kind: Kind,
+        path: PathBuf,
+        /// Every folder the kind is installed in, as a route from the
+        /// project.
+        targets: Vec<String>,
+        agents: Vec<Agent>,
+    },
+    /// A rule or an MCP server the project received that some of its
+    /// agents read nowhere, as `status` says it
+    /// ([`ProjectStatus::missed`]): `path` is the `AGENTS.md` a rule is
+    /// kept from them in, or the config file of the first agent a server
+    /// is.
+    #[error("{path}: {} {} not read {} `{name}`, which the project received", titled(.agents), if .agents.len() == 1 { "does" } else { "do" }, .kind)]
+    Missed {
+        kind: Kind,
+        name: String,
+        path: PathBuf,
+        agents: Vec<Agent>,
+    },
 }
 
 /// `paths`, each as it is written, in a list a sentence holds.
@@ -366,6 +405,8 @@ codes!(Symptom {
     Self::VariableUnset { .. } => "doctor_variable_unset",
     Self::LeftoverStage { .. } => "doctor_leftover_stage",
     Self::LeftoverBeside { .. } => "doctor_leftover_beside",
+    Self::Unreached { .. } => "doctor_unreached",
+    Self::Missed { .. } => "doctor_missed",
 });
 
 impl Symptom {
@@ -380,9 +421,10 @@ impl Symptom {
             | Symptom::CodexOverBudget { .. } => vec![Agent::Codex],
             Symptom::ClaudeMissesRules { .. } => vec![Agent::Claude],
             Symptom::CopiesDiffer { agent, .. } => vec![*agent],
-            Symptom::UserSkillDiffers { agents, .. } | Symptom::VariableUnset { agents, .. } => {
-                agents.clone()
-            }
+            Symptom::UserSkillDiffers { agents, .. }
+            | Symptom::VariableUnset { agents, .. }
+            | Symptom::Unreached { agents, .. }
+            | Symptom::Missed { agents, .. } => agents.clone(),
             Symptom::ServerAtUserScope { agent, .. } => vec![*agent],
             // Nothing an agent reads yet, or what any agent reading the
             // folder may.
@@ -410,7 +452,10 @@ impl Symptom {
             Symptom::UserSkillDiffers { copy, .. } => copy,
             Symptom::ServerAtUserScope { config, .. } => config,
             Symptom::VariableUnset { file, .. } => file,
-            Symptom::LeftoverStage { path } | Symptom::LeftoverBeside { path, .. } => path,
+            Symptom::LeftoverStage { path }
+            | Symptom::LeftoverBeside { path, .. }
+            | Symptom::Unreached { path, .. }
+            | Symptom::Missed { path, .. } => path,
         }
     }
 
@@ -476,6 +521,23 @@ impl Symptom {
             ),
             Symptom::LeftoverBeside { copy, .. } => {
                 format!("the next install of `{copy}` clears it, or remove it")
+            }
+            Symptom::Unreached { kind, .. } => format!(
+                "point them at one of those folders, or install {} where they read with `mind \
+                 targets reset {}`",
+                kind.plural(),
+                kind.slug()
+            ),
+            Symptom::Missed { kind, .. } => {
+                let why = match kind {
+                    Kind::Rule => "a rule about some files reaches Claude Code alone, as written",
+                    Kind::Skill | Kind::Mcp => "`mind status` says why",
+                };
+                format!(
+                    "{why}; what a file git tracks keeps from them reaches them once the project \
+                     shares its installs (`mind share shared`) or edits what git tracks (`mind \
+                     share local --edit-tracked`)"
+                )
             }
         }
     }
@@ -1006,6 +1068,43 @@ impl<'a> Exam<'a> {
                 self.symptoms.push(Symptom::LeftoverBeside { path, copy });
             }
             seen.push(folder);
+        }
+    }
+
+    /// What `status` says the project's agents miss ([`ProjectStatus`]): a
+    /// kind installed only where some of them read none of it, which a
+    /// project's `targets` can leave, and a rule or a server some of them
+    /// read nowhere, which a local project's tracked `AGENTS.md` or config
+    /// file leaves (D-02), or a rule about some files, which Claude alone
+    /// reads.
+    fn unreached(&mut self, unreached: &[Unreached], missed: &[Missed]) {
+        for unreached in unreached {
+            let first = unreached.targets.first().map(String::as_str).unwrap_or("");
+            self.symptoms.push(Symptom::Unreached {
+                kind: unreached.kind,
+                path: self.root().join(first),
+                targets: unreached.targets.clone(),
+                agents: unreached.agents.clone(),
+            });
+        }
+        for missed in missed {
+            // Matched with no wildcard, so a kind added says here where it
+            // is kept from an agent.
+            let path = match missed.kind {
+                Kind::Rule => self.root().join(agents_md::FILE),
+                Kind::Mcp => missed
+                    .agents
+                    .first()
+                    .and_then(|agent| agent.mcp_file(self.root()).ok())
+                    .map_or_else(|| self.root().to_path_buf(), |file| self.root().join(file)),
+                Kind::Skill => self.root().to_path_buf(),
+            };
+            self.symptoms.push(Symptom::Missed {
+                kind: missed.kind,
+                name: missed.name.to_string(),
+                path,
+                agents: missed.agents.clone(),
+            });
         }
     }
 }

@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 
 use mindweaver_core::doctor::{Examined, Machine, Report};
 use mindweaver_core::install;
+use mindweaver_core::reapply::{self, Change};
 use mindweaver_core::{
     claude_md, Agent, AgentHomes, Directories, Kind, MindProject, Share, WeaverWorkspace,
 };
@@ -679,4 +680,57 @@ fn an_older_version_left_beside_a_copy_where_an_agent_reads_is_found_by_its_copy
     assert_eq!(paths, vec![old.as_path(), new.as_path()]);
     assert!(examined.findings[0].fix.contains("`review`"));
     assert!(new.is_dir() && old.is_dir(), "doctor removes nothing");
+}
+
+#[test]
+fn a_kind_installed_where_some_of_its_agents_read_none_of_it_is_found_as_status_says() {
+    let fixture = fixture(&[Agent::Claude, Agent::Codex]);
+    reapply::apply(
+        Some(&fixture.workspace),
+        &fixture.project,
+        &Change::Targets {
+            kind: Kind::Skill,
+            folders: Some(vec![PathBuf::from(".skills")]),
+        },
+        &fixture.homes(),
+    )
+    .unwrap();
+    let project = MindProject::open(fixture.root()).unwrap();
+    let machine = Machine::new(fixture.homes(), Vec::new());
+
+    let report = Report::of_project(&project, Some(&fixture.workspace), &machine);
+
+    let examined = &report.projects[0];
+    assert_eq!(codes(examined), vec!["doctor_unreached"]);
+    let finding = &examined.findings[0];
+    assert_eq!(finding.path, fixture.root().join(".skills"));
+    assert_eq!(finding.agents, vec![Agent::Claude, Agent::Codex]);
+    assert!(
+        finding.fix.contains("`mind targets reset skill`"),
+        "{}",
+        finding.fix
+    );
+}
+
+#[test]
+fn a_rule_about_some_files_codex_reads_nowhere_is_found_as_status_says() {
+    let fixture = clean(&[Agent::Claude, Agent::Codex]);
+    fixture.install_rule(
+        "errors",
+        "---\npaths:\n  - \"src/**/*.rs\"\n---\nReturn errors; never panic in a library.\n",
+    );
+
+    let examined = fixture.examined();
+
+    assert_eq!(codes(&examined), vec!["doctor_missed"]);
+    let finding = &examined.findings[0];
+    assert_eq!(finding.agents, vec![Agent::Codex]);
+    assert_eq!(finding.path, fixture.root().join("AGENTS.md"));
+    assert!(
+        finding
+            .message
+            .contains("Codex does not read rule `errors`"),
+        "{}",
+        finding.message
+    );
 }
