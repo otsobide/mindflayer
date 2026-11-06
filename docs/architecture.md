@@ -3795,8 +3795,15 @@ and is given none (`no_target`).
   either level, core's batch previews it rather than installing it
   (`assign::install`), and the command says what each agent would run and
   `nothing installed`, writing and recording nothing, with the exit
-  status the install would have. The library's own is written as a skill
-  is: it is the workspace's own, written by whoever keeps it. Asking of
+  status the install would have. A batch whose every part is only previewed
+  reads the ledger without making it (`ledger_for_reading`), as an
+  update's dry run does: opened to write, it would be made where there is
+  none, told the projects' ids, and scrubbed or migrated where an older
+  build left one, for a command that writes nothing. One with a part
+  refused is asked again of the ledger opened to write, since a refusal
+  read before the scrub can be one it takes away, two rows of one shelf
+  source offering a name twice until then. The library's own is written as
+  a skill is: it is the workspace's own, written by whoever keeps it. Asking of
   every server was the alternative, and would ask of the library's own
   what a skill is never asked.
 - **The writers hold the lock.** An install and an uninstall hold the

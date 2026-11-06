@@ -1212,6 +1212,11 @@ fn a_loaded_workspaces_server_is_a_dry_run_that_writes_nothing_until_yes() {
     .unwrap();
     weaver(dir.path(), &["load", &team.path().display().to_string()]).unwrap();
     let app = dir.path().join("app");
+    let ledger = WeaverWorkspace::locate(dir.path())
+        .unwrap()
+        .unwrap()
+        .ledger_path();
+    assert!(!ledger.exists(), "nothing has been recorded yet");
 
     let dry = weaver(dir.path(), &["install", "-p", "app", "linear", &home]).unwrap();
 
@@ -1236,7 +1241,8 @@ fn a_loaded_workspaces_server_is_a_dry_run_that_writes_nothing_until_yes() {
     for file in [".mcp.json", ".codex", "opencode.json"] {
         assert!(!app.join(file).exists(), "{file}");
     }
-    // Nor anything recorded.
+    // Nor anything recorded, the ledger not even made.
+    assert!(!ledger.exists(), "{}", ledger.display());
     let status = weaver(dir.path(), &["status", "-p", "app"]).unwrap();
     assert!(!status.stdout.contains("linear"), "{}", status.stdout);
 
