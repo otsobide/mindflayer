@@ -332,16 +332,7 @@ pub fn render(
     definition: &McpDefinition,
     homes: &AgentHomes,
 ) -> Result<Rendered, OpenCodeMcpError> {
-    let checked = entry(definition, Shape::V2)?;
-    let (file, _) = config(root)?;
-    if let Some((file, home, reader)) = install::in_agent_home(homes, &[file.path()]) {
-        return Err(OpenCodeMcpError::UserScope { file, home, reader });
-    }
-    let standing = standing(&file, checked.name.as_str())?;
-    let given = match standing.map_or_else(|| followed(&file), Ok)? {
-        Shape::V2 => checked,
-        Shape::V1 => entry(definition, Shape::V1)?,
-    };
+    let (file, given, standing) = prepared(root, definition, homes)?;
     let key = given.shape.key(given.name.as_str());
     let edit = match standing {
         None => Edit::Insert(given.value.clone()),
@@ -353,6 +344,54 @@ pub fn render(
         written,
         entry: given,
     })
+}
+
+/// What [`render`] would write, with nothing written: for an install to
+/// say what OpenCode would be given before it writes anything.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Planned {
+    /// The one of [`FILES`] it would be written into.
+    pub file: PathBuf,
+    /// The entry, in the shape that file would be given it in.
+    pub entry: Entry,
+}
+
+/// What [`render`] would write into the first of [`FILES`] there is at
+/// `root`, read and refused as [`render`] reads and refuses it, in the
+/// shape it would write, with nothing written: one place deciding both, so
+/// what an install says OpenCode will be given is what it then writes.
+pub fn planned(
+    root: &Path,
+    definition: &McpDefinition,
+    homes: &AgentHomes,
+) -> Result<Planned, OpenCodeMcpError> {
+    let (file, entry, _) = prepared(root, definition, homes)?;
+    Ok(Planned {
+        file: file.path(),
+        entry,
+    })
+}
+
+/// The file [`render`] writes into, the entry it writes there in the shape
+/// it is written in, and the shape a server of the name stands in there
+/// already, each refusal asked in the order [`render`] asks it: what it
+/// and [`planned`] share.
+fn prepared(
+    root: &Path,
+    definition: &McpDefinition,
+    homes: &AgentHomes,
+) -> Result<(ConfigFile, Entry, Option<Shape>), OpenCodeMcpError> {
+    let checked = entry(definition, Shape::V2)?;
+    let (file, _) = config(root)?;
+    if let Some((file, home, reader)) = install::in_agent_home(homes, &[file.path()]) {
+        return Err(OpenCodeMcpError::UserScope { file, home, reader });
+    }
+    let standing = standing(&file, checked.name.as_str())?;
+    let given = match standing.map_or_else(|| followed(&file), Ok)? {
+        Shape::V2 => checked,
+        Shape::V1 => entry(definition, Shape::V1)?,
+    };
+    Ok((file, given, standing))
 }
 
 /// Take the server keyed `name` out of the first of [`FILES`] there is at

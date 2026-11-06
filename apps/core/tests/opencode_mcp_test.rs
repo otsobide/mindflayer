@@ -904,3 +904,29 @@ fn the_keys_opencode_s_mcp_holds_itself_are_no_servers_of_v1_s() {
     }
     assert_eq!(read(root.path(), FILE), TEAMS);
 }
+
+#[test]
+fn what_a_render_would_write_is_planned_in_its_file_and_shape_with_nothing_written() {
+    let name = McpMother::name();
+    let definition = parsed(&McpMother::stdio(&name));
+    let empty = TempDir::new().unwrap();
+    let kept = TempDir::new().unwrap();
+    write(kept.path(), FILES[1], TEAMS_V1);
+
+    let new = opencode_mcp::planned(empty.path(), &definition, &AgentHomes::default()).unwrap();
+    let old = opencode_mcp::planned(kept.path(), &definition, &AgentHomes::default()).unwrap();
+
+    assert_eq!(new.file, empty.path().join(FILE));
+    assert_eq!(new.entry.shape, Shape::V2);
+    assert!(names(empty.path()).is_empty());
+    assert_eq!(old.file, kept.path().join(FILES[1]));
+    assert_eq!(old.entry.shape, Shape::V1);
+    assert_eq!(read(kept.path(), FILES[1]), TEAMS_V1);
+    // What it plans is what the render then writes.
+    for (root, planned) in [(&empty, new), (&kept, old)] {
+        let rendered =
+            opencode_mcp::render(root.path(), &definition, &AgentHomes::default()).unwrap();
+        assert_eq!(rendered.entry, planned.entry);
+        assert_eq!(rendered.file, planned.file);
+    }
+}

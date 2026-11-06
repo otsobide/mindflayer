@@ -785,3 +785,33 @@ fn a_symlink_on_the_way_is_refused_and_what_it_points_at_left_alone() {
         TEAMS
     );
 }
+
+#[test]
+fn what_a_render_would_write_and_say_is_planned_and_refused_as_it_is_with_nothing_written() {
+    let name = McpMother::name();
+    let definition = parsed(&McpMother::address_for_codex(&name));
+    let root = TempDir::new().unwrap();
+    let (_trusting, trusted) = codex_home(Some(&trusting(root.path(), "trusted")));
+    let (_colliding, colliding) = codex_home(Some(&users(&name)));
+
+    let unsaid = codex_mcp::planned(root.path(), &definition, &trusted).unwrap();
+    let untrusted = codex_mcp::planned(root.path(), &definition, &AgentHomes::default()).unwrap();
+    let refused = codex_mcp::planned(root.path(), &definition, &colliding).unwrap_err();
+
+    assert_eq!(unsaid.file, root.path().join(FILE));
+    assert!(unsaid.warnings.is_empty(), "{:?}", unsaid.warnings);
+    assert_eq!(
+        untrusted
+            .warnings
+            .iter()
+            .map(codex_mcp::Warning::code)
+            .collect::<Vec<_>>(),
+        ["codex_mcp_untrusted"]
+    );
+    assert_eq!(refused.code(), "codex_mcp_collision");
+    assert!(names(root.path()).is_empty());
+    // What it plans is what the render then writes, and says.
+    let rendered = codex_mcp::render(root.path(), &definition, &AgentHomes::default()).unwrap();
+    assert_eq!(rendered.entry, untrusted.entry);
+    assert_eq!(rendered.warnings, untrusted.warnings);
+}
