@@ -1455,6 +1455,114 @@ fn a_marketplace_is_typed_on_the_shelf_when_none_is_picked() {
     assert_eq!(press_key(&mut app, KeyCode::Enter), TuiStep::Stay);
 }
 
+/// A remote that fetches GitHub's `acme/market` from the repository at
+/// `.0`, on the disk, and refuses every other address: what reaches a tree
+/// URL's marketplace with no network.
+#[derive(Debug)]
+struct AcmeMarket(String);
+
+impl mindweaver_core::port::Remote for AcmeMarket {
+    fn fetch(
+        &self,
+        url: &str,
+        reference: Option<&str>,
+        pin: Option<&mindweaver_core::value::Revision>,
+        into: &Path,
+        watch: &Watch,
+    ) -> Result<mindweaver_core::port::Cloned, mindweaver_core::port::GitError> {
+        use mindweaver_core::port::GitError;
+        if url != "https://github.com/acme/market" {
+            return Err(GitError::Fetch {
+                url: url.to_owned(),
+                detail: String::from("no repository there"),
+            });
+        }
+        mindweaver_core::adapter::gix::Gix.fetch(&self.0, reference, pin, into, watch)
+    }
+
+    fn scrub(&self, clone: &Path) -> Result<bool, mindweaver_core::port::GitError> {
+        mindweaver_core::adapter::gix::Gix.scrub(clone)
+    }
+}
+
+#[test]
+fn a_marketplace_typed_as_a_tree_url_with_no_folder_lists_the_plugins_in_the_folder_it_names() {
+    let market = repository(&[
+        (
+            "sub/.claude-plugin/marketplace.json",
+            r#"{"name": "m", "plugins": [{"name": "a", "source": "./a"}]}"#,
+        ),
+        ("sub/a/skills/one/SKILL.md", &skill_file("one", "First")),
+    ]);
+    let head = fs::read_to_string(market.path().join(".git/HEAD")).unwrap();
+    let branch = head
+        .trim()
+        .trim_start_matches("ref: refs/heads/")
+        .to_owned();
+    let tree = format!("https://github.com/acme/market/tree/{branch}/sub");
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+    // Listed as the line would list it, through a remote that reaches the
+    // repository on the disk, since the line itself would reach GitHub.
+    let workspace = WeaverWorkspace::open(dir.path()).unwrap();
+    let remote = AcmeMarket(market.path().to_string_lossy().into_owned());
+    let catalog = mindweaver_core::gather::Request::addressed(&tree, None, None)
+        .unwrap()
+        .through(std::sync::Arc::new(remote));
+    mindweaver_core::marketplace::gather(
+        &workspace,
+        &workspace.ledger().unwrap(),
+        &mindweaver_core::marketplace::Request::new(
+            catalog,
+            mindweaver_core::marketplace::Pick::Listing,
+        ),
+    )
+    .unwrap();
+    let mut app = tui_in(dir.path());
+    press_and_run(&mut app, KeyCode::Char('s'));
+    press_key(&mut app, KeyCode::Char('m'));
+    // Typed afresh, the folder left as the form has it.
+    app.mode = Mode::Gathering(tui::state::GatherForm::marketplace());
+    type_text(&mut app, &tree);
+    app.runner = Some(Runner::new(|words, _, _, _| Done {
+        command: words.join(" "),
+        stdout: String::new(),
+        stderr: Vec::new(),
+        error: None,
+        ok: true,
+    }));
+
+    let listing = press_and_run(&mut app, KeyCode::Enter).unwrap();
+
+    assert_eq!(
+        listing,
+        Task::ListPlugins {
+            url: tree.clone(),
+            folder: String::new(),
+            reference: None,
+        }
+    );
+    let Mode::Plugins(plugins) = &app.mode else {
+        panic!("{:?}", app.mode);
+    };
+    let names: Vec<&str> = plugins
+        .entries
+        .iter()
+        .map(|(name, _, _)| name.as_str())
+        .collect();
+    assert_eq!(names, ["a"]);
+    // Its plugins' line names the folder as the listing's did: by the URL.
+    press_key(&mut app, KeyCode::Char(' '));
+    let TuiStep::Run(gathering) = press_key(&mut app, KeyCode::Enter) else {
+        panic!("{:?}", app.mode);
+    };
+    assert!(matches!(
+        gather_line(&gathering),
+        GatherCommand::Marketplace { source, path: None, plugins, .. }
+            if source == tree && plugins == ["a"]
+    ));
+}
+
 #[test]
 fn an_empty_shelf_leaves_its_keys_nothing_to_do() {
     let dir = TempDir::new().unwrap();

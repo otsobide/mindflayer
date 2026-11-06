@@ -31,7 +31,7 @@ use mindweaver_core::url::redacted;
 use mindweaver_core::view::{self, Directory, Held, LoadedWorkspace, Snapshot};
 use mindweaver_core::{
     scan, AgentHomes, Kind, MarkerFile, MindProject, SourceKind, Template, WeaverWorkspace,
-    WorkspaceError,
+    WorkspaceError, DEFAULT_SUBDIRECTORY,
 };
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::crossterm::terminal::{self, EnterAlternateScreen};
@@ -309,8 +309,11 @@ fn listed(
     reference: Option<&str>,
     dones: Vec<Done>,
 ) -> Performed {
-    let request = Request::addressed(url, reference.map(str::to_owned), Some(folder.to_owned()))
-        .map_err(CliError::from);
+    // The root left unsaid, as the line leaves it, so a tree URL's folder
+    // is the one it names.
+    let given = (folder != DEFAULT_SUBDIRECTORY).then(|| folder.to_owned());
+    let request =
+        Request::addressed(url, reference.map(str::to_owned), given).map_err(CliError::from);
     let read = request.and_then(|request| {
         let workspace = WeaverWorkspace::open(base)?;
         let ledger = workspace.ledger_for_reading()?;
