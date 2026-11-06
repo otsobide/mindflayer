@@ -7,6 +7,7 @@
 pub(crate) mod activate;
 pub(crate) mod adopt;
 pub(crate) mod artifact;
+pub(crate) mod doctor;
 pub(crate) mod gather;
 pub(crate) mod install;
 pub(crate) mod known;
@@ -44,6 +45,7 @@ use artifact::{
     add_to, edit_in, remove_everywhere, remove_from, remove_own, rename_in, templates_of,
     would_remove_everywhere,
 };
+use doctor::{doctor_here, doctor_of_project, doctor_of_workspace};
 use gather::run_gather;
 use install::{install_named, uninstall_named, uninstall_orphans};
 use known::{forget_command, workspaces_command};
@@ -281,6 +283,7 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
             Ok(json_or_text(found.filter(|_| *json), text))
         }
         Command::Status { json } => status_here(project_here(&directory)?, lookup, *json),
+        Command::Doctor { json } => doctor_here(project_here(&directory)?, lookup, *json),
         Command::Link => link_here(&directory, lookup),
         Command::Unlink => unlink_here(&directory, lookup),
         Command::Load { workspaces } => {
@@ -906,6 +909,19 @@ fn run_weaver(
                     *json,
                 )),
                 None => Ok(status_of_workspace(workspace, *json)),
+            })
+        }
+        // Read as `status` reads, and told the agent homes and the names of
+        // the variables set by the lookup, as core never looks them up.
+        WeaverCommand::Doctor { project, json } => {
+            reading_workspace(directory, lookup, |workspace| match project {
+                Some(project) => Ok(doctor_of_project(
+                    workspace,
+                    &workspace.pick(project)?,
+                    lookup,
+                    *json,
+                )),
+                None => Ok(doctor_of_workspace(workspace, lookup, *json)),
             })
         }
         // Laid out as JSON once the read is done, the hint about a workspace

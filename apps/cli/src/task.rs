@@ -1021,6 +1021,7 @@ impl Refusal {
                 | Command::List { .. }
                 | Command::Validate { .. }
                 | Command::Status { .. }
+                | Command::Doctor { .. }
                 | Command::Link
                 | Command::Unlink
                 | Command::Load { .. }
@@ -1069,6 +1070,7 @@ impl Refusal {
                 | WeaverCommand::List { .. }
                 | WeaverCommand::Validate { .. }
                 | WeaverCommand::Status { .. }
+                | WeaverCommand::Doctor { .. }
                 | WeaverCommand::Link { .. }
                 | WeaverCommand::Unlink { .. }
                 | WeaverCommand::Relink { .. }
@@ -1193,6 +1195,7 @@ impl Caution {
                 | Command::Show { .. }
                 | Command::Validate { .. }
                 | Command::Status { .. }
+                | Command::Doctor { .. }
                 | Command::Link
                 | Command::Load { .. }
                 | Command::Agents { .. }
@@ -1237,6 +1240,7 @@ impl Caution {
                 | WeaverCommand::Show { .. }
                 | WeaverCommand::Validate { .. }
                 | WeaverCommand::Status { .. }
+                | WeaverCommand::Doctor { .. }
                 | WeaverCommand::Link { .. }
                 | WeaverCommand::Relink { .. }
                 | WeaverCommand::Load { .. }

@@ -176,6 +176,7 @@ fn a_lookup_hands_core_what_it_holds() {
         activated: path("/activated"),
         home: path("/home"),
         agents: AgentHomes::default(),
+        variables: Default::default(),
         older: Vec::new(),
     };
 
@@ -367,4 +368,35 @@ fn agent_homes_takes_every_option_first() {
         agent_homes_from(&every_option(""), &environment(&[]), None)
     );
     assert_eq!(agent_homes(&every_option_empty()), AgentHomes::default());
+}
+
+#[test]
+fn a_lookup_tells_doctor_its_agent_homes_and_the_names_it_was_given_alone() {
+    let lookup = Lookup {
+        agents: AgentHomes {
+            codex_home: path("/codex"),
+            ..AgentHomes::default()
+        },
+        variables: ["GITHUB_TOKEN", "PATH"].map(String::from).into(),
+        ..Lookup::default()
+    };
+
+    let machine = lookup.machine();
+
+    assert_eq!(
+        machine,
+        mindweaver_core::doctor::Machine::new(
+            lookup.agents.clone(),
+            [String::from("PATH"), String::from("GITHUB_TOKEN")]
+        )
+    );
+}
+
+#[test]
+fn the_variables_set_are_read_by_name_and_hold_no_value() {
+    let set = set_variables();
+
+    // Set wherever a test runs, and never a `name=value`.
+    assert!(set.contains("PATH"), "{set:?}");
+    assert!(set.iter().all(|name| !name.contains('=')), "{set:?}");
 }

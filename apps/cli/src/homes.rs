@@ -11,9 +11,11 @@
 //! taken, so a shell an older `activate` set up keeps its workspace, and the
 //! line says so ([`Lookup::older`]).
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use mindweaver_core::activate::{FLAYER_WORKSPACE_VARIABLE, WORKSPACE_VARIABLE};
+use mindweaver_core::doctor::Machine;
 use mindweaver_core::{AgentHomes, Inputs, Intent};
 
 use crate::AgentHomeOptions;
@@ -39,6 +41,10 @@ pub struct Lookup {
     /// Where each agent keeps what it reads for every project
     /// ([`agent_homes`]); none of them unless given.
     pub agents: AgentHomes,
+    /// The names of the environment variables set where the command line
+    /// runs, and nothing of what they hold ([`set_variables`]): what doctor
+    /// says of an MCP server's inputs. None unless given.
+    pub variables: BTreeSet<String>,
     /// Each variable taken under the name a Mindflayer build read, because
     /// the one it is called now was not set, for the line to say.
     pub older: Vec<Older>,
@@ -81,8 +87,16 @@ impl Lookup {
         Self {
             home,
             agents: agent_homes(agents),
+            variables: set_variables(),
             ..chosen
         }
+    }
+
+    /// What doctor is told of the machine: the agent homes and the names of
+    /// the variables set, both decided once per command line here, so a
+    /// line the TUI or the panel runs is told what its launch was.
+    pub fn machine(&self) -> Machine {
+        Machine::new(self.agents.clone(), self.variables.iter().cloned())
     }
 
     /// What `-W` and `$MINDWEAVER_WORKSPACE` say, with the environment passed
@@ -249,6 +263,16 @@ fn resolve(
         (None, None) => return fallback,
     };
     (!chosen.is_empty()).then(|| PathBuf::from(chosen))
+}
+
+/// The name of every environment variable set, read once per command line,
+/// each value dropped as it is read: core is handed names alone, so no
+/// report it builds can say a value (#96). A name that is not Unicode is
+/// none an MCP server's input can be read from.
+fn set_variables() -> BTreeSet<String> {
+    std::env::vars_os()
+        .filter_map(|(name, _)| name.into_string().ok())
+        .collect()
 }
 
 /// A variable's value. One that is not Unicode counts as unset, as it always
