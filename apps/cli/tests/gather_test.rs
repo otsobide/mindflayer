@@ -194,6 +194,36 @@ fn a_gathered_name_cannot_put_a_carriage_return_on_the_terminal() {
 }
 
 #[test]
+fn a_name_two_skills_share_cannot_put_an_escape_on_the_terminal() {
+    // The clash quotes the name both declare, which the source writes.
+    let declared = "---\nname: \"pdf\\x1b[31mRED\"\ndescription: Read PDFs\n---\n";
+    let source = repository(&[
+        ("skills/one/SKILL.md", declared),
+        ("skills/two/SKILL.md", declared),
+    ]);
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+    let url = source.path().to_string_lossy().into_owned();
+
+    let previewed = weaver(dir.path(), &["gather", "git", &url, "--dry-run"]).unwrap();
+    let gathered = weaver(dir.path(), &["gather", "git", &url]).unwrap();
+
+    for outcome in [&previewed, &gathered] {
+        assert_eq!(
+            stderr_codes(outcome),
+            [
+                Some(String::from("gathered_name_clash")),
+                Some(String::from("gathered_name_clash")),
+            ]
+        );
+        for line in &outcome.stderr {
+            assert!(!line.text.contains('\u{1b}'), "{:?}", line.text);
+            assert!(line.text.contains("`pdf [31mRED`"), "{:?}", line.text);
+        }
+    }
+}
+
+#[test]
 fn gather_list_names_where_each_skill_came_from() {
     let source = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it"))]);
     let dir = TempDir::new().unwrap();

@@ -518,21 +518,33 @@ fn gathered(url: &str, report: &Report) -> Outcome {
     // An artifact that could not be taken is a warning beside what was, not a
     // reason to be told nothing about the rest; so is what is wrong with one
     // that was taken anyway.
-    let stderr: Vec<Warning> = report
-        .failures
+    let stderr = said_of(&report.failures, &report.warnings);
+    let ok = stderr.is_empty();
+    Outcome { stdout, stderr, ok }
+}
+
+/// What a gather, or a dry run of one, could not take and what is wrong
+/// with what it took, as the lines it warns of.
+///
+/// Printable, both: a warning quotes what the skill declares and a failure
+/// the name two skills share and the folders they are in, which are the
+/// source's to write, and an escape in one would reach the terminal.
+fn said_of(failures: &[gather::Failure], warnings: &[gather::Warning]) -> Vec<Warning> {
+    failures
         .iter()
-        .map(|failure| Warning::coded(failure.code(), format!("warning: {failure}")))
-        // Printable, because a warning quotes what the skill declares, which
-        // is the source's to write.
-        .chain(report.warnings.iter().map(|warning| {
+        .map(|failure| {
+            Warning::coded(
+                failure.code(),
+                format!("warning: {}", printable(&failure.to_string())),
+            )
+        })
+        .chain(warnings.iter().map(|warning| {
             Warning::coded(
                 warning.issue.code(),
                 format!("warning: {}", printable(&warning.to_string())),
             )
         }))
-        .collect();
-    let ok = stderr.is_empty();
-    Outcome { stdout, stderr, ok }
+        .collect()
 }
 
 /// What a dry run of a gather found: the source, by the URL it would be
@@ -566,17 +578,7 @@ fn previewed(url: &str, preview: &Preview) -> Outcome {
             plural(preview.found.len(), "skill")
         );
     }
-    let stderr: Vec<Warning> = preview
-        .failures
-        .iter()
-        .map(|failure| Warning::coded(failure.code(), format!("warning: {failure}")))
-        .chain(preview.warnings.iter().map(|warning| {
-            Warning::coded(
-                warning.issue.code(),
-                format!("warning: {}", printable(&warning.to_string())),
-            )
-        }))
-        .collect();
+    let stderr = said_of(&preview.failures, &preview.warnings);
     let ok = stderr.is_empty();
     Outcome { stdout, stderr, ok }
 }
