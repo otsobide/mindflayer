@@ -163,6 +163,25 @@ impl Request {
         }
     }
 
+    /// Gather `source` again as the ledger records it was gathered last:
+    /// from its URL, at its branch or tag, out of its folder, at the commit
+    /// it is pinned to when it is one, and under the name it has, which a
+    /// request naming none leaves as it is.
+    ///
+    /// At its pin, rather than at whatever the branch is at now: a pin is
+    /// what the shelf is said to hold for good, moved only by a gather told
+    /// another (`gather git --pin`), never by one told to bring the source
+    /// up to date. From its URL as it was recorded, so a relative path is
+    /// read from where the gather runs, as one typed is.
+    pub fn again(source: &ledger::Source) -> Self {
+        match source.kind {
+            SourceKind::Git => Request::git(source.url.as_str())
+                .from_subdirectory(source.subdirectory.clone())
+                .at(source.reference.clone())
+                .pinned(source.pin.as_ref().map(|pin| pin.as_str().to_owned())),
+        }
+    }
+
     /// Take from `subdirectory` instead of `skills`.
     pub fn from_subdirectory(mut self, subdirectory: impl Into<String>) -> Self {
         self.subdirectory = subdirectory.into();

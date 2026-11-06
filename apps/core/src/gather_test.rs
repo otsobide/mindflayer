@@ -13,7 +13,7 @@ use std::sync::Mutex;
 use tempfile::TempDir;
 
 use crate::mother::random;
-use crate::mother::{SkillMother, SourceMother, UrlMother, WorkspaceMother};
+use crate::mother::{RevisionMother, SkillMother, SourceMother, UrlMother, WorkspaceMother};
 
 const DRAWS: usize = 200;
 
@@ -104,6 +104,28 @@ fn a_request_is_pinned_to_what_it_is_told_and_to_nothing_again_by_none() {
     );
     assert_eq!(Request::git(UrlMother::https()).pin, None);
     assert_eq!(request.pinned(None::<String>).pin, None);
+}
+
+#[test]
+fn a_source_is_gathered_again_from_where_and_as_it_was_gathered_last() {
+    for _ in 0..DRAWS {
+        let mut source = SourceMother::random();
+        source.subdirectory = random::word();
+        source.pin = random::chance().then(RevisionMother::random);
+
+        let request = Request::again(&source);
+
+        assert_eq!(request.source.url(), source.url.as_str(), "{source:?}");
+        assert_eq!(request.source.reference(), source.reference.as_deref());
+        assert_eq!(request.subdirectory, source.subdirectory);
+        assert_eq!(request.kind, Kind::Skill);
+        assert_eq!(
+            request.pin.as_deref(),
+            source.pin.as_ref().map(|pin| pin.as_str())
+        );
+        // Under the name it has, which a request naming none leaves.
+        assert_eq!(request.name, None);
+    }
 }
 
 #[test]
