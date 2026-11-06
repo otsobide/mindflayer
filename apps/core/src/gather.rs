@@ -433,8 +433,9 @@ pub struct Preview {
     /// Each skill a gather would take, in the order of where it is in the
     /// repository.
     pub found: Vec<Previewed>,
-    /// What keeps the rest from being taken, as a gather would say it, each
-    /// path in the clone the dry run read and took away again.
+    /// What keeps the rest from being taken, as a gather would say it, but
+    /// for each path in the clone, which is said by where it is in the
+    /// repository: the clone the dry run read is taken away again.
     ///
     /// Not serialized, nor `warnings`, as a report's are not: a front end
     /// says both as its warnings.
@@ -561,8 +562,11 @@ fn look(
             summary: artifact.summary().map(str::to_owned),
         });
     }
-    failures.sort_by(|a, b| a.path().cmp(b.path()));
-    preview.failures = failures;
+    preview.failures = failures
+        .into_iter()
+        .map(|failure| failure.in_repository(&clone.root))
+        .collect();
+    preview.failures.sort_by(|a, b| a.path().cmp(b.path()));
     preview.warnings.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(preview)
 }
@@ -1627,6 +1631,35 @@ codes!(Failure {
 });
 
 impl Failure {
+    /// The same failure, each path in the repository cloned at `clone` said
+    /// by its route from the repository's root instead, `.` for the root: a
+    /// dry run's, whose clone is taken away once it is read
+    /// ([`preview`]), so a path into it would name nothing. A path that is
+    /// not in the clone, the shelf's or where a link leads, is left as it
+    /// is.
+    fn in_repository(self, clone: &Path) -> Self {
+        let route = |path: PathBuf| match path.strip_prefix(clone) {
+            Ok(route) if route.as_os_str().is_empty() => PathBuf::from("."),
+            Ok(route) => route.to_path_buf(),
+            Err(_) => path,
+        };
+        match self {
+            Failure::Artifact(error) => Failure::Artifact(error.moved(route)),
+            Failure::UnusableName { path } => Failure::UnusableName { path: route(path) },
+            Failure::Unnamed { path } => Failure::Unnamed { path: route(path) },
+            Failure::LinkOutside { path, to } => Failure::LinkOutside {
+                path: route(path),
+                to,
+            },
+            Failure::Clash { path, name, with } => Failure::Clash {
+                path: route(path),
+                name,
+                with,
+            },
+            Failure::Copy { .. } | Failure::Unhashed { .. } | Failure::Unremoved { .. } => self,
+        }
+    }
+
     /// The path the failure is about.
     pub fn path(&self) -> &Path {
         match self {

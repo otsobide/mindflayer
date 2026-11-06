@@ -774,6 +774,13 @@ fn a_dry_run_says_what_a_gather_would_warn_of_and_exits_as_it_would() {
             Some(String::from("name_not_kebab_case")),
         ]
     );
+    // Where it is in the repository, as the clone it was read in is gone.
+    assert_eq!(
+        outcome.stderr[0].to_string(),
+        "warning: .claude/skills/pdf: another skill in this source is called `pdf` too, at \
+         skills/pdf, so neither is gathered: gather the one you want with --path naming its \
+         folder"
+    );
     assert!(
         outcome.stderr[2]
             .to_string()

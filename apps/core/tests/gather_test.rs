@@ -2016,9 +2016,11 @@ fn a_dry_run_lists_what_a_gather_would_take_and_writes_nothing() {
         .iter()
         .all(|warning| warning.path == std::path::Path::new("skills/pdf--forms/SKILL.md")));
     assert_eq!(preview.failures.len(), 1, "{:?}", preview.failures);
-    assert!(preview.failures[0]
-        .path()
-        .ends_with("skills/broken/SKILL.md"));
+    // Where it is in the repository, as the clone it was read in is gone.
+    assert_eq!(
+        preview.failures[0].path(),
+        std::path::Path::new("skills/broken/SKILL.md")
+    );
     // Nothing registered, shelved, recorded or logged, and no clone kept.
     assert_eq!(ledger.sources().unwrap(), []);
     assert!(ledger.gathered().unwrap().is_empty());

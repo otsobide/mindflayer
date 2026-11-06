@@ -1641,6 +1641,30 @@ impl ArtifactError {
             | ArtifactError::Definition { path, .. } => path,
         }
     }
+
+    /// The same failure, about the file `moved` makes of its path: what a
+    /// dry run of a gather says of one in a clone it took away
+    /// ([`crate::gather::preview`]).
+    pub(crate) fn moved(self, moved: impl FnOnce(PathBuf) -> PathBuf) -> Self {
+        match self {
+            ArtifactError::Read { path, source } => ArtifactError::Read {
+                path: moved(path),
+                source,
+            },
+            ArtifactError::FrontMatter { path, source } => ArtifactError::FrontMatter {
+                path: moved(path),
+                source,
+            },
+            ArtifactError::Parse { path, source } => ArtifactError::Parse {
+                path: moved(path),
+                source,
+            },
+            ArtifactError::Definition { path, source } => ArtifactError::Definition {
+                path: moved(path),
+                source,
+            },
+        }
+    }
 }
 
 #[cfg(test)]

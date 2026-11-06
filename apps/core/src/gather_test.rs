@@ -1012,6 +1012,41 @@ fn the_folder_searched_holding_a_manifest_is_the_one_candidate() {
     assert_eq!(found, [dir.path()]);
 }
 
+#[test]
+fn a_dry_run_s_failure_is_said_by_where_it_is_in_the_repository_and_only_there() {
+    let clone = Path::new("/w/.mindweaver/cache/+dry-run-1-2");
+    let unread = Failure::Artifact(ArtifactError::Read {
+        path: clone.join("skills/broken/SKILL.md"),
+        source: io::Error::other("denied"),
+    });
+    let unnamed = Failure::Unnamed {
+        path: clone.to_path_buf(),
+    };
+    let outside = Failure::LinkOutside {
+        path: clone.join("skills/keys"),
+        to: PathBuf::from("/home/you/.ssh"),
+    };
+    let shelved = Failure::Unhashed {
+        path: PathBuf::from("/w/.mindweaver/skills/s/deploy"),
+        source: io::Error::other("gone"),
+    };
+
+    let said: Vec<String> = [unread, unnamed, outside, shelved]
+        .into_iter()
+        .map(|failure| failure.in_repository(clone).path().display().to_string())
+        .collect();
+
+    assert_eq!(
+        said,
+        [
+            "skills/broken/SKILL.md",
+            ".",
+            "skills/keys",
+            "/w/.mindweaver/skills/s/deploy"
+        ]
+    );
+}
+
 /// The folder keeps the name the source gave it, whatever the skill
 /// declares: the disagreement is `validate`'s to say.
 #[test]
