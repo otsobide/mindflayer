@@ -3642,6 +3642,10 @@ to say. Its MCP servers are kept in
 `.mcp.json` or in `mcp.json` (`marketplace::MCP_FILES`, #104), and the note
 names the file each is in (`Child::mcp_files`), so a person knows which to
 read; nothing of either is imported, which this roadmap never does. A
+package in the Agent Plugins format that `gather git` gathers, the folder
+it searches, is said the same way (`gather::Report::holds`), since it is a
+plugin by its own `plugin.json` with no catalog to list it; one a
+repository's search comes to below that folder is not (open questions). A
 plugin that is one skill, its `SKILL.md` at its root or its root the skill
 its entry names, is put on the shelf without them, where it keeps each
 (`hooks`, `agents`, `.mcp.json`, `mcp.json`), as a skill's
@@ -13783,9 +13787,10 @@ it once as it closes.
   nor is a plugin installed whole. A plugin's MCP files, `.mcp.json` and
   `mcp.json`, are named and never imported (#104), and a Codex plugin's app
   connectors, `.app.json`, are not looked at (#104's out of scope). A
-  package `gather git` gathers in the Agent Plugins format is searched as
-  that format says, but what it holds beside its skills is not said: only a
-  catalog's gather says it, by the plugin's entry.
+  package in the Agent Plugins format that a repository's search comes to
+  below the folder `gather git` gathers is searched as that format says,
+  but what it holds beside its skills is not said: only the package
+  gathered, and a plugin a catalog lists, are.
 - **Which `$schema` is the Agent Plugins format's.** No copy of that
   format's specification was at hand when #104 was written, offline, so a
   root `plugin.json` is taken for one of its manifests when its `$schema`

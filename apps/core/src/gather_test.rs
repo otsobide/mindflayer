@@ -616,6 +616,8 @@ fn a_report_counts_everything_now_on_the_shelf_because_of_it() {
             warnings: Vec::new(),
             // Off the shelf, so counted nowhere.
             removed: (0..removed).map(|_| harvested()).collect(),
+            holds: Vec::new(),
+            mcp_files: Vec::new(),
         };
 
         assert_eq!(report.total(), added + updated + unchanged);

@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use common::{commit, repository, skill, url, workspace, write_files};
 use mindweaver_core::gather::{self, GatherError, Progress, Request, Search, Warning, Watch};
 use mindweaver_core::ledger::{Action, Ledger, SourceKind};
-use mindweaver_core::marketplace::Dialect;
+use mindweaver_core::marketplace::{Dialect, Holding};
 use mindweaver_core::value::SourceName;
 use mindweaver_core::{Kind, MindProject, ValidationIssue, WeaverWorkspace, DEFAULT_SUBDIRECTORY};
 use tempfile::TempDir;
@@ -1521,6 +1521,55 @@ fn an_agent_plugins_package_offers_its_skills_children_alone_and_nothing_deeper(
 }
 
 #[test]
+fn what_a_package_gathered_whole_holds_beside_its_skills_is_reported_and_not_taken() {
+    let files = [
+        ("skills/deploy/SKILL.md", skill("deploy", "Ship it")),
+        ("mcp.json", String::from(r#"{"mcpServers": {}}"#)),
+        ("hooks/hooks.json", String::from("{}")),
+    ];
+    let files: Vec<(&str, &str)> = files
+        .iter()
+        .map(|(at, text)| (*at, text.as_str()))
+        .collect();
+    let package = repository(&[&[("plugin.json", PACKAGE)], files.as_slice()].concat());
+    let plain = repository(&files);
+    let gathered = |source: &TempDir, search: Search| {
+        let (dir, workspace) = workspace();
+        let ledger = workspace.ledger().unwrap();
+        let report = gather::gather(
+            &workspace,
+            &ledger,
+            &Request::git(url(source)).searching(search),
+        )
+        .unwrap();
+        (dir, workspace, report)
+    };
+
+    let (_dir, workspace, report) = gathered(&package, Search::Layouts);
+
+    assert_eq!(report.holds, [Holding::Hooks, Holding::McpServers]);
+    assert_eq!(report.mcp_files, ["mcp.json"]);
+    let shelf = workspace.gathered_dir(Kind::Skill).join(&report.directory);
+    let mut placed: Vec<String> = std::fs::read_dir(&shelf)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    placed.sort();
+    assert_eq!(placed, ["deploy"]);
+    // A repository that is no package is no plugin of anybody's; a plugin a
+    // catalog lists is said by its catalog's gather, by its entry.
+    for (source, search) in [
+        (&plain, Search::Layouts),
+        (&package, listed_by(Dialect::Claude)),
+    ] {
+        let (_dir, _workspace, report) = gathered(source, search);
+
+        assert_eq!(report.holds, [], "{report:?}");
+        assert_eq!(report.mcp_files, Vec::<&str>::new(), "{report:?}");
+    }
+}
+
+#[test]
 fn a_package_the_search_of_a_repository_comes_to_offers_its_skills_children_alone() {
     let source = repository(&[
         ("kit/plugin.json", PACKAGE),
@@ -2496,6 +2545,8 @@ fn a_gather_report_serializes_what_changed_and_leaves_its_failures_to_the_warnin
         }],
         name: SourceName::parse("acme-skills").unwrap(),
         removed: vec![harvested("ship")],
+        holds: vec![Holding::McpServers],
+        mcp_files: vec!["mcp.json"],
     };
 
     let serialized = serde_json::to_string(&report).unwrap();

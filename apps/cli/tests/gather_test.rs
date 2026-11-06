@@ -68,6 +68,39 @@ fn gathering_again_says_nothing_moved() {
 }
 
 #[test]
+fn what_an_agent_plugins_package_holds_beside_its_skills_is_a_note_naming_its_mcp_file() {
+    let source = repository(&[
+        (
+            "plugin.json",
+            r#"{"$schema": "https://example.org/agent-plugins/plugin.schema.json", "name": "kit"}"#,
+        ),
+        ("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it")),
+        ("mcp.json", r#"{"mcpServers": {}}"#),
+    ]);
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+
+    let outcome = weaver(
+        dir.path(),
+        &["gather", "git", &source.path().to_string_lossy()],
+    )
+    .unwrap();
+
+    assert!(outcome.ok, "{:?}", outcome.stderr);
+    let name = outcome.stdout.split(':').next().unwrap();
+    assert_eq!(
+        outcome.stderr,
+        [format!(
+            "note: {name}: its plugin holds MCP servers in `mcp.json` too, which are not \
+             gathered"
+        )]
+    );
+    let shelf = weaver(dir.path(), &["gather", "list"]).unwrap();
+    assert!(shelf.stdout.starts_with("deploy  "), "{}", shelf.stdout);
+    assert_eq!(shelf.stdout.lines().count(), 1, "{}", shelf.stdout);
+}
+
+#[test]
 fn a_skill_that_cannot_be_read_is_a_warning_and_a_non_zero_exit() {
     let source = repository(&[
         ("skills/good/SKILL.md", &skill_file("good", "Fine")),

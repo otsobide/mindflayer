@@ -640,8 +640,11 @@ fn gathered(url: &str, report: &Report) -> Outcome {
     // An artifact that could not be taken is a warning beside what was, not a
     // reason to be told nothing about the rest; so is what is wrong with one
     // that was taken anyway.
-    let stderr = said_of(&report.failures, &report.warnings);
+    let mut stderr = said_of(&report.failures, &report.warnings);
     let ok = stderr.is_empty();
+    // What a package gathered whole holds beside its skills is a note, and
+    // no reason to fail, as a marketplace's plugin's is (#104).
+    stderr.extend(holds_note(&report.name, &report.holds, &report.mcp_files));
     Outcome { stdout, stderr, ok }
 }
 
@@ -736,19 +739,9 @@ fn marketplace_gathered(report: &marketplace::Report, pick: &Pick) -> Outcome {
                 outcome.stdout.push_str(&said.stdout);
                 outcome.stderr.extend(said.stderr);
                 outcome.ok &= said.ok;
-                if !child.holds.is_empty() {
-                    let holds: Vec<String> = child
-                        .holds
-                        .iter()
-                        .map(|holding| held(*holding, child))
-                        .collect();
-                    let holds: Vec<&str> = holds.iter().map(String::as_str).collect();
-                    outcome.stderr.push(Warning::from(format!(
-                        "note: {}: its plugin holds {} too, which are not gathered",
-                        printable(&report.name),
-                        and(&holds)
-                    )));
-                }
+                outcome
+                    .stderr
+                    .extend(holds_note(&report.name, &child.holds, &child.mcp_files));
             }
             Err(error) => {
                 outcome.stderr.push(Warning::coded(
@@ -778,17 +771,32 @@ fn gathered_url(catalog: &Listed, child: &marketplace::Child) -> String {
         .unwrap_or_else(|| catalog.url.to_string())
 }
 
+/// The note saying what the plugin the source `name` was gathered from
+/// holds beside its skills (`holds`), which is not taken, and the files its
+/// MCP servers are in (`mcp_files`); none when it holds nothing.
+fn holds_note(name: &str, holds: &[Holding], mcp_files: &[&str]) -> Option<Warning> {
+    if holds.is_empty() {
+        return None;
+    }
+    let holds: Vec<String> = holds
+        .iter()
+        .map(|holding| held(*holding, mcp_files))
+        .collect();
+    let holds: Vec<&str> = holds.iter().map(String::as_str).collect();
+    Some(Warning::from(format!(
+        "note: {}: its plugin holds {} too, which are not gathered",
+        printable(name),
+        and(&holds)
+    )))
+}
+
 /// What a note says a plugin holds of `holding`: its words, and for its MCP
-/// servers the files its folder keeps them in, when it keeps any, so a
-/// person knows which to read (#104).
-fn held(holding: Holding, child: &marketplace::Child) -> String {
+/// servers the files its folder keeps them in, `mcp_files`, when it keeps
+/// any, so a person knows which to read (#104).
+fn held(holding: Holding, mcp_files: &[&str]) -> String {
     match holding {
-        Holding::McpServers if !child.mcp_files.is_empty() => {
-            let files: Vec<String> = child
-                .mcp_files
-                .iter()
-                .map(|file| format!("`{file}`"))
-                .collect();
+        Holding::McpServers if !mcp_files.is_empty() => {
+            let files: Vec<String> = mcp_files.iter().map(|file| format!("`{file}`")).collect();
             let files: Vec<&str> = files.iter().map(String::as_str).collect();
             format!("{} in {}", holding.words(), and(&files))
         }

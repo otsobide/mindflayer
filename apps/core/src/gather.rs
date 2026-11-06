@@ -32,7 +32,7 @@ use crate::hash;
 use crate::kind::{Kind, Layout};
 use crate::ledger::{self, Action, Ledger, LedgerError, Merged, Outcome, SourceKind, Upstream};
 use crate::lock::LockError;
-use crate::marketplace::Dialect;
+use crate::marketplace::{Dialect, Holding};
 use crate::paths;
 use crate::plugin::{self, Manifest};
 use crate::port::{Cloned, GitError, Remote};
@@ -424,6 +424,19 @@ pub struct Report {
     /// taken, now off the shelf, each where it was: added after the rest
     /// (#100), and on the shelf no longer, so not in [`total`](Self::total).
     pub removed: Vec<Harvested>,
+    /// What the package in the Agent Plugins format a repository's gather
+    /// searched holds beside its skills, which is not taken (#104), said as
+    /// a marketplace says what a plugin it lists holds
+    /// ([`crate::marketplace::Child`]). Empty for a plugin a catalog lists,
+    /// which its catalog's gather says by the plugin's entry.
+    ///
+    /// Not serialized, nor `mcp_files`: a front end says both in a note.
+    #[serde(skip)]
+    pub holds: Vec<Holding>,
+    /// Which of [`crate::marketplace::MCP_FILES`] that package holds, by
+    /// name, so a person knows which file to read; never imported.
+    #[serde(skip)]
+    pub mcp_files: Vec<&'static str>,
 }
 
 impl Report {
@@ -1239,6 +1252,8 @@ pub(crate) fn place(
         warnings: Vec::new(),
         name: source.name.clone(),
         removed: Vec::new(),
+        holds: Vec::new(),
+        mcp_files: Vec::new(),
     };
 
     // Everything is read before anything is placed, rather than each
@@ -1254,7 +1269,11 @@ pub(crate) fn place(
         held,
         taken,
         licenses: plugins,
+        holds,
+        mcp_files,
     } = offered(&clone.root, request, url, manifest, &mut report.failures)?;
+    report.holds = holds;
+    report.mcp_files = mcp_files;
 
     // The last moment a cancel is honoured, and the reason everything is read
     // first: past here the shelf and the ledger change, and a gather stopped
@@ -1406,6 +1425,10 @@ struct Offered {
     taken: Vec<(PathBuf, String, Artifact)>,
     /// What the plugins its skills are in say of their licence (#104).
     licenses: Licenses,
+    /// What the package a repository's gather searched holds beside its
+    /// skills, and in which of the MCP files ([`Report::holds`]).
+    holds: Vec<Holding>,
+    mcp_files: Vec<&'static str>,
 }
 
 /// The licences the manifests of the plugins a gather's skills are in give
@@ -1527,10 +1550,26 @@ fn offered(
         .iter()
         .filter_map(|directory| filed(directory, clone, repository.as_deref()))
         .collect();
+    // For a repository's gather, whose search reads the Agent Plugins
+    // format's manifest alone ([`Search::formats`]), `plugin` is there only
+    // when the folder searched is a package; a catalog's gather says what a
+    // plugin it lists holds by its entry.
+    let (holds, mcp_files) = match (&request.search, &plugin) {
+        (Search::Layouts, Some(package)) => {
+            let mut holds = package.declares.clone();
+            holds.extend(Holding::held_at(&searched));
+            holds.sort();
+            holds.dedup();
+            (holds, Holding::mcp_files_at(&searched))
+        }
+        _ => (Vec::new(), Vec::new()),
+    };
     Ok(Offered {
         held,
         taken,
         licenses: Licenses::of_plugins(&found, &searched, &bound, plugin),
+        holds,
+        mcp_files,
     })
 }
 

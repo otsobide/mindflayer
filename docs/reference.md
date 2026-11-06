@@ -1155,7 +1155,8 @@ the plugin's, as its manifest gives it, else as its catalog does. What a
 plugin holds beside its skills, hooks, agents and MCP servers, as its entry
 or its manifest declares them or its folder keeps them, is said in a note
 and never taken, and the files its MCP servers are in, `.mcp.json` or
-`mcp.json`, are named there, never imported:
+`mcp.json`, are named there, never imported; `gather git` says the same of
+a package in the Agent Plugins format it gathers:
 
 ```
 note: acme-codex.linear: its plugin holds MCP servers in `.mcp.json` too, which are not gathered
