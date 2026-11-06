@@ -432,6 +432,8 @@ mind show <NAME> [--json]  # one artifact; `rule:deploy` when a name is ambiguou
 mind validate [KIND|NAME] [--json]
                            # check a kind, one artifact, or everything
 mind status [--json]       # what it holds, from where, for which agents
+mind doctor [--json]       # what keeps its agents from what it gives them,
+                           # which no agent says; it fixes nothing
 mind link / mind unlink    # this project, into or out of the workspace above
 mind load / mind unload <path>...
                            # another workspace's skills and rules, into the
@@ -497,6 +499,8 @@ mindweaver status [-p PROJECT] [--json]
                            # what every project holds, or one: current,
                            # outdated, edited, missing, orphaned, foreign or
                            # authored, for which agents, and from where
+mindweaver doctor [-p PROJECT] [--json]
+                           # mind doctor, for every project or one
 mindweaver scan [DIR...] [--depth N] [--suggest] [--json]
                            # the repositories under it, or under each DIR,
                            # which are linked, and which moved; --suggest
@@ -731,9 +735,10 @@ be read at all is a warning on stderr and does not hide the ones next to it.
 Each agent also reads a folder that belongs to no project: Claude Code its
 configuration folder, Codex its home, OpenCode its configuration folder, and
 more than one of them the skills in `~/.agents`. An install never puts a copy
-inside one of them, since a skill there reaches every project; checks to come
-will look in them too. Each is taken from its option, then from the variable
-the agent itself reads, then from its folder in your home:
+inside one of them, since a skill there reaches every project, and
+[`doctor`](#what-no-agent-says) reads what each holds that a project's agents
+read too. Each is taken from its option, then from the variable the agent
+itself reads, then from its folder in your home:
 
 | Option | Then | Then |
 |---|---|---|
@@ -1379,10 +1384,78 @@ $ mindweaver status -p tanukeys --json
 hint: tanukeys is marked by a mind.toml, which `mind migrate` moves to a settings.toml
 ```
 
+### What no agent says
+
+Some things keep an agent from what a project gives it, and the agent says
+nothing: a Codex project nothing trusts reads none of its
+`.codex/config.toml`, an `AGENTS.override.md` hides `AGENTS.md` from Codex, a
+`CLAUDE.local.md` made after the rules were installed stops Claude reading
+`AGENTS.md`, a skill at user scope holds something else under a project
+skill's name, and an MCP server's variable is not set. `mindweaver doctor`
+finds them in every project the workspace links, `-p` in one, and `mind
+doctor` in the project you are in. In `collapse`, given the rule
+`git/commits` and the skill `code-review`, with a `CLAUDE.local.md` made since
+and a `code-review` of your own in `~/.agents/skills`, and in `tanukeys`, for
+Claude Code and Codex, with a `.codex/config.toml` your Codex config does not
+trust:
+
+```
+$ cd ~/Projects
+$ mindweaver doctor
+collapse: /home/you/Projects/collapse/CLAUDE.local.md: Claude Code reads it in place of the AGENTS.md of /home/you/Projects/collapse, and nothing imports that file, so these rules in its block reach Claude Code nowhere: git/commits
+  fix: install one of them again (`mind install rule:git/commits`), which renders every rule for Claude Code as the project stands, through an import of AGENTS.md or in .claude/rules/mindweaver
+collapse: /home/you/Projects/collapse/.agents/skills/code-review: Codex and OpenCode also read a skill `code-review` at user scope, at /home/you/.agents/skills/code-review, which holds something else, and one name at both scopes resolves differently in each agent
+  fix: rename the project's or the one at user scope, or make them hold the same
+collapse: /home/you/Projects/collapse/.claude/skills/code-review: OpenCode also reads a skill `code-review` at user scope, at /home/you/.agents/skills/code-review, which holds something else, and one name at both scopes resolves differently in each agent
+  fix: rename the project's or the one at user scope, or make them hold the same
+tanukeys: /home/you/Projects/tanukeys/.codex/config.toml: Codex reads it only in a project it trusts, and /home/you/.codex/config.toml does not mark /home/you/Projects/tanukeys `trusted`
+  fix: trust the project when Codex asks, or add `trust_level = "trusted"` under `[projects."/home/you/Projects/tanukeys"]` in /home/you/.codex/config.toml
+
+2 projects checked, 4 findings
+```
+
+Each finding names the file it is about and what fixes it. What it checks,
+each against [where the agents read](agents.md), for the agents a project
+names:
+
+- Codex: a project your Codex config marks `untrusted`, which loses its
+  `AGENTS.md` and its `.codex/config.toml`, or marks neither way while it
+  has a `.codex/config.toml`; an `AGENTS.override.md` beside `AGENTS.md`;
+  no git repository, so Codex reads `AGENTS.md` only when started in that
+  folder; and the `AGENTS.md` files from the repository's root down near or
+  past the 32 KiB Codex reads.
+- Claude Code: the rules of the block in `AGENTS.md` reaching it through
+  nothing, since a `CLAUDE.md` or a `CLAUDE.local.md` in or above the
+  project keeps it from that file and nothing imports it.
+- Skills: copies of one name that differ in folders one agent reads, as
+  OpenCode reads `.agents/skills`, `.claude/skills` and `.opencode/skills`;
+  and a project skill whose name a skill at user scope holds too, with
+  something else in it, in `~/.claude/skills`, `~/.agents/skills` or
+  OpenCode's `skills`, where it reads both.
+- MCP servers installed into the project: one of the same name in Codex's
+  or OpenCode's own config, which each merges with the project's into one
+  server, and each variable an input reads that is not set where `doctor`
+  runs, a secret said as one. Only the names of the variables set are read,
+  never a value.
+- What an install that did not finish left, in `.mind/tmp` or beside a
+  copy, which the next install clears; and what `status` says the
+  project's agents miss.
+
+It reads files and nothing else: no agent is run, nothing is written and
+nothing is swept, and the agents' own folders are the ones [their options
+say](#the-agents-own-folders). The exit status is non-zero once it finds
+anything, as `validate` fails once something does not pass, so it works in
+CI, and once something could not be read, which is a `warning:` on stderr as
+anywhere else. `--json` prints the report in the envelope: `projects`, each
+with its `entry`, `name` and `path`, its `findings`, each with its `code`,
+the `agents` it keeps something from, the `path` it is about, its
+`message` and its `fix`, and its `failures`, what could not be read, each
+with its `code` and `message`.
+
 ## Machine-readable output
 
 The commands that report what is there take `--json`, at either level:
-`list`, `show`, `validate`, `templates` and `status`, and `mindweaver
+`list`, `show`, `validate`, `templates`, `status` and `doctor`, and `mindweaver
 workspaces`, `mindweaver scan` and `mindweaver gather list`. Each prints what it
 read in one envelope, the same for every command, so a script or an agent
 reads them all one way, and reads what a workspace holds, its own
@@ -1459,6 +1532,8 @@ warning: /home/you/Projects/collapse/skills/broken/SKILL.md: the file does not s
 - `status`, `workspaces` and `scan`: the reports shown in [what each project
   has](#what-each-project-has), [the weavers this machine
   knows](#the-weavers-this-machine-knows) and [commands](#commands).
+- `doctor`: what it found in each project, as [what no agent
+  says](#what-no-agent-says) shows.
 
 `warnings` holds what the text says on stderr as `warning:` lines, without
 the prefix, and `coded_warnings` the same lines, in the same order, each
@@ -1468,8 +1543,8 @@ stderr too, as above, as the text says it, so piping the JSON into `jq`
 leaves them on the terminal; a script reads them in the envelope and need
 not read stderr, where a `hint:`, advice for whoever reads the terminal, is
 said too and the envelope leaves it out. The exit status is the text's:
-non-zero when something could not be read, as above, and for `validate`
-when something does not pass. An error that stops a command is still a line
+non-zero when something could not be read, as above, for `validate`
+when something does not pass, and for `doctor` when it finds anything. An error that stops a command is still a line
 on stderr, with nothing on stdout.
 
 The names in it are a contract. `version` is 2, and version 2 only grows
@@ -1889,7 +1964,8 @@ asks before running `mind init` in it, because that writes into it. A project
 whose directory has gone is listed with a `!`, where `U` drops it, or, when
 the scan found it [moved](#following-a-project-that-moved),
 `M` follows it; an artifact `validate` would reject is marked `✗`, with the
-reason underneath.
+reason underneath; and a project [`doctor`](#what-no-agent-says) finds
+something in is marked `✚` and how many, its pane saying each with its fix.
 
 ## Control panel
 
