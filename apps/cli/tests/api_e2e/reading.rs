@@ -464,6 +464,7 @@ fn a_plan_of_ticked_boxes_is_the_tasks_that_carry_it_out() {
         )
         .is(200)
         .answers(json!({
+            "asks": [],
             "conflicts": [],
             "locked": [],
             "tasks": [{
@@ -472,6 +473,7 @@ fn a_plan_of_ticked_boxes_is_the_tasks_that_carry_it_out() {
                 "name": "review",
                 "projects": ["api"],
                 "type": "install",
+                "yes": false,
             }],
         }));
 }
@@ -517,7 +519,9 @@ fn a_plan_says_a_box_it_may_not_change_is_locked_and_plans_the_rest() {
                 "name": "review",
                 "projects": ["api"],
                 "type": "install",
+                "yes": false,
             }],
+            "asks": [],
         }));
 }
 

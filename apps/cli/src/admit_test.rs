@@ -524,3 +524,34 @@ fn every_project_a_selection_names_is_an_entry_the_registry_holds() {
     }
     assert!(admission.selection(&[]).is_ok());
 }
+
+/// A yes is admitted with an MCP server from elsewhere than the library
+/// alone, the panel's confirmation of one; with any other install it is
+/// refused by its code, whatever else the task names.
+#[test]
+fn a_yes_is_admitted_only_with_an_install_that_asks_for_one() {
+    let (_dir, workspace) = fixture();
+    let install = |kind: Kind, from: Option<&str>| Task::Install {
+        projects: vec![String::from("alpha")],
+        kind,
+        name: String::from("github"),
+        from: from.map(String::from),
+        yes: true,
+    };
+
+    assert!(admitted(&workspace, &install(Kind::Mcp, Some("load:../team"))).is_ok());
+    for task in [
+        install(Kind::Skill, Some("load:../team")),
+        install(Kind::Mcp, Some("workspace")),
+        install(Kind::Mcp, None),
+        Task::ApplyInstall {
+            changes: vec![install(Kind::Rule, Some("workspace"))],
+        },
+    ] {
+        assert_eq!(
+            code(admitted(&workspace, &task)),
+            "install_yes_unasked",
+            "{task:?}"
+        );
+    }
+}

@@ -75,7 +75,7 @@ use mindweaver_core::code::Said;
 use mindweaver_core::contents::{Contents, ContentsError, Files};
 use mindweaver_core::draft;
 use mindweaver_core::gather::Watch;
-use mindweaver_core::install::{self, Cell, Conflict, Locked};
+use mindweaver_core::install::{self, Cell, Change, Conflict, Locked};
 use mindweaver_core::known::{self, Launch};
 use mindweaver_core::lock::{self, Waited};
 use mindweaver_core::mcp;
@@ -84,10 +84,12 @@ use mindweaver_core::resolve::{resolve, Intent, Reason, Resolved};
 use mindweaver_core::scan::{self, Order, DEFAULT_DEPTH};
 use mindweaver_core::update::Updates;
 use mindweaver_core::value::Redacted;
+use mindweaver_core::value::{ArtifactName, Origin};
 use mindweaver_core::view::Snapshot;
 use mindweaver_core::{paths, policy, watch};
 use mindweaver_core::{
-    Found, Kind, LifecycleError, MindProject, Reference, Scan, WeaverWorkspace, WorkspaceError,
+    AgentHomes, Found, Kind, LifecycleError, MindProject, Reference, Scan, WeaverWorkspace,
+    WorkspaceError,
 };
 use mindweaver_server::{Backend, Grounds, Preview, Refusal, Route, Watched};
 use serde::{Deserialize, Serialize};
@@ -370,7 +372,9 @@ impl Scanned {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Planned {
     /// Each `install` and `uninstall` that carries the selection out, in
-    /// the order to run them.
+    /// the order to run them. None carries a yes: an MCP server from
+    /// elsewhere than the library is only previewed by its line, until its
+    /// confirmation (`asks`) is sent in its place.
     pub tasks: Vec<Task>,
     /// Boxes of one name in one project that cannot all be as asked, none
     /// of which is planned.
@@ -378,16 +382,118 @@ pub struct Planned {
     /// Boxes whose change is held back, each by the code the command would
     /// refuse it with, or why the project could not be asked about it.
     pub locked: Vec<Locked>,
+    /// Each of `tasks` that waits for a yes ([`install::asks_first`]), with
+    /// what it would give each agent of each project and the task carrying
+    /// the yes, in the order of `tasks`.
+    pub asks: Vec<Asking>,
 }
 
-impl From<install::Plan> for Planned {
-    fn from(plan: install::Plan) -> Self {
+/// An install of a plan that waits for somebody to say yes, an MCP server
+/// from elsewhere than the library, as the install screen confirms one:
+/// what it would give each agent of each project, laid out as its line
+/// would say it ([`crate::install::foreseen`]), then the task that writes
+/// it once that has been shown.
+///
+/// The task carrying the yes is handed over here, beside the lines it was
+/// shown with, rather than the panel setting one on the task it holds:
+/// which install waits for one is core's, and the yes is the
+/// confirmation's alone. The panel sends it in the place of the task it
+/// confirms, `task` by its place among the plan's.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct Asking {
+    /// Which of the plan's tasks it confirms, by its place among them.
+    pub task: usize,
+    /// For each project it names, a line naming the install, then what
+    /// each agent there would run or reach, and each warning, as the
+    /// install screen's confirmation shows them.
+    pub lines: Vec<String>,
+    /// That task, saying yes: its line with `--yes`.
+    pub confirmed: Task,
+}
+
+impl Planned {
+    /// `plan`, each change the task that runs it, beside the confirmation
+    /// of each that waits for a yes, previewed in `workspace` for the agent
+    /// homes `homes`.
+    fn of(workspace: &WeaverWorkspace, plan: install::Plan, homes: &AgentHomes) -> Planned {
+        let mut asks = Vec::new();
+        let mut tasks = Vec::new();
+        for (at, change) in plan.changes.into_iter().enumerate() {
+            if let Change::Install {
+                projects,
+                kind,
+                name,
+                from,
+            } = &change
+            {
+                if install::asks_first(*kind, from) {
+                    asks.push(Asking {
+                        task: at,
+                        lines: foreseen_in(workspace, projects, *kind, name, from, homes),
+                        confirmed: Task::confirmed(change.clone()),
+                    });
+                }
+            }
+            tasks.push(Task::from(change));
+        }
         Planned {
-            tasks: plan.changes.into_iter().map(Task::from).collect(),
+            tasks,
             conflicts: plan.conflicts,
             locked: plan.locked,
+            asks,
         }
     }
+}
+
+/// What installing `kind` `name` from `from` would give each agent of
+/// each of `projects`, by their entries, as the install screen's
+/// confirmation says it: a heading for each project, then its lines. A
+/// project or an offer that cannot be read says why under its heading, as
+/// its line would refuse it.
+fn foreseen_in(
+    workspace: &WeaverWorkspace,
+    projects: &[String],
+    kind: Kind,
+    name: &ArtifactName,
+    from: &Origin,
+    homes: &AgentHomes,
+) -> Vec<String> {
+    let ledger = match workspace.ledger_for_reading() {
+        Ok(ledger) => ledger,
+        Err(error) => return vec![format!("  error: {error}")],
+    };
+    let reference = Reference::parse(&crate::task::qualified(kind, name));
+    let mut lines = Vec::new();
+    for entry in projects {
+        let project = policy::linked(workspace, entry)
+            .map_err(|error| error.to_string())
+            .and_then(|member| member.project.map_err(|error| error.to_string()));
+        let shown = project
+            .as_ref()
+            .map_or(entry.as_str(), |project| project.name());
+        lines.push(crate::install::heading(kind, name, shown, from));
+        let candidate = project.and_then(|project| {
+            install::offered_typed(
+                workspace,
+                &ledger,
+                &project,
+                &reference,
+                Some(from),
+                workspace.root(),
+            )
+            .map(|candidate| (project, candidate))
+            .map_err(|error| error.to_string())
+        });
+        match candidate {
+            Ok((project, candidate)) => lines.extend(crate::install::foreseen(
+                workspace, &ledger, &project, &candidate, homes,
+            )),
+            Err(error) => lines.push(format!("  error: {error}")),
+        }
+    }
+    lines
 }
 
 /// What running a task's lines produced.
@@ -795,7 +901,8 @@ impl Backend for PanelBackend {
                 .map_err(|error| refused(error.code(), error))?;
                 let plan = install::plan(&workspace, &selection)
                     .map_err(|error| refused(error.code(), error))?;
-                Ok(serde_json::to_value(Planned::from(plan)).expect("a plan serializes"))
+                let planned = Planned::of(&workspace, plan, &self.lookup.agents);
+                Ok(serde_json::to_value(planned).expect("a plan serializes"))
             }
             Query::Updates {} => {
                 let updates =
@@ -1232,7 +1339,8 @@ impl Absence for PolicyError {
             | PolicyError::Relative { .. }
             | PolicyError::Unnormalized { .. }
             | PolicyError::InWeaverDir { .. }
-            | PolicyError::Unlisted { .. } => false,
+            | PolicyError::Unlisted { .. }
+            | PolicyError::YesUnasked { .. } => false,
         }
     }
 }

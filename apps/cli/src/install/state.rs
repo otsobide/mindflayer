@@ -28,6 +28,7 @@ use mindweaver_core::{Kind, MindProject};
 use ratatui::crossterm::event::KeyCode;
 
 use crate::commands::install::named;
+use crate::install::heading;
 use crate::task::Task;
 
 /// Which column the keyboard is in, and so which way round the screen is.
@@ -485,11 +486,11 @@ impl Screen {
                 if row.pending() != Some(Pending::Install) {
                     continue;
                 }
-                lines.push(format!(
-                    "{} into {}, from {}:",
-                    named(row.candidate.kind(), row.candidate.name()),
+                lines.push(heading(
+                    row.candidate.kind(),
+                    row.candidate.name(),
                     target.name(),
-                    row.candidate.origin()
+                    &row.candidate.origin(),
                 ));
                 lines.extend(preview.iter().cloned());
             }

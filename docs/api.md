@@ -426,6 +426,7 @@ $ curl -s -H "Authorization: Bearer $token" -H 'Content-Type: application/json' 
     -d '{"selection": [{"project": "api", "reference": "skill:review", "origin": "workspace", "wanted": true}]}' \
     "$api/plan" | jq .
 {
+  "asks": [],
   "conflicts": [],
   "locked": [],
   "tasks": [
@@ -436,11 +437,21 @@ $ curl -s -H "Authorization: Bearer $token" -H 'Content-Type: application/json' 
       "projects": [
         "api"
       ],
-      "type": "install"
+      "type": "install",
+      "yes": false
     }
   ]
 }
 ```
+
+An MCP server from a workspace this one loads, or from the shelf, is
+somebody else's command for every agent to run, so its install waits for a
+yes: its task carries `"yes": false`, and its line says what each agent
+would run and installs nothing. `asks` holds each such task by its place
+in `tasks`, what it would give each agent of each project, `lines` as
+`mindweaver install` says them, and `confirmed`, the same task with `"yes":
+true`, to send in its place once those lines have been read. A yes sent
+with any other install is refused (`install_yes_unasked`).
 
 `POST /validate` judges an artifact a command is about to write, as that
 command would refuse it and as `validate` would say of it once written,
@@ -516,7 +527,8 @@ ran, however the command went, and `outcome.ok` says that.
 
 An `install` task names the projects, the kind and the name, and `from`,
 the place it is offered from as `--from` takes it, or `null` for wherever
-the name is offered:
+the name is offered, and `yes` only for an MCP server's confirmation, as
+`/plan` hands it:
 
 ```console
 $ curl -s -H "Authorization: Bearer $token" -H 'Content-Type: application/json' \

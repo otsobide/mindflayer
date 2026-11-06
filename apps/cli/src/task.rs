@@ -331,11 +331,15 @@ pub enum Task {
     /// With `yes`, `--yes`: an MCP server from elsewhere than the library
     /// written ([`install::asks_first`]), once what each agent would run
     /// has been shown, as the install screen shows it before it applies;
-    /// without, such a line writes nothing and says what it would. Never
-    /// in JSON, read or written: the panel shows no agent's line yet (#97),
-    /// so a task it sends never says yes for it, and one saying so is
-    /// refused as any field it does not have is; nor from a plan
-    /// ([`Change`]), whose tasks the panel sends back as they are.
+    /// without, such a line writes nothing and says what it would.
+    ///
+    /// In JSON for the panel's confirmation of such a server alone (#97):
+    /// a plan's task carries none ([`Task::from`]), and its confirmation,
+    /// shown beside what each agent would run, is the one task that does
+    /// ([`Task::confirmed`], the backend's `Planned::asks`). A yes sent
+    /// with any other install is refused by the path policy before a line
+    /// is built (`policy::confirmed`, `install_yes_unasked`), and one left
+    /// out is none, as before a yes could be sent.
     ///
     /// [`WeaverWorkspace::naming`]: mindweaver_core::WeaverWorkspace::naming
     /// [`install::asks_first`]: mindweaver_core::install::asks_first
@@ -344,8 +348,7 @@ pub enum Task {
         kind: Kind,
         name: String,
         from: Option<String>,
-        #[serde(skip)]
-        #[cfg_attr(feature = "ts", ts(skip))]
+        #[serde(default)]
         yes: bool,
     },
     /// `mindweaver uninstall -p <project>... <kind:name>`: one artifact taken

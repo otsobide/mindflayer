@@ -321,6 +321,7 @@ export type CoreCode =
   | "path_unnormalized"
   | "path_in_mindflayer"
   | "switch_unlisted"
+  | "install_yes_unasked"
   | "reapply_no_agent"
   | "reapply_no_folder"
   | "reapply_copy_failed"

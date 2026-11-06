@@ -20,7 +20,7 @@ use mindweaver_core::{AgentHomes, Kind, MindProject, WeaverWorkspace};
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::DefaultTerminal;
 
-use crate::commands::install::entries_said;
+use crate::commands::install::{entries_said, named};
 use crate::commands::workspace::load_warnings;
 use crate::tui::state::{transcript, Done};
 use crate::{tui, CliError, Failure, Lookup, Outcome, Warning};
@@ -189,20 +189,46 @@ pub fn build(
             row.was = held;
             row.checked = held;
             if row.candidate.asks_first() {
-                let done = install::mcp::preview(
+                row.preview = Some(foreseen(
                     workspace,
                     ledger,
                     &target.project,
                     &row.candidate,
                     homes,
-                    Edits::Kept,
-                );
-                row.preview = Some(previewed(done));
+                ));
             }
         }
         targets.push(target);
     }
     Ok(Screen::new(targets))
+}
+
+/// What installing `candidate`, which waits for a yes, into `project` would
+/// give each agent there, as a confirmation shows it before the yes: core's
+/// preview of it ([`install::mcp::preview`]), laid out as the line
+/// installing it says it ([`previewed`]). One for the install screen and
+/// the panel's backend, so the two confirm a server in the same words.
+pub(crate) fn foreseen(
+    workspace: &WeaverWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+    candidate: &install::Candidate,
+    homes: &AgentHomes,
+) -> Vec<String> {
+    previewed(install::mcp::preview(
+        workspace,
+        ledger,
+        project,
+        candidate,
+        homes,
+        Edits::Kept,
+    ))
+}
+
+/// The line a confirmation names an install by, above what it would give
+/// each agent ([`foreseen`]): `mcp github into api, from load:../team:`.
+pub(crate) fn heading(kind: Kind, name: &str, project: &str, origin: &str) -> String {
+    format!("{} into {project}, from {origin}:", named(kind, name))
 }
 
 /// What a preview of an install, `done`, says, a line each, as the line

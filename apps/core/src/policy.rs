@@ -38,6 +38,7 @@ use thiserror::Error;
 
 use crate::code::codes;
 use crate::install;
+use crate::kind::Kind;
 use crate::known::Switchable;
 use crate::names::Names;
 use crate::paths;
@@ -63,6 +64,18 @@ pub enum PolicyError {
     /// or a path somebody put together, none of which is gone to.
     #[error("`{given}` is none of the workspaces this machine knows, nor the one the panel was launched on: only one of those is switched to")]
     Unlisted { given: String },
+    /// A yes sent with an install that waits for none: anything but an
+    /// MCP server from elsewhere than the library, by the place it comes
+    /// from as `--from` takes it, or from no place named, which is not
+    /// told until the line runs (`install::asks_first`). The one yes a
+    /// request may carry is to such a server, once somebody has been shown
+    /// what each agent would run of it.
+    #[error("{} {name}{}: nothing is asked before it is installed, so no yes is sent with it", .kind.noun(), .from.as_ref().map_or_else(|| String::from(" from no place named"), |from| format!(" from {from}")))]
+    YesUnasked {
+        kind: Kind,
+        name: String,
+        from: Option<String>,
+    },
     /// An entry no registry holds, or a path no entry points at: the
     /// workspace's own error for an unlink or an unload of one, since it is
     /// the condition they meet too.
@@ -76,9 +89,31 @@ codes!(PolicyError {
     Self::Unnormalized { .. } => "path_unnormalized",
     Self::InWeaverDir { .. } => "path_in_mindflayer",
     Self::Unlisted { .. } => "switch_unlisted",
+    Self::YesUnasked { .. } => "install_yes_unasked",
 } carried {
     Self::Workspace(error) => error,
 });
+
+/// A yes a request sends with an install of `kind` `name` from `from`, as
+/// `--from` takes it: one only for an install that waits for one
+/// ([`install::asks_first`]), an MCP server from elsewhere than the
+/// library, named by where it comes from.
+///
+/// Held here, with every value a request may name, rather than passed on
+/// for the line to ignore: a yes is a front end saying somebody was shown
+/// what each agent would run, and one sent where nothing asks it says that
+/// of nothing, which a request that could carry it anywhere would come to
+/// mean of everything.
+pub fn confirmed(kind: Kind, name: &str, from: Option<&str>) -> Result<(), PolicyError> {
+    if from.is_some_and(|from| install::asks_first(kind, from)) {
+        return Ok(());
+    }
+    Err(PolicyError::YesUnasked {
+        kind,
+        name: name.to_owned(),
+        from: from.map(str::to_owned),
+    })
+}
 
 /// `given`, as a path a request may name: absolute, spelled exactly as
 /// [`paths::normalize`] would spell it, and outside every `.mindweaver` and

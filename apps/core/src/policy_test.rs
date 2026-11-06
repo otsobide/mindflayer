@@ -341,3 +341,27 @@ fn the_one_in_use_is_taken_as_a_switch_that_changes_nothing() {
     assert_eq!(to.root(), elsewhere.root());
     assert_eq!(reason, Reason::Above);
 }
+
+#[test]
+fn a_yes_is_taken_only_with_a_server_from_elsewhere_than_the_library() {
+    for from in ["load:../team", "https://github.com/acme/servers"] {
+        assert!(confirmed(Kind::Mcp, "github", Some(from)).is_ok(), "{from}");
+    }
+    for (kind, from) in [
+        (Kind::Mcp, Some(install::WORKSPACE_ORIGIN)),
+        (Kind::Mcp, None),
+        (Kind::Skill, Some("load:../team")),
+        (Kind::Rule, Some("load:../team")),
+    ] {
+        let refused = confirmed(kind, "github", from);
+
+        assert_eq!(code(refused), "install_yes_unasked", "{kind:?} {from:?}");
+    }
+    assert_eq!(
+        confirmed(Kind::Mcp, "github", None)
+            .unwrap_err()
+            .to_string(),
+        "MCP server github from no place named: nothing is asked before it is installed, so no \
+         yes is sent with it"
+    );
+}

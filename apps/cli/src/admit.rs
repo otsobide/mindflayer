@@ -14,6 +14,8 @@
 //!   about it, as the TUI decides for its rows.
 //! - **Each project an install, an uninstall, an adoption or a migration
 //!   names** is an entry too, and becomes the `-p` of the same folder.
+//! - **A yes an install carries** is one to an MCP server that asks first
+//!   (`policy::confirmed`), the panel's confirmation of one, and no other.
 //! - **An entry `unlink`, `unload` or `relink` takes** is one the marker
 //!   holds, and goes to the command as the marker spells it, which is what
 //!   those commands take an entry by.
@@ -119,7 +121,21 @@ impl Admission<'_> {
             | Task::Toggled { holder, .. }
             | Task::Update { holder, .. }
             | Task::UninstallOrphaned { holder } => *holder = self.holder(holder)?,
-            Task::Install { projects, .. } | Task::Uninstall { projects, .. } => {
+            Task::Install {
+                projects,
+                kind,
+                name,
+                from,
+                yes,
+            } => {
+                if *yes {
+                    policy::confirmed(*kind, name, from.as_deref())?;
+                }
+                for project in projects {
+                    *project = self.project(project)?;
+                }
+            }
+            Task::Uninstall { projects, .. } => {
                 for project in projects {
                     *project = self.project(project)?;
                 }

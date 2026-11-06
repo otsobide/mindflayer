@@ -1852,6 +1852,131 @@ fn held(
     (copies, records)
 }
 
+/// `home`, a workspace loading `team`, which keeps the MCP server
+/// `github` of its own, a program started with a secret, and linking
+/// `alpha`, a project `mind init` made for every agent.
+fn serving() -> (TempDir, PathBuf) {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("home");
+    let team = dir.path().join("team");
+    for root in [&home, &team] {
+        fs::create_dir_all(root).unwrap();
+        weaver(root, &["init"]).unwrap();
+    }
+    weaver(
+        &team,
+        &[
+            "add",
+            "mcp",
+            "github",
+            "GitHub",
+            "--command",
+            "npx",
+            "--arg=-y",
+            "--arg",
+            "@acme/server",
+            "--secret-env",
+            "GITHUB_TOKEN",
+        ],
+    )
+    .unwrap();
+    weaver(&home, &["load", "../team"]).unwrap();
+    let root = home.join("alpha");
+    fs::create_dir(&root).unwrap();
+    new_project(&root);
+    weaver(&home, &["link", "alpha"]).unwrap();
+    (dir, home)
+}
+
+/// A server from a loaded workspace waits for a yes: its plan's task
+/// carries none, and its line writes nothing, while beside it the plan
+/// hands what each agent would run, as the install screen's confirmation
+/// says it, and the one task carrying the yes, which writes it.
+#[test]
+fn a_server_that_asks_first_is_planned_with_what_each_agent_would_run_and_its_yes_apart() {
+    let (dir, home) = serving();
+    let backend = backend(&home);
+    let before = files(dir.path());
+    let entry = |name: &str| home.join("alpha").join(name);
+
+    let answer = plan(
+        &backend,
+        json!([cell("alpha", "mcp:github", "load:../team", true)]),
+    )
+    .unwrap();
+
+    assert_eq!(files(dir.path()), before);
+    let plain = json!({
+        "type": "install", "projects": ["alpha"], "kind": "mcp", "name": "github",
+        "from": "load:../team", "yes": false,
+    });
+    assert_eq!(answer["tasks"], json!([plain]));
+    let mut yes = plain.clone();
+    yes["yes"] = json!(true);
+    assert_eq!(answer["asks"][0]["task"], 0);
+    assert_eq!(answer["asks"][0]["confirmed"], yes);
+    let lines: Vec<&str> = answer["asks"][0]["lines"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|line| line.as_str().unwrap())
+        .collect();
+    assert_eq!(
+        lines[..4],
+        [
+            "mcp github into alpha, from load:../team:",
+            "  claude runs: npx -y @acme/server",
+            "  codex runs: npx -y @acme/server",
+            "  opencode runs: npx -y @acme/server",
+        ],
+        "{lines:?}"
+    );
+
+    let dry = backend.run(task(plain)).unwrap();
+    assert!(dry.runs[0].stdout.contains("nothing installed"), "{dry:?}");
+    assert!(!entry(".mcp.json").exists());
+    let preview = backend.preview(&task(yes.clone())).unwrap();
+    assert!(
+        preview.lines[0].ends_with("--from load:../team --yes mcp:github"),
+        "{preview:?}"
+    );
+    backend.run(task(yes)).unwrap();
+    for file in [".mcp.json", ".codex/config.toml", "opencode.json"] {
+        assert!(entry(file).is_file(), "{file}");
+    }
+}
+
+/// A yes is the confirmation's alone: one sent with an install that asks
+/// nothing, a skill's or the library's own server's, is refused by its
+/// code before a line is built, and nothing runs.
+#[test]
+fn a_yes_sent_with_an_install_that_asks_nothing_is_refused_and_nothing_runs() {
+    let (dir, home) = serving();
+    weaver(&home, &["add", "skill", "deploy", "Ship it"]).unwrap();
+    let backend = backend(&home);
+    let before = files(dir.path());
+
+    for (kind, from) in [
+        ("skill", json!("workspace")),
+        ("mcp", json!("workspace")),
+        ("mcp", Value::Null),
+    ] {
+        let sent = json!({
+            "type": "install", "projects": ["alpha"], "kind": kind, "name": "deploy",
+            "from": from, "yes": true,
+        });
+
+        let refused = backend.preview(&task(sent.clone())).unwrap_err();
+
+        assert_eq!(refused.code, "install_yes_unasked", "{sent}");
+        assert_eq!(
+            backend.run(task(sent)).unwrap_err().code,
+            "install_yes_unasked"
+        );
+    }
+    assert_eq!(files(dir.path()), before);
+}
+
 #[test]
 fn a_plan_is_answered_with_the_tasks_that_carry_it_out_and_changes_nothing() {
     let (dir, home) = assigning();
@@ -1879,11 +2004,13 @@ fn a_plan_is_answered_with_the_tasks_that_carry_it_out_and_changes_nothing() {
                     "kind": "skill",
                     "name": "deploy",
                     "from": "load:../team",
+                    "yes": false,
                 },
                 {"type": "uninstall", "projects": ["alpha"], "kind": "skill", "name": "deploy", "force": false},
             ],
             "conflicts": [],
             "locked": [],
+            "asks": [],
         })
     );
     assert_eq!(files(dir.path()), before);

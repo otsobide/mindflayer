@@ -4,6 +4,13 @@
   "description": "What a selection the panel asked to plan amounts to ([`Query::Plan`]):\ncore's plan of it ([`install::Plan`]), each change in it the task that\nruns it.\n\nTasks rather than core's changes, so the panel sends back what it was\nhanded, never a task it puts together itself: the `install` and\n`uninstall` tasks, each a project by the entry its box named it by, which\nthe backend turns into the folder the registry resolves as it does any\ntask's. Sent as one `apply_install`, as the install screen applies its\nmarks, each line runs whatever came of the ones before.",
   "type": "object",
   "properties": {
+    "asks": {
+      "description": "Each of `tasks` that waits for a yes ([`install::asks_first`]), with\nwhat it would give each agent of each project and the task carrying\nthe yes, in the order of `tasks`.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Asking"
+      }
+    },
     "conflicts": {
       "description": "Boxes of one name in one project that cannot all be as asked, none\nof which is planned.",
       "type": "array",
@@ -19,7 +26,7 @@
       }
     },
     "tasks": {
-      "description": "Each `install` and `uninstall` that carries the selection out, in\nthe order to run them.",
+      "description": "Each `install` and `uninstall` that carries the selection out, in\nthe order to run them. None carries a yes: an MCP server from\nelsewhere than the library is only previewed by its line, until its\nconfirmation (`asks`) is sent in its place.",
       "type": "array",
       "items": {
         "$ref": "#/$defs/Task"
@@ -29,7 +36,8 @@
   "required": [
     "tasks",
     "conflicts",
-    "locked"
+    "locked",
+    "asks"
   ],
   "$defs": {
     "Agent": {
@@ -84,6 +92,34 @@
             "agents"
           ]
         }
+      ]
+    },
+    "Asking": {
+      "description": "An install of a plan that waits for somebody to say yes, an MCP server\nfrom elsewhere than the library, as the install screen confirms one:\nwhat it would give each agent of each project, laid out as its line\nwould say it ([`crate::install::foreseen`]), then the task that writes\nit once that has been shown.\n\nThe task carrying the yes is handed over here, beside the lines it was\nshown with, rather than the panel setting one on the task it holds:\nwhich install waits for one is core's, and the yes is the\nconfirmation's alone. The panel sends it in the place of the task it\nconfirms, `task` by its place among the plan's.",
+      "type": "object",
+      "properties": {
+        "confirmed": {
+          "description": "That task, saying yes: its line with `--yes`.",
+          "$ref": "#/$defs/Task"
+        },
+        "lines": {
+          "description": "For each project it names, a line naming the install, then what\neach agent there would run or reach, and each warning, as the\ninstall screen's confirmation shows them.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "task": {
+          "description": "Which of the plan's tasks it confirms, by its place among them.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "task",
+        "lines",
+        "confirmed"
       ]
     },
     "Cell": {
@@ -1081,7 +1117,7 @@
           ]
         },
         {
-          "description": "`mindweaver install -p <project>... [--from <origin>] <kind:name>`: one\noffer into each project named, by what picks it out\n([`WeaverWorkspace::naming`]), from the place `from` names when it\nnames one.\n\nEach of `projects` is what `naming` gives, an entry or a path from\nthe root, never a project's name, though `-p` takes one: a value\nthat starts with a dash reaches `-p` behind a `./` (`directory`),\nwhich names the same directory, and so picks the same project by its\npath, but is no longer a name `pick` would match. `-p=-odd`, which\nwould keep it a name, was the alternative, and it would change the\nline the TUI has always run and shown for such a project.\n\nWith `yes`, `--yes`: an MCP server from elsewhere than the library\nwritten ([`install::asks_first`]), once what each agent would run\nhas been shown, as the install screen shows it before it applies;\nwithout, such a line writes nothing and says what it would. Never\nin JSON, read or written: the panel shows no agent's line yet (#97),\nso a task it sends never says yes for it, and one saying so is\nrefused as any field it does not have is; nor from a plan\n([`Change`]), whose tasks the panel sends back as they are.\n\n[`WeaverWorkspace::naming`]: mindweaver_core::WeaverWorkspace::naming\n[`install::asks_first`]: mindweaver_core::install::asks_first",
+          "description": "`mindweaver install -p <project>... [--from <origin>] <kind:name>`: one\noffer into each project named, by what picks it out\n([`WeaverWorkspace::naming`]), from the place `from` names when it\nnames one.\n\nEach of `projects` is what `naming` gives, an entry or a path from\nthe root, never a project's name, though `-p` takes one: a value\nthat starts with a dash reaches `-p` behind a `./` (`directory`),\nwhich names the same directory, and so picks the same project by its\npath, but is no longer a name `pick` would match. `-p=-odd`, which\nwould keep it a name, was the alternative, and it would change the\nline the TUI has always run and shown for such a project.\n\nWith `yes`, `--yes`: an MCP server from elsewhere than the library\nwritten ([`install::asks_first`]), once what each agent would run\nhas been shown, as the install screen shows it before it applies;\nwithout, such a line writes nothing and says what it would.\n\nIn JSON for the panel's confirmation of such a server alone (#97):\na plan's task carries none ([`Task::from`]), and its confirmation,\nshown beside what each agent would run, is the one task that does\n([`Task::confirmed`], the backend's `Planned::asks`). A yes sent\nwith any other install is refused by the path policy before a line\nis built (`policy::confirmed`, `install_yes_unasked`), and one left\nout is none, as before a yes could be sent.\n\n[`WeaverWorkspace::naming`]: mindweaver_core::WeaverWorkspace::naming\n[`install::asks_first`]: mindweaver_core::install::asks_first",
           "type": "object",
           "properties": {
             "from": {
@@ -1105,6 +1141,10 @@
             "type": {
               "type": "string",
               "const": "install"
+            },
+            "yes": {
+              "type": "boolean",
+              "default": false
             }
           },
           "required": [
@@ -1112,7 +1152,8 @@
             "projects",
             "kind",
             "name",
-            "from"
+            "from",
+            "yes"
           ]
         },
         {

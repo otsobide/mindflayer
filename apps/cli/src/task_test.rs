@@ -1821,10 +1821,11 @@ fn a_line_carrying_a_credential_runs_it_as_typed_and_is_shown_without_it() {
 }
 
 /// A yes to an install that waits for one is a front end's that has shown
-/// what each agent would run: never in JSON, so the panel, which shows no
-/// agent's line yet, sends none, and one that does is refused.
+/// what each agent would run: in JSON for the panel's confirmation, and
+/// left out, by a script or a front end from before it could be sent, it
+/// is none.
 #[test]
-fn an_install_says_yes_on_its_line_and_never_in_its_json() {
+fn an_install_says_yes_on_its_line_and_in_its_json() {
     let task = Task::Install {
         projects: vec![String::from("alpha")],
         kind: Kind::Mcp,
@@ -1838,18 +1839,27 @@ fn an_install_says_yes_on_its_line_and_never_in_its_json() {
         "mindweaver install -p alpha --from load:../team --yes mcp:github"
     );
     let json = serde_json::to_value(&task).unwrap();
-    assert!(json.get("yes").is_none(), "{json}");
-    let read: Task = serde_json::from_value(json).unwrap();
-    assert!(matches!(read, Task::Install { yes: false, .. }), "{read:?}");
-    let said = serde_json::json!({
+    assert_eq!(
+        json,
+        serde_json::json!({
+            "type": "install",
+            "projects": ["alpha"],
+            "kind": "mcp",
+            "name": "github",
+            "from": "load:../team",
+            "yes": true,
+        })
+    );
+    assert_eq!(serde_json::from_value::<Task>(json).unwrap(), task);
+    let unsaid = serde_json::json!({
         "type": "install",
         "projects": ["alpha"],
         "kind": "mcp",
         "name": "github",
         "from": "load:../team",
-        "yes": true,
     });
-    assert!(serde_json::from_value::<Task>(said).is_err());
+    let read: Task = serde_json::from_value(unsaid).unwrap();
+    assert!(matches!(read, Task::Install { yes: false, .. }), "{read:?}");
 }
 
 #[test]
@@ -1871,7 +1881,12 @@ fn a_change_confirmed_says_yes_only_of_an_install_that_waits_for_one() {
     ))));
     assert!(!yes(Task::confirmed(install(Kind::Mcp, "workspace"))));
     assert!(!yes(Task::confirmed(install(Kind::Skill, "load:../team"))));
-    assert!(!yes(Task::from(install(Kind::Mcp, "load:../team"))));
+    // Built without the confirmation, as a plan's task and the palette's
+    // are, it carries none, in JSON as on its line.
+    let plain = Task::from(install(Kind::Mcp, "load:../team"));
+    assert!(!yes(plain.clone()));
+    assert_eq!(serde_json::to_value(&plain).unwrap()["yes"], false);
+    assert!(!plain.commands()[0].contains(&String::from("--yes")));
 }
 
 #[test]
