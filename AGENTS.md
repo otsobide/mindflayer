@@ -1278,9 +1278,13 @@ These are easy to break from a single file without noticing.
   (`--claude-config-dir`, `--codex-home`, `--opencode-config-dir`,
   `--agents-dir`), then `$CLAUDE_CONFIG_DIR`, `$CODEX_HOME` or
   `$OPENCODE_CONFIG_DIR`, then `~/.claude`, `~/.codex`, `~/.config/opencode`
-  or `~/.agents`; empty means none. Those folder names are core's
-  (`AgentHomes::defaults_under`), and only the user's home is the CLI's to
-  find. Core takes the answer as `AgentHomes` and never resolves one.
+  or `~/.agents`; empty means none. While `$CLAUDE_CONFIG_DIR` or
+  `$OPENCODE_CONFIG_DIR` names a folder of its own, the one in the user's
+  home is kept beside it (`claude_dir_in_home`, `opencode_dir_in_home`),
+  which OpenCode reads all the same (docs/agents.md); an option names the
+  one folder outright, so a pinned test reaches neither. Those folder
+  names are core's (`AgentHomes::defaults_under`), and only the user's
+  home is the CLI's to find. Core takes the answer as `AgentHomes` and never resolves one.
   `Lookup::given` decides them once per command line, into the `Lookup`
   (`Lookup::agents`), and install is the first to take them, to refuse a
   copy inside one, as `agents_md::render` and `claude_rules::render` take

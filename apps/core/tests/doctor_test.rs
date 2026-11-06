@@ -821,3 +821,55 @@ fn a_rule_a_tracked_agents_md_keeps_from_codex_in_a_local_project_is_found_with_
         finding.fix
     );
 }
+
+#[test]
+fn opencode_s_folders_in_the_home_are_read_beside_those_its_variables_name() {
+    let fixture = fixture(&[Agent::OpenCode]);
+    fixture.install_server("github", &server("github", "DOCTOR_TEST_TOKEN"));
+    let home = fixture.home();
+    // As the front end hands them over while `$CLAUDE_CONFIG_DIR` and
+    // `$OPENCODE_CONFIG_DIR` name folders of their own.
+    let homes = AgentHomes {
+        claude_config_dir: Some(home.join("claude")),
+        opencode_config_dir: Some(home.join("opencode")),
+        claude_dir_in_home: Some(home.join(".claude")),
+        opencode_dir_in_home: Some(home.join(".config").join("opencode")),
+        ..fixture.homes()
+    };
+    let ours = skill_in(
+        &fixture,
+        &fixture.root().join(".opencode/skills"),
+        "review",
+        "Read it",
+    );
+    let theirs = skill_in(&fixture, &home.join(".claude/skills"), "review", "Mine");
+    // Claude's own, which OpenCode does not read.
+    skill_in(&fixture, &home.join("claude/skills"), "review", "Not read");
+    let global = home.join(".config/opencode/opencode.json");
+    fixture.write(&global, "{\"mcp\": {\"github\": {\"type\": \"remote\"}}}\n");
+    let machine = Machine::new(homes, [String::from("DOCTOR_TEST_TOKEN")]);
+
+    let report = Report::of_project(&fixture.project, Some(&fixture.workspace), &machine);
+
+    let examined = &report.projects[0];
+    assert!(examined.failures.is_empty(), "{:?}", examined.failures);
+    let found: Vec<(&str, &Path)> = examined
+        .findings
+        .iter()
+        .map(|finding| (finding.code, finding.path.as_path()))
+        .collect();
+    assert_eq!(
+        found,
+        vec![
+            ("doctor_user_skill_differs", ours.as_path()),
+            ("doctor_server_at_user_scope", global.as_path()),
+        ]
+    );
+    assert!(
+        examined.findings[0]
+            .message
+            .contains(&format!("at {}", theirs.display())),
+        "{}",
+        examined.findings[0].message
+    );
+}

@@ -755,9 +755,11 @@ of those facts were checked on the real binaries, is recorded in
 [agents.md](agents.md).
 
 OpenCode itself reads `$OPENCODE_CONFIG_DIR` on top of `~/.config/opencode`
-rather than in its place, by its own documentation. Mindweaver takes one
-folder for each agent for now, the first the table gives; whether a check has
-to read both of OpenCode's is still open.
+rather than in its place, and Claude's skills in `~/.claude/skills` whatever
+`$CLAUDE_CONFIG_DIR` says, by its own documentation. So while either variable
+names a folder, the one in your home is still OpenCode's to Mindweaver too:
+`doctor` reads it, and no install puts a copy in it. An option names the one
+folder outright.
 
 ## Gathering skills from elsewhere
 

@@ -229,7 +229,7 @@ impl List {
         if let Some(home) = &homes.codex_home {
             self.add(scope, home.join(codex_mcp::USER_FILE));
         }
-        if let Some(folder) = &homes.opencode_config_dir {
+        for folder in homes.opencode_dirs() {
             for file in opencode_mcp::USER_FILES {
                 self.add(scope, folder.join(file));
             }

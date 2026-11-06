@@ -233,6 +233,34 @@ fn what_doctor_reads_is_watched_the_agents_own_folders_and_the_project_s_scratch
 }
 
 #[test]
+fn opencode_s_folders_in_the_home_are_watched_beside_those_its_variables_name() {
+    let fixture = Fixture::new();
+    let home = fixture.home();
+    let opencode = home.join(".config").join("opencode");
+    let homes = AgentHomes {
+        claude_config_dir: Some(home.join("claude")),
+        opencode_config_dir: Some(home.join("opencode")),
+        claude_dir_in_home: Some(home.join(".claude")),
+        opencode_dir_in_home: Some(opencode.clone()),
+        ..AgentHomes::default()
+    };
+
+    let watched = watch::watched(&fixture.hub, Some(&home), &homes);
+
+    for expected in [
+        opencode.join("opencode.json"),
+        opencode.join("skills"),
+        home.join("opencode").join("opencode.json"),
+        home.join("opencode").join("skills"),
+        home.join(".claude").join("skills"),
+        home.join("claude").join("skills"),
+    ] {
+        let expected = of(&Scope::Workspace, expected);
+        assert!(watched.contains(&expected), "{expected:?} in {watched:#?}");
+    }
+}
+
+#[test]
 fn what_doctor_reads_above_a_project_is_watched_under_its_scope() {
     let fixture = Fixture::new();
     let api = &fixture.api;

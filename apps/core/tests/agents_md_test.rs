@@ -22,6 +22,8 @@ const NO_HOMES: AgentHomes = AgentHomes {
     codex_home: None,
     opencode_config_dir: None,
     agents_dir: None,
+    claude_dir_in_home: None,
+    opencode_dir_in_home: None,
 };
 
 /// A workspace linking one project below it, and a library of rules to

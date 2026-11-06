@@ -5149,7 +5149,9 @@ left and what `status` says:
   reads both (`doctor_user_skill_differs`). Which folders each agent reads
   there is core's, matched with no wildcard (`AgentHomes::skills_read_by`:
   Claude's `skills`, verified in part; `~/.agents/skills` for Codex,
-  docs-only; OpenCode's own, Claude's and `~/.agents`'s, docs-only). A
+  docs-only; OpenCode's own, the one in the home beneath the one
+  `$OPENCODE_CONFIG_DIR` names, `~/.claude`'s whatever
+  `$CLAUDE_CONFIG_DIR` says, and `~/.agents`'s, docs-only). A
   project at the home, whose folder is the one at user scope, is not
   compared with itself.
 - **A server of an installed one's name at user scope.** Codex reads a
@@ -5157,7 +5159,8 @@ left and what `status` says:
   install refuses (`codex_mcp_collision`) and a server added to the user's
   config since is not; OpenCode merges a project's config over its global
   `config.json`, `opencode.json` and `opencode.jsonc` key by key
-  (docs-only), read as Codex's is (`opencode_mcp::held_by_user`, through
+  (docs-only), in each of its folders (`AgentHomes::opencode_dirs`), read
+  as Codex's is (`opencode_mcp::held_by_user`, through
   `config_entry::read_through`), in either shape
   (`doctor_server_at_user_scope`). Claude's servers at user scope are not
   read ([open questions](#open-questions)).
@@ -9024,11 +9027,18 @@ the answer as an `AgentHomes` and never resolves one.
 
 For OpenCode that order is a simplification: its documentation reads
 `$OPENCODE_CONFIG_DIR` as a folder loaded on top of `~/.config/opencode`, not
-one that replaces it. Doctor is the first to read OpenCode's folder, and
-reads the one `AgentHomes` gives; #17 ran only Claude Code, so that reading
-is still docs-only and the simpler shape stands until a check on the binary
-confirms it; the [open questions](#open-questions) say what changes if one
-does.
+one that replaces it, and names `~/.claude/skills` whatever
+`$CLAUDE_CONFIG_DIR` says. Doctor is the first to read OpenCode's folder, so
+`AgentHomes` takes both, as docs/agents.md's fallback says it would then:
+while a variable names a folder of its own, the one in the user's home is
+kept beside it, `~/.config/opencode` beneath OpenCode's
+(`opencode_dir_in_home`) and `~/.claude` for the skills OpenCode reads
+there (`claude_dir_in_home`), and read, watched and kept free of copies as
+OpenCode's. An option names the one folder outright, for every agent
+reading it, so a test that pins every option reaches no folder in the home
+through these either. #17 ran only Claude Code, so both readings are still
+docs-only; the [open questions](#open-questions) say what changes if a
+check on the binary disagrees.
 
 Those folder names are core's all the same (`AgentHomes::defaults_under`),
 the way `.mindweaver` is: the CLI finds the user's home and core says which
@@ -12796,15 +12806,16 @@ it once as it closes.
   variable becomes the step before the default for `--opencode-config-dir`,
   and tests that spawn a binary clear it too.
 - **`$OPENCODE_CONFIG_DIR` beside OpenCode's folder, not instead of it.**
-  `--opencode-config-dir` takes the variable in place of `~/.config/opencode`,
-  as `--codex-home` takes `$CODEX_HOME` in place of `~/.codex`. OpenCode's
-  documentation says otherwise: the folder the variable names is loaded after
-  the global one and the project's `.opencode`, so it can override their
-  settings, and the global folder is still read. #17 did not run OpenCode, so
-  that stays docs-only. If a check on the real binary confirms it, a check
-  that reads only one folder misses what OpenCode reads from the other
-  whenever the variable is set, and `AgentHomes` needs both for OpenCode:
-  `~/.config/opencode`, and the variable's folder on top.
+  OpenCode's documentation loads the folder the variable names after the
+  global one and the project's `.opencode`, so it can override their
+  settings, and the global folder is still read. `AgentHomes` takes both
+  while the variable names a folder (`opencode_dir_in_home`), and doctor
+  reads both, as it reads `~/.claude/skills` for OpenCode whatever
+  `$CLAUDE_CONFIG_DIR` says (`claude_dir_in_home`). #17 did not run
+  OpenCode, so both stay docs-only. If a check on the real binary finds
+  that the variable replaces the global folder after all, or that OpenCode
+  follows `$CLAUDE_CONFIG_DIR`, doctor reads a folder OpenCode does not and
+  says too much, never too little, and the folder in the home goes.
 - **An empty agent variable.** An empty `$CLAUDE_CONFIG_DIR`, `$CODEX_HOME` or
   `$OPENCODE_CONFIG_DIR` means no folder at all here, following
   `$MINDWEAVER_HOME`. An agent that reads an empty one as unset uses its

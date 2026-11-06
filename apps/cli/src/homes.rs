@@ -223,25 +223,58 @@ fn agent_homes_from(
     // Only which home the folders sit in is decided here; the folders
     // themselves are core's.
     let fallback = user.map(AgentHomes::defaults_under).unwrap_or_default();
+    let claude_config_dir = resolve(
+        given.claude_config_dir.as_deref(),
+        variable("CLAUDE_CONFIG_DIR"),
+        fallback.claude_config_dir.clone(),
+    );
+    let opencode_config_dir = resolve(
+        given.opencode_config_dir.as_deref(),
+        variable("OPENCODE_CONFIG_DIR"),
+        fallback.opencode_config_dir.clone(),
+    );
     AgentHomes {
-        claude_config_dir: resolve(
+        claude_dir_in_home: in_home(
             given.claude_config_dir.as_deref(),
-            variable("CLAUDE_CONFIG_DIR"),
+            &claude_config_dir,
             fallback.claude_config_dir,
         ),
+        opencode_dir_in_home: in_home(
+            given.opencode_config_dir.as_deref(),
+            &opencode_config_dir,
+            fallback.opencode_config_dir,
+        ),
+        claude_config_dir,
         codex_home: resolve(
             given.codex_home.as_deref(),
             variable("CODEX_HOME"),
             fallback.codex_home,
         ),
-        opencode_config_dir: resolve(
-            given.opencode_config_dir.as_deref(),
-            variable("OPENCODE_CONFIG_DIR"),
-            fallback.opencode_config_dir,
-        ),
+        opencode_config_dir,
         // No variable: the folder belongs to no one agent, so none of their
         // variables moves it.
         agents_dir: resolve(given.agents_dir.as_deref(), None, fallback.agents_dir),
+    }
+}
+
+/// The agent's folder in the user's home, `fallback`, while its variable
+/// named another folder for `chosen`, for the agents that read the one in
+/// the home all the same: OpenCode reads `~/.claude/skills` whatever
+/// `$CLAUDE_CONFIG_DIR` says, and `~/.config/opencode` beneath the folder
+/// `$OPENCODE_CONFIG_DIR` names (docs/agents.md, docs-only).
+///
+/// None while an option names the folder outright, so a test that pins
+/// every option reaches no folder in the user's home through this either,
+/// and while the variable is unset, empty or names that folder itself: an
+/// empty one is no folder at all, as it is for every home.
+fn in_home(
+    given: Option<&str>,
+    chosen: &Option<PathBuf>,
+    fallback: Option<PathBuf>,
+) -> Option<PathBuf> {
+    match (given, chosen) {
+        (None, Some(chosen)) if fallback.as_ref() != Some(chosen) => fallback,
+        _ => None,
     }
 }
 

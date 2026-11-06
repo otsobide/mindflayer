@@ -494,8 +494,9 @@ pub fn servers(root: &Path, route: &str) -> Result<Vec<(String, Shape, Value)>, 
 }
 
 /// The first of OpenCode's global config files ([`USER_FILES`]) in the
-/// folder `homes` gives it that holds a server keyed `name`, in either
-/// shape: none when none does, or no folder is given.
+/// folders `homes` gives it ([`AgentHomes::opencode_dirs`]) that holds a
+/// server keyed `name`, in either shape: none when none does, or no folder
+/// is given.
 ///
 /// Read through a link and up to [`MAX_BYTES`], as JSONC, as Codex's own
 /// config is read ([`config_entry::read_through`]): only read, and a
@@ -505,11 +506,11 @@ pub(crate) fn held_by_user(
     homes: &AgentHomes,
     name: &str,
 ) -> Result<Option<PathBuf>, OpenCodeMcpError> {
-    let Some(folder) = &homes.opencode_config_dir else {
-        return Ok(None);
-    };
-    for file in USER_FILES {
-        let path = folder.join(file);
+    for path in homes
+        .opencode_dirs()
+        .into_iter()
+        .flat_map(|folder| USER_FILES.map(|file| folder.join(file)))
+    {
         let Some(text) = config_entry::read_through(&path, MAX_BYTES)? else {
             continue;
         };
