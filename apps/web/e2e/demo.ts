@@ -167,8 +167,10 @@ const SECRETS = `# Keep secrets out of the repository
 /**
  * `at.workspace`, and the repositories around it:
  *
- * - its library holds the skills `api-conventions` and `deploy-checklist`
- *   and the rules `git/commits`, `security/secrets` and `style/comments`;
+ * - its library holds the skills `api-conventions` and `deploy-checklist`,
+ *   the rules `git/commits`, `security/secrets` and `style/comments`, and
+ *   the MCP servers `github`, a program started with a secret, and
+ *   `linear`, an address reached with a bearer token;
  * - its shelf holds `code-review`, `commit-style` and `release-notes`,
  *   gathered from `team`, the team's repository beside it;
  * - it links six projects, `billing-api`, `storefront`, `mobile-app`,
@@ -231,6 +233,18 @@ export function build(at: Places): void {
     succeed(at, 'mindweaver', at.workspace, ['edit', `${kind}:${name}`, '--editor', `cp ${draft}`])
   }
 
+  // The library's MCP servers, each made by `mindweaver add mcp` from how
+  // an agent starts or reaches it, every secret a variable's name.
+  succeed(at, 'mindweaver', at.workspace, [
+    'add', 'mcp', 'github', 'GitHub\'s issues, pull requests and code',
+    '--command', 'npx', '--arg=-y', '--arg', '@modelcontextprotocol/server-github',
+    '--secret-env', 'GITHUB_PERSONAL_ACCESS_TOKEN'
+  ])
+  succeed(at, 'mindweaver', at.workspace, [
+    'add', 'mcp', 'linear', 'Linear\'s issues and projects',
+    '--url', 'https://mcp.linear.app/mcp', '--bearer-env', 'LINEAR_API_KEY'
+  ])
+
   // The projects, each a repository made a project and linked, with what
   // it works with installed.
   const projects: [name: string, options: string[], installs: string[]][] = [
@@ -261,6 +275,13 @@ export function build(at: Places): void {
     }
   }
   succeed(at, 'mind', join(at.workspace, 'billing-api'), ['add', 'skill', 'run-migrations', 'Applies and rolls back the database migrations'])
+  // GitHub's server for `billing-api`'s agents, Claude and Codex: Codex is
+  // given its entry in a project nothing marks trusted, which the install
+  // warns of, and exits 1 for, installed all the same.
+  const served = run(at, 'mindweaver', at.workspace, ['install', '-p', 'billing-api', 'mcp:github'])
+  if (!served.stdout.startsWith('installed ') || !/^warning: Codex reads `github`/m.test(served.stderr)) {
+    throw new Error(`\`${served.line}\` exited ${served.status}:\n${served.stdout}${served.stderr}`)
+  }
   // `infra` keeps its skills where Claude reads them, so its copy of the
   // checklist is its own to edit, and it did: edited, which an update
   // leaves alone.
