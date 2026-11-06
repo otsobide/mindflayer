@@ -6,16 +6,21 @@
 //! `adapter/reqwest_test.rs`.
 
 use std::collections::{BTreeMap, VecDeque};
+use std::fs;
 use std::io::{self, Read};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use mindweaver_core::http::{Answer, Client, Headers, HttpError, Limits, Page, Paging, Request};
+use mindweaver_core::http::{
+    Answer, Cache, Client, Entry, Headers, HttpError, Limits, Page, Paging, Request, Served,
+};
+use mindweaver_core::mother::WorkspaceMother;
 use mindweaver_core::value::Redacted;
-use mindweaver_core::Http;
+use mindweaver_core::{Clock, Http};
 use serde::Deserialize;
+use tempfile::TempDir;
 
 // ---------------------------------------------------------------------------
 // The fake
@@ -960,4 +965,282 @@ fn a_page_that_fails_fails_the_listing() {
 
     assert_eq!(error.code(), "http_json_invalid");
     assert!(error.to_string().starts_with(second), "{error}");
+}
+
+// ---------------------------------------------------------------------------
+// The cache
+// ---------------------------------------------------------------------------
+
+/// A clock that tells what a test sets it to.
+#[derive(Debug)]
+struct Set(AtomicI64);
+
+impl Set {
+    fn at(now: i64) -> Arc<Self> {
+        Arc::new(Self(AtomicI64::new(now)))
+    }
+
+    fn pass(&self, seconds: i64) {
+        self.0.fetch_add(seconds, Ordering::SeqCst);
+    }
+}
+
+impl Clock for Set {
+    fn now(&self) -> i64 {
+        self.0.load(Ordering::SeqCst)
+    }
+}
+
+const NOW: i64 = 1_800_000_000;
+
+fn cache(folder: &TempDir, clock: &Arc<Set>) -> Cache {
+    Cache::at(folder.path().join("http"))
+        .fresh_for(Duration::from_secs(3600))
+        .stamped_by(clock.clone())
+}
+
+#[test]
+fn a_workspaces_cache_is_beside_its_clones() {
+    let (_dir, workspace) = WorkspaceMother::empty();
+
+    let cache = Cache::of(&workspace);
+
+    assert_eq!(cache.folder(), workspace.cache_dir().join("http"));
+    assert_eq!(cache.folder(), workspace.http_cache_dir());
+}
+
+/// A miss is fetched and kept; the same URL asked again while it is fresh
+/// is a hit, which sends nothing.
+#[test]
+fn a_miss_is_fetched_and_kept_and_then_a_hit() {
+    let folder = TempDir::new().unwrap();
+    let clock = Set::at(NOW);
+    let fake = Fake::new().answering(
+        CATALOG,
+        Reply::ok("[1]").with("Content-Type", "application/json"),
+    );
+    let client = Client::new(&fake).with_cache(cache(&folder, &clock));
+
+    let first = client.get(&Request::get(CATALOG)).unwrap();
+    clock.pass(3599);
+    let second = client.get(&Request::get(CATALOG)).unwrap();
+
+    assert_eq!(first.served, Served::Network);
+    assert_eq!(second.served, Served::Cache);
+    assert_eq!(second.body, b"[1]");
+    assert_eq!(second.headers.get("content-type"), Some("application/json"));
+    assert!(first.warnings.is_empty() && second.warnings.is_empty());
+    assert_eq!(fake.sent().len(), 1, "a hit sends nothing");
+}
+
+/// An entry past fresh is asked about, and an answer that has not changed
+/// is served from the cache, kept again from now.
+#[test]
+fn a_stale_entry_is_asked_whether_it_changed() {
+    let folder = TempDir::new().unwrap();
+    let clock = Set::at(NOW);
+    let fake = Fake::new()
+        .answering(CATALOG, Reply::ok("[1]").with("ETag", "\"v1\""))
+        .answering(CATALOG, Reply::status(304, ""));
+    let client = Client::new(&fake).with_cache(cache(&folder, &clock));
+
+    client.get(&Request::get(CATALOG)).unwrap();
+    clock.pass(3600);
+    let again = client.get(&Request::get(CATALOG)).unwrap();
+
+    assert_eq!(again.served, Served::Revalidated);
+    assert_eq!(again.status, 200);
+    assert_eq!(again.body, b"[1]");
+    let sent = fake.sent();
+    assert_eq!(sent[1].header("if-none-match"), Some("\"v1\""));
+    let kept = cache(&folder, &clock).read(CATALOG).unwrap().unwrap();
+    assert_eq!(kept.stored, NOW + 3600);
+}
+
+#[test]
+fn an_answer_that_changed_takes_its_entrys_place() {
+    let folder = TempDir::new().unwrap();
+    let clock = Set::at(NOW);
+    let fake = Fake::new()
+        .answering(CATALOG, Reply::ok("[1]").with("ETag", "\"v1\""))
+        .answering(CATALOG, Reply::ok("[1,2]").with("ETag", "\"v2\""));
+    let client = Client::new(&fake).with_cache(cache(&folder, &clock));
+
+    client.get(&Request::get(CATALOG)).unwrap();
+    clock.pass(7200);
+    let again = client.get(&Request::get(CATALOG)).unwrap();
+
+    assert_eq!(again.served, Served::Network);
+    assert_eq!(again.body, b"[1,2]");
+    let kept = cache(&folder, &clock).read(CATALOG).unwrap().unwrap();
+    assert_eq!(kept.body, b"[1,2]");
+    assert_eq!(kept.headers.get("etag"), Some("\"v2\""));
+}
+
+/// What a 304 means is "what you have": to a request that has nothing, it
+/// is no answer.
+#[test]
+fn an_unchanged_answer_to_a_request_that_did_not_ask_is_a_failure() {
+    let folder = TempDir::new().unwrap();
+    let clock = Set::at(NOW);
+    let fake = Fake::new().answering(CATALOG, Reply::status(304, ""));
+
+    let error = Client::new(&fake)
+        .with_cache(cache(&folder, &clock))
+        .get(&Request::get(CATALOG))
+        .unwrap_err();
+
+    assert_eq!(error.code(), "http_status_unsuccessful");
+}
+
+/// A corrupt entry is a miss, said beside the answer fetched in its place,
+/// which is kept whole over it.
+#[test]
+fn a_corrupt_entry_is_a_miss_and_said() {
+    let folder = TempDir::new().unwrap();
+    let clock = Set::at(NOW);
+    let kept = cache(&folder, &clock);
+    fs::create_dir_all(kept.folder()).unwrap();
+    fs::write(kept.path_of(CATALOG), "half an entr").unwrap();
+    let fake = Fake::new().answering(CATALOG, Reply::ok("[1]"));
+
+    let fetched = Client::new(&fake)
+        .with_cache(cache(&folder, &clock))
+        .get(&Request::get(CATALOG))
+        .unwrap();
+
+    assert_eq!(fetched.served, Served::Network);
+    assert_eq!(fetched.body, b"[1]");
+    let codes: Vec<&str> = fetched.warnings.iter().map(HttpError::code).collect();
+    assert_eq!(codes, ["http_cache_unreadable"]);
+    assert_eq!(kept.read(CATALOG).unwrap().unwrap().body, b"[1]");
+}
+
+/// Written through a temporary file renamed into place, so a reader finds
+/// the old entry or the new one, whole: never the new one half written, nor
+/// a temporary left beside it.
+#[cfg(unix)]
+#[test]
+fn an_entry_is_written_whole_through_a_rename() {
+    use std::os::unix::fs::MetadataExt;
+
+    let folder = TempDir::new().unwrap();
+    let clock = Set::at(NOW);
+    let kept = cache(&folder, &clock);
+    let entry = |body: &[u8]| Entry {
+        stored: NOW,
+        headers: Headers::new(),
+        body: body.to_vec(),
+    };
+    kept.write(CATALOG, &entry(b"[1]")).unwrap();
+    let before = fs::metadata(kept.path_of(CATALOG)).unwrap().ino();
+
+    kept.write(CATALOG, &entry(&vec![b'x'; 1024 * 1024]))
+        .unwrap();
+
+    let after = fs::metadata(kept.path_of(CATALOG)).unwrap().ino();
+    assert_ne!(before, after, "the entry was written in place");
+    assert_eq!(kept.read(CATALOG).unwrap().unwrap().body.len(), 1024 * 1024);
+    let files: Vec<_> = fs::read_dir(kept.folder()).unwrap().collect();
+    assert_eq!(files.len(), 1, "{files:?}");
+}
+
+/// An answer that could not be kept is still the answer: said, and fetched
+/// again next time.
+#[test]
+fn an_answer_that_cannot_be_kept_is_served_and_said() {
+    let folder = TempDir::new().unwrap();
+    let clock = Set::at(NOW);
+    let kept = cache(&folder, &clock);
+    // A folder where the entry would be, which no rename replaces.
+    fs::create_dir_all(kept.path_of(CATALOG).join("in-the-way")).unwrap();
+    let fake = Fake::new().answering(CATALOG, Reply::ok("[1]"));
+
+    let fetched = Client::new(&fake)
+        .with_cache(cache(&folder, &clock))
+        .get(&Request::get(CATALOG))
+        .unwrap();
+
+    assert_eq!(fetched.body, b"[1]");
+    // The folder in the way is no entry to read either, and each is said.
+    let codes: Vec<&str> = fetched.warnings.iter().map(HttpError::code).collect();
+    assert_eq!(codes, ["http_cache_unreadable", "http_cache_unwritable"]);
+    let left: Vec<_> = fs::read_dir(kept.folder()).unwrap().collect();
+    assert_eq!(left.len(), 1, "no temporary is left: {left:?}");
+}
+
+/// What a credential unlocked is not left on disk, and what is on disk is
+/// not served to a request that brings one.
+#[test]
+fn a_request_with_a_credential_goes_past_the_cache() {
+    let folder = TempDir::new().unwrap();
+    let clock = Set::at(NOW);
+    let fake = Fake::new()
+        .answering(CATALOG, Reply::ok("[\"public\"]"))
+        .answering(CATALOG, Reply::ok("[\"private\"]"));
+    let client = Client::new(&fake).with_cache(cache(&folder, &clock));
+
+    client.get(&Request::get(CATALOG)).unwrap();
+    let with = client
+        .get(&Request::get(CATALOG).header("Authorization", "Bearer ghp_token"))
+        .unwrap();
+
+    assert_eq!(with.served, Served::Network);
+    assert_eq!(with.body, b"[\"private\"]");
+    let kept = cache(&folder, &clock).read(CATALOG).unwrap().unwrap();
+    assert_eq!(kept.body, b"[\"public\"]");
+}
+
+/// An entry holds what the answer said of itself and nothing of the
+/// request: not its headers, not its URL.
+#[test]
+fn an_entry_holds_nothing_of_the_request() {
+    let folder = TempDir::new().unwrap();
+    let clock = Set::at(NOW);
+    let url = "https://catalog.example/v0/servers?key=k3y";
+    let fake = Fake::new().answering(
+        url,
+        Reply::ok("[]")
+            .with("ETag", "\"v1\"")
+            .with("Set-Cookie", "session=s3cret"),
+    );
+
+    Client::new(&fake)
+        .with_cache(cache(&folder, &clock))
+        .get(&Request::get(url).header("X-Trace", "tr4ce"))
+        .unwrap();
+
+    let written = fs::read(cache(&folder, &clock).path_of(url)).unwrap();
+    let written = String::from_utf8_lossy(&written);
+    for secret in ["k3y", "tr4ce", "s3cret", "catalog.example"] {
+        assert!(!written.contains(secret), "{secret} in {written}");
+    }
+    assert!(written.contains("\\\"v1\\\""), "{written}");
+}
+
+/// A page kept with its `Link` is followed from the cache as from the
+/// server.
+#[test]
+fn a_listing_read_again_is_followed_from_the_cache() {
+    let folder = TempDir::new().unwrap();
+    let clock = Set::at(NOW);
+    let second = "https://api.example/search?q=skill&page=2";
+    let fake = Fake::new()
+        .answering(
+            SEARCH,
+            Reply::ok(&search(&["a"])).with("Link", &format!("<{second}>; rel=next")),
+        )
+        .answering(second, Reply::ok(&search(&["b"])));
+    let client = Client::new(&fake).with_cache(cache(&folder, &clock));
+
+    client
+        .pages::<Search>(&Request::get(SEARCH), &Paging::NextLink, 10)
+        .unwrap();
+    let again = client
+        .pages::<Search>(&Request::get(SEARCH), &Paging::NextLink, 10)
+        .unwrap();
+
+    assert_eq!(names(&again.pages), ["a", "b"]);
+    assert!(again.warnings.is_empty());
+    assert_eq!(fake.sent().len(), 2);
 }

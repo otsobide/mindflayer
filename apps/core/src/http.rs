@@ -4,8 +4,8 @@
 //! Catalogs (the MCP Registry, the skill directories) are HTTP APIs, and
 //! what is done with them is rules: which URLs a fetch may name, which
 //! redirects it follows and what goes along, how long an answer may take and
-//! how large it may be, how it is read as JSON and how a listing pages
-//! ([`Paging`]). Rules live in core, so the CLI,
+//! how large it may be, how it is read as JSON, how a listing pages
+//! ([`Paging`]) and what of an answer is kept on disk ([`Cache`]). Rules live in core, so the CLI,
 //! the TUI and the server cannot disagree about them. What carries the bytes
 //! is not a rule, and is behind the port: [`crate::adapter::reqwest`] by
 //! default, and a fake in every test, so none goes online. Front ends
@@ -15,14 +15,16 @@
 //!
 //! A [`Client`] is what the rest of core fetches through. It holds every
 //! answer to its [`Limits`] whichever [`Http`] brought it, reading the body
-//! itself rather than trusting a transport to stop, and names a URL in an
-//! error only as a [`Redacted`] one. Everything here blocks: core is
+//! itself rather than trusting a transport to stop, keeps answers in a
+//! workspace's [`Cache`] when it is given one, and names a URL in an error
+//! only as a [`Redacted`] one. Everything here blocks: core is
 //! synchronous, and the server already runs what a backend does off tokio's
 //! threads, where blocking is allowed.
 
 use std::fmt;
 use std::io::{self, Read};
 use std::net::IpAddr;
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use reqwest::Url;
@@ -34,8 +36,10 @@ use crate::port::Http;
 use crate::url::carries_credentials;
 use crate::value::Redacted;
 
+mod cache;
 mod paging;
 
+pub use cache::{Cache, Entry};
 pub use paging::{Page, Paged, Paging};
 
 /// Who Mindweaver says it is on every request: GitHub's API refuses one that
@@ -276,6 +280,13 @@ pub struct Fetched {
     pub status: u16,
     pub headers: Headers,
     pub body: Vec<u8>,
+    /// Where the body came from.
+    pub served: Served,
+    /// What went wrong with the cache on the way, which did not stop the
+    /// fetch: an entry that could not be read was fetched past, and one that
+    /// could not be kept is fetched again next time. Each for the caller to
+    /// collect beside what it read.
+    pub warnings: Vec<HttpError>,
 }
 
 impl Fetched {
@@ -293,12 +304,25 @@ impl Fetched {
     }
 }
 
-/// What core fetches through: an [`Http`], and the limits every answer it
-/// brings back is held to.
+/// Where the body of a [`Fetched`] came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Served {
+    /// The server sent it just now.
+    Network,
+    /// The cache, without asking the server: it was kept recently enough
+    /// ([`Cache::fresh_for`]).
+    Cache,
+    /// The cache, once the server said it has not changed.
+    Revalidated,
+}
+
+/// What core fetches through: an [`Http`], the limits every answer it
+/// brings back is held to, and where answers are kept, if anywhere.
 #[derive(Debug)]
 pub struct Client<'a> {
     http: &'a dyn Http,
     limits: Limits,
+    cache: Option<Cache>,
 }
 
 impl<'a> Client<'a> {
@@ -309,7 +333,15 @@ impl<'a> Client<'a> {
         Self {
             http,
             limits: Limits::default(),
+            cache: None,
         }
+    }
+
+    /// Keep answers in `cache`, and serve them from it while they are fresh
+    /// or the server says they have not changed.
+    pub fn with_cache(mut self, cache: Cache) -> Self {
+        self.cache = Some(cache);
+        self
     }
 
     /// Hold answers to `limits` rather than to the default ones.
@@ -337,7 +369,74 @@ impl<'a> Client<'a> {
     /// whichever one it sends the request on to. reqwest drops
     /// `Authorization` and `Cookie` on such a hop by itself, and only those,
     /// so a key in a header of a service's own naming would have gone along.
+    ///
+    /// With a [`Cache`], a `200` is kept, and served again while it is fresh,
+    /// or once the server says it has not changed when it said how to ask
+    /// (`ETag`, `Last-Modified`). A request that carries a credential goes
+    /// past the cache both ways: what a credential unlocked is not left on
+    /// disk for a request without one to read.
     pub fn get(&self, request: &Request) -> Result<Fetched, HttpError> {
+        let url = request.url();
+        // Before the cache is looked in, which a refused URL never reaches.
+        fetchable(url)?;
+        let Some(cache) = self
+            .cache
+            .as_ref()
+            .filter(|_| !request.carries_credential())
+        else {
+            return self.fetch(request, false);
+        };
+
+        let mut warnings = Vec::new();
+        let kept = cache.read(url).unwrap_or_else(|warning| {
+            warnings.push(warning);
+            None
+        });
+        let served = |entry: Entry, served, warnings| Fetched {
+            url: url.to_owned(),
+            status: 200,
+            headers: entry.headers,
+            body: entry.body,
+            served,
+            warnings,
+        };
+        let kept = match kept {
+            Some(entry) if cache.is_fresh(&entry) => {
+                return Ok(served(entry, Served::Cache, warnings));
+            }
+            kept => kept,
+        };
+
+        let asking = kept.as_ref().and_then(|entry| entry.conditional(request));
+        let mut fetched = self.fetch(asking.as_ref().unwrap_or(request), asking.is_some())?;
+        match kept {
+            Some(entry) if asking.is_some() && fetched.status == 304 => {
+                // Kept again, so how long it is fresh for starts from now.
+                let entry = Entry {
+                    stored: cache.now(),
+                    ..entry
+                };
+                if let Err(warning) = cache.write(url, &entry) {
+                    warnings.push(warning);
+                }
+                Ok(served(entry, Served::Revalidated, warnings))
+            }
+            _ => {
+                if fetched.status == 200 {
+                    if let Err(warning) = cache.write(url, &Entry::of(&fetched, cache.now())) {
+                        warnings.push(warning);
+                    }
+                }
+                fetched.warnings = warnings;
+                Ok(fetched)
+            }
+        }
+    }
+
+    /// Fetch `request` from the server, as [`Client::get`] says, with no
+    /// cache: a `304` is an answer, with no body, only to a request that is
+    /// `asking` whether what is kept has changed.
+    fn fetch(&self, request: &Request, asking: bool) -> Result<Fetched, HttpError> {
         let url = request.url();
         let first = fetchable(url)?;
         let started = Instant::now();
@@ -366,17 +465,22 @@ impl<'a> Client<'a> {
             at = next;
         };
 
-        if !(200..300).contains(&answer.status) {
+        let unchanged = asking && answer.status == 304;
+        if !(200..300).contains(&answer.status) && !unchanged {
             return Err(HttpError::Status {
                 url: Redacted::new(url),
                 status: answer.status,
             });
         }
-        let declared = answer
-            .headers
-            .get("content-length")
-            .and_then(|length| length.trim().parse::<u64>().ok());
-        let body = self.read(url, answer.body, declared, started)?;
+        let body = if unchanged {
+            Vec::new()
+        } else {
+            let declared = answer
+                .headers
+                .get("content-length")
+                .and_then(|length| length.trim().parse::<u64>().ok());
+            self.read(url, answer.body, declared, started)?
+        };
         Ok(Fetched {
             url: if redirects == 0 {
                 url.to_owned()
@@ -386,6 +490,8 @@ impl<'a> Client<'a> {
             status: answer.status,
             headers: answer.headers,
             body,
+            served: Served::Network,
+            warnings: Vec::new(),
         })
     }
 
@@ -630,6 +736,18 @@ pub enum HttpError {
     /// A listing that went on past the most pages it was let run to.
     #[error("{url}: read no further than {limit} pages, the most this listing is let run to")]
     TooManyPages { url: Redacted, limit: usize },
+    /// A kept answer that cannot be read, or was written in a format this
+    /// build does not know: a miss, said, and fetched in its place. Its
+    /// path is a digest, which says nothing of the URL.
+    #[error("{path}: a kept HTTP answer that cannot be read, so it is fetched again: {detail}")]
+    CacheUnreadable { path: PathBuf, detail: String },
+    /// An answer that could not be kept: said, and fetched again next time.
+    #[error("{path}: an HTTP answer cannot be kept: {source}")]
+    CacheUnwritable {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
 }
 
 codes!(HttpError {
@@ -647,6 +765,8 @@ codes!(HttpError {
     Self::TooManyRedirects { .. } => "http_too_many_redirects",
     Self::Json { .. } => "http_json_invalid",
     Self::TooManyPages { .. } => "http_too_many_pages",
+    Self::CacheUnreadable { .. } => "http_cache_unreadable",
+    Self::CacheUnwritable { .. } => "http_cache_unwritable",
 });
 
 #[cfg(test)]

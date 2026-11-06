@@ -44,6 +44,9 @@ pub struct Paged<T> {
     /// what is in `pages` is all of it before that. A failure for the caller
     /// to collect beside what was read, rather than a reason to hide it.
     pub cut: Option<HttpError>,
+    /// What went wrong with the cache on the way, each page's
+    /// ([`Fetched::warnings`]).
+    pub warnings: Vec<HttpError>,
 }
 
 impl Client<'_> {
@@ -64,6 +67,7 @@ impl Client<'_> {
     ) -> Result<Paged<T>, HttpError> {
         let origin = fetchable(first.url())?.origin();
         let mut pages = Vec::new();
+        let mut warnings = Vec::new();
         let mut asked = 0;
         let mut next = Some(first.clone());
         while let Some(request) = next.take() {
@@ -74,10 +78,12 @@ impl Client<'_> {
                         url: Redacted::new(first.url()),
                         limit: max_pages,
                     }),
+                    warnings,
                 });
             }
             asked += 1;
-            let fetched = self.get(&request)?;
+            let mut fetched = self.get(&request)?;
+            warnings.append(&mut fetched.warnings);
             let page: T = fetched.json()?;
             let after = match paging {
                 Paging::NextLink => next_link(&fetched)?,
@@ -87,7 +93,11 @@ impl Client<'_> {
             pages.push(page);
             next = after.map(|url| first.to(&url, url.origin() == origin));
         }
-        Ok(Paged { pages, cut: None })
+        Ok(Paged {
+            pages,
+            cut: None,
+            warnings,
+        })
     }
 }
 

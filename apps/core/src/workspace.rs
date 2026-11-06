@@ -138,6 +138,10 @@ pub const FLAYER_CONFIG: &str = "flayer.toml";
 /// Kept rather than discarded so a gather can be inspected after the fact, and
 /// so what a source actually contained is still there when its report is not.
 pub const CACHE_DIR: &str = "cache";
+/// Where a workspace keeps the answers it fetched over HTTP, inside
+/// [`CACHE_DIR`] beside the clones, each of which has a folder of its own
+/// named from its source.
+pub const HTTP_CACHE_DIR: &str = "http";
 /// Where a workspace keeps its own artifacts when its marker does not say,
 /// inside [`WEAVER_DIR`]: a folder per kind, named after it.
 ///
@@ -1474,6 +1478,12 @@ impl WeaverWorkspace {
     /// Where clones are kept, whether or not it exists yet.
     pub fn cache_dir(&self) -> PathBuf {
         self.weaver_dir().join(CACHE_DIR)
+    }
+
+    /// Where answers fetched over HTTP are kept ([`HTTP_CACHE_DIR`]),
+    /// whether or not it exists yet.
+    pub fn http_cache_dir(&self) -> PathBuf {
+        self.cache_dir().join(HTTP_CACHE_DIR)
     }
 
     /// The workspace's scratch folder ([`SCRATCH_DIR`] in `.mindweaver`),

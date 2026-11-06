@@ -71,8 +71,9 @@ ts-rs = { version = "12", optional = true, features = ["no-serde-warnings"] }
 # crates it brings; serde_json, below, writes what a type says by hand.
 schemars = { version = "1.2", optional = true }
 # What a catalog answers over HTTP is JSON, read into the types a catalog
-# declares (`http::Fetched::json`): a dependency of every build since, where
-# it was the `schema` feature's alone. The version the server already builds.
+# declares (`http::Fetched::json`), and what an entry of the HTTP cache says
+# of itself is JSON too: a dependency of every build since, where it was the
+# `schema` feature's alone. The version the server already builds.
 serde_json = "1"
 # What a fixture mother holds its folder in (`mother::fixture`), only under
 # `mother`, as the dev-dependency below is for core's own tests.

@@ -231,6 +231,8 @@ export type CoreCode =
   | "http_too_many_redirects"
   | "http_json_invalid"
   | "http_too_many_pages"
+  | "http_cache_unreadable"
+  | "http_cache_unwritable"
   | "shelf_copy_missing"
   | "loaded_copy_gone"
   | "name_unsafe"
