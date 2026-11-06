@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import type { Asking } from '@/api/generated/Asking'
 import type { Cell } from '@/api/generated/Cell'
@@ -8,7 +8,7 @@ import type { Project } from '@/api/generated/Project'
 import type { Said } from '@/api/generated/Said'
 import type { Snapshot } from '@/api/generated/Snapshot'
 import { useRunner } from '@/api/commands'
-import { batchOf, usePlan, usePreview } from '@/api/plan'
+import { batchOf, sameAsking, usePlan, usePreview } from '@/api/plan'
 import { useSnapshot } from '@/api/snapshot'
 import { TransportError, type Task } from '@/api/transport'
 import { first, useQueryChange } from '@/address'
@@ -67,19 +67,32 @@ const plan = computed(() => (selection.value.length > 0 && !isPlaceholderData.va
 
 /**
  * Each install waiting for a yes that somebody said yes to, once its lines
- * were shown, by the task its confirmation carries: one the plan no longer
- * asks of is no longer sent, and one asked of again is said yes to again.
+ * were shown, by the task its confirmation carries and those lines
+ * (`sameAsking`): one whose lines change asks again.
  */
 const said = ref<Asking[]>([])
 
+// A yes the plan no longer asks for is let go, every one when nothing is
+// marked, so a box unmarked and marked again, or lines changed and changed
+// back, asks again rather than going out with a yes said to what the page
+// no longer showed. None while the next plan is asked for, which is not
+// drawn.
+watch(plan, (now) => {
+  if (now) {
+    said.value = said.value.filter(each => now.asks.some(asking => sameAsking(each, asking)))
+  } else if (selection.value.length === 0) {
+    said.value = []
+  }
+})
+
 /** Whether `asking` was said yes to. */
 function yes(asking: Asking): boolean {
-  return said.value.some(each => JSON.stringify(each.confirmed) === JSON.stringify(asking.confirmed))
+  return said.value.some(each => sameAsking(each, asking))
 }
 
 /** Say yes to `asking`, or take it back. */
 function say(asking: Asking, to: boolean) {
-  const others = said.value.filter(each => JSON.stringify(each.confirmed) !== JSON.stringify(asking.confirmed))
+  const others = said.value.filter(each => !sameAsking(each, asking))
   said.value = to ? [...others, asking] : others
 }
 

@@ -312,6 +312,11 @@ describe('applying a plan', () => {
   })
 })
 
+/** The box saying yes to the one install waiting for it. */
+function yesBox(): HTMLElement | null {
+  return document.body.querySelector<HTMLElement>('[data-testid="say-yes"] [role="checkbox"], [role="checkbox"][data-testid="say-yes"]')
+}
+
 describe('an MCP server on the matrix', () => {
   it('draws the servers as every other offer, ticked where a project holds one', async () => {
     const { page } = await render('/assign?kind=mcp', fixture('serving'))
@@ -338,7 +343,7 @@ describe('an MCP server on the matrix', () => {
     expect(plain!.task).toEqual({ type: 'apply_install', changes: (plan.answer as Planned).tasks })
     expect(JSON.stringify(plain!.task)).not.toContain('"yes":true')
 
-    document.body.querySelector<HTMLElement>('[data-testid="say-yes"] [role="checkbox"], [role="checkbox"][data-testid="say-yes"]')!.click()
+    yesBox()!.click()
     await flushPromises()
     expect(texts(page, '[data-testid="line"]')).toEqual(confirmed!.preview.lines.map(line => `$ ${line}`))
     expect(confirmed!.task).toEqual({ type: 'apply_install', changes: [asks[0]!.confirmed] })
@@ -351,6 +356,48 @@ describe('an MCP server on the matrix', () => {
     ;(dialog.querySelector('[data-testid="run"]') as HTMLElement).click()
     await flushPromises()
     expect(sent.filter(each => each.mode === 'run').map(each => each.task)).toEqual([confirmed!.task])
+  })
+
+  it('asks again once the lines a yes was said to change, and sends none till then', async () => {
+    const [plain, confirmed] = served().filter(each => each.task.type === 'apply_install')
+    const answered = servers()
+    const plan = answered.find(each => each.query.type === 'plan' && JSON.stringify(each.query).includes('mcp:sentry'))!
+    const { tell, transport } = commanding(fixture('serving'), [plain!, confirmed!], answered)
+    const { page } = await render('/assign?kind=mcp', transport)
+    await box(page, 'mcp', 'sentry', 'load:../team', 'web').trigger('click')
+    await flushPromises()
+    yesBox()!.click()
+    await flushPromises()
+    expect(texts(page, '[data-testid="line"]')).toEqual(confirmed!.preview.lines.map(line => `$ ${line}`))
+
+    // The team's definition changed on disk: the same task now runs
+    // something else, which nobody has read.
+    const asks = (plan.answer as Planned).asks
+    asks[0]!.lines = [...asks[0]!.lines, '  codex: runs something else']
+    tell({ type: 'changed', scopes: [{ type: 'workspace' }] })
+    await flushPromises()
+
+    expect(texts(page, '[data-testid="ask-line"]')).toContain('codex: runs something else')
+    expect(yesBox()!.getAttribute('aria-checked')).toBe('false')
+    expect(texts(page, '[data-testid="line"]')).toEqual(plain!.preview.lines.map(line => `$ ${line}`))
+  })
+
+  it('asks again of a box unmarked and marked again', async () => {
+    const [plain, confirmed] = served().filter(each => each.task.type === 'apply_install')
+    const { page } = await render('/assign?kind=mcp', commanding(fixture('serving'), [plain!, confirmed!], servers()).transport)
+    const sentry = () => box(page, 'mcp', 'sentry', 'load:../team', 'web')
+    await sentry().trigger('click')
+    await flushPromises()
+    yesBox()!.click()
+    await flushPromises()
+
+    await sentry().trigger('click')
+    await flushPromises()
+    await sentry().trigger('click')
+    await flushPromises()
+
+    expect(yesBox()!.getAttribute('aria-checked')).toBe('false')
+    expect(texts(page, '[data-testid="line"]')).toEqual(plain!.preview.lines.map(line => `$ ${line}`))
   })
 
   it('sends one that asks first with no yes until it is said, which installs nothing', async () => {

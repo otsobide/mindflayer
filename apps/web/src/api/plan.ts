@@ -14,18 +14,28 @@ import { useTransport, type Task } from './transport'
  *
  * Each install the plan says waits for a yes (`asks`) is sent as it came,
  * its line installing nothing, unless it is among `confirmed`, those
- * somebody said yes to once their lines were shown: then the task the
- * plan handed beside it carrying the yes goes in its place. The panel sets
- * no yes on a task of its own; one built anywhere else carries none.
+ * somebody said yes to once their lines were shown (`sameAsking`): then
+ * the task the plan handed beside it carrying the yes goes in its place.
+ * The panel sets no yes on a task of its own; one built anywhere else
+ * carries none.
  */
 export function batchOf(plan: Planned, confirmed: Asking[] = []): Task | undefined {
   const changes = plan.tasks.map((task, at) => {
     const asking = plan.asks.find(each => each.task === at)
-    return asking && confirmed.some(each => JSON.stringify(each.confirmed) === JSON.stringify(asking.confirmed))
-      ? asking.confirmed
-      : task
+    return asking && confirmed.some(each => sameAsking(each, asking)) ? asking.confirmed : task
   })
   return changes.length > 0 ? { type: 'apply_install', changes } : undefined
+}
+
+/**
+ * Whether a yes said to `said` is one to `asking`: the same task, shown
+ * the same lines. A plan is asked for again whenever the disk changes, a
+ * definition in a loaded workspace among it, so the same task may come to
+ * run what nobody has read: its lines changed, it waits for a yes of its
+ * own.
+ */
+export function sameAsking(said: Asking, asking: Asking): boolean {
+  return JSON.stringify([said.confirmed, said.lines]) === JSON.stringify([asking.confirmed, asking.lines])
 }
 
 /**

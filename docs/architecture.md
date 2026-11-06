@@ -7642,7 +7642,11 @@ What the pages offer:
   the plan's own task goes, whose line installs nothing and says what it
   would, and once ticked the confirmation's task goes in its place
   (`batchOf`, given what was said yes to), its line `--yes`, previewed and
-  asked like any other. `Task::Install`'s `yes` is JSON for that alone: a
+  asked like any other. A yes is to that task as its lines were shown
+  (`sameAsking`): a plan is asked for again whenever the disk changes, a
+  loaded workspace's definition among it, so lines that changed since ask
+  again, and a yes the plan no longer asks for, a box unmarked, is let
+  go. `Task::Install`'s `yes` is JSON for that alone: a
   plan's task carries `false`, the palette's install too, and the panel
   sets it on no task of its own, sending only what a plan handed it. A yes
   sent with any other install is refused by the path policy before a line
