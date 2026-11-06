@@ -209,7 +209,8 @@ pub struct Holdings {
     /// `mindweaver doctor` says it, each with its fix, one line each: none
     /// for the workspace's own, which is no project's.
     pub found: Vec<String>,
-    /// Files that could not be read, one line each.
+    /// Files that could not be read, one line each: the read's, and those
+    /// doctor could not read to tell.
     pub warnings: Vec<String>,
     /// Where each kind lives, relative to the project, so an empty project
     /// can say where it looked.

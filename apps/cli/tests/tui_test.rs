@@ -3674,6 +3674,39 @@ fn a_project_doctor_finds_something_in_is_marked_with_how_much_and_its_pane_says
 }
 
 #[test]
+fn what_doctor_could_not_read_to_tell_is_said_beside_what_could_not_be_read() {
+    let dir = workspace_with_own();
+    let codex = dir.path().join("home/.codex");
+    fs::create_dir_all(&codex).unwrap();
+    let config = codex.join("config.toml");
+    fs::write(&config, "[projects\n").unwrap();
+    let lookup = Lookup {
+        agents: AgentHomes {
+            codex_home: Some(codex),
+            ..AgentHomes::default()
+        },
+        ..Lookup::default()
+    };
+
+    let view = tui::load(dir.path(), &lookup).unwrap();
+    let app = App::new(dir.path().to_path_buf(), view).with_lookup(lookup);
+
+    let member = app.member().unwrap();
+    let holdings = member.holdings.as_ref().unwrap();
+    let said: Vec<&String> = holdings
+        .warnings
+        .iter()
+        .filter(|line| line.starts_with(&format!("{}: ", config.display())))
+        .collect();
+    assert_eq!(said.len(), 1, "{:?}", holdings.warnings);
+    assert!(
+        member.problems() > 0,
+        "a check left unmade is no clean bill"
+    );
+    assert!(tui_drawn(&app).contains("Could not be read"));
+}
+
+#[test]
 fn a_project_no_workspace_links_is_marked_for_what_doctor_finds_in_it_too() {
     let home = TempDir::new().unwrap();
     let elsewhere = TempDir::new().unwrap();

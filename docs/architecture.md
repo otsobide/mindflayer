@@ -5199,7 +5199,9 @@ files Mindweaver does not own, would change what it holds, which moves the
 format: #97 shows the findings beside it. The TUI marks a project doctor
 finds something in with `✚` and how many, and its pane says each with its
 fix, in a strip of its own beside the one of what its agents do not see
-([the TUI](#the-tui)); the panel draws nothing of them yet. What the
+([the TUI](#the-tui)), and what doctor could not read to tell in the one of
+what could not be read, counted with it, as `mindweaver doctor` says it on
+stderr; the panel draws nothing of them yet. What the
 snapshot now reads, what doctor reads, is watched as everything it reads is
 (`watch::watched`): every folder an agent reads skills from in a project
 and its `.mind/tmp`, under the project's scope, and the agents' own files

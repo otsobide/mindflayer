@@ -665,6 +665,15 @@ fn held(entry: String, project: &view::Project, examined: &Examined) -> Member {
             .map(|unreached| unread(&name, unreached, false)),
     );
     unreached.extend(project.missed.iter().map(|missed| unseen(&name, missed)));
+    // What doctor could not read to tell, beside what the read could not,
+    // as `mindweaver doctor` says it on stderr: a check left unmade is no
+    // clean bill. A line once, a folder neither could list being one.
+    let mut warnings = messages(&project.failures);
+    for line in messages(&examined.failures) {
+        if !warnings.contains(&line) {
+            warnings.push(line);
+        }
+    }
     let settings = project.settings.as_ref();
     Member {
         entry,
@@ -696,7 +705,7 @@ fn held(entry: String, project: &view::Project, examined: &Examined) -> Member {
                 .iter()
                 .map(|finding| format!("{}; fix: {}", finding.message, finding.fix))
                 .collect(),
-            warnings: messages(&project.failures),
+            warnings,
             directories: directories(&project.directories),
             templates: choices(&project.templates),
         }),
