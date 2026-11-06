@@ -431,15 +431,27 @@ impl Given {
 /// the file holds beside them. Refused, with why, when the file does not
 /// read as a definition, whose transport cannot be told apart from the
 /// rest then.
+///
+/// `text` as it is when `given` says what it holds already, its
+/// `transport` and `inputs` the same values to TOML: a form starts from
+/// what [`Given::of`] reads back, `env` and `headers` in the order of
+/// their keys, which is no order an agent reads, so a change told nothing
+/// new rewrites nothing, a layout or a comment of somebody's in those
+/// tables included, and `edit` writes nothing.
 pub(crate) fn retransported(text: &str, given: &Given) -> Result<String, String> {
     let before = McpDefinition::parse(text).map_err(|error| error.to_string())?;
     let mut document: toml_edit::DocumentMut = text
         .parse()
         .map_err(|error: toml_edit::TomlError| error.to_string())?;
-    let written: toml_edit::DocumentMut = given
-        .text(&before.name, &before.description)
+    let rewritten = given.text(&before.name, &before.description);
+    let written: toml_edit::DocumentMut = rewritten
         .parse()
         .map_err(|error: toml_edit::TomlError| error.to_string())?;
+    if let (Ok(held), Ok(told)) = (started(text), started(&rewritten)) {
+        if held == told {
+            return Ok(text.to_owned());
+        }
+    }
     // Where the transport stood, so the new one stands there, its inputs
     // after it, and not below the extras, which a file reads as written
     // after them: each table is given the one place, which `toml_edit`
@@ -468,6 +480,14 @@ pub(crate) fn retransported(text: &str, given: &Given) -> Result<String, String>
         document.insert(key, item);
     }
     Ok(document.to_string())
+}
+
+/// What a definition's `text` says of how its server is started or reached
+/// and of what is supplied for it, its `transport` and `inputs`, as TOML
+/// reads their values: a table's keys in no order.
+fn started(text: &str) -> Result<(Option<toml::Value>, Option<toml::Value>), toml::de::Error> {
+    let mut table: toml::Table = toml::from_str(text)?;
+    Ok((table.remove("transport"), table.remove("inputs")))
 }
 
 /// An input a definition declares, as `add` writes it.

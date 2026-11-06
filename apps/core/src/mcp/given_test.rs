@@ -403,6 +403,34 @@ fn a_transport_written_again_keeps_every_other_key_and_its_comments() {
 }
 
 #[test]
+fn a_transport_told_what_the_file_holds_is_not_written_again_in_another_order() {
+    let given = Given::Program(Program {
+        command: String::from("npx"),
+        env: vec![
+            (String::from("B"), String::from("1")),
+            (String::from("A"), String::from("2")),
+        ],
+        secret_env: vec![VariableName::from("TOKEN")],
+        ..Program::default()
+    });
+    // As `add` writes it, with a comment of somebody's in its transport.
+    let text = given
+        .text("acme", "Acme's tools")
+        .replace("[transport]\n", "[transport]\n# Ours.\n");
+    let read = Given::of(&McpDefinition::parse(&text).unwrap()).unwrap();
+    assert_ne!(read, given, "read back in the order of its keys");
+
+    assert_eq!(retransported(&text, &read).unwrap(), text);
+    // Told something new, it is written again.
+    let Given::Program(mut changed) = read else {
+        unreachable!("a program is read back as one");
+    };
+    changed.env[0].1 = String::from("3");
+    let written = retransported(&text, &Given::Program(changed)).unwrap();
+    assert!(written.contains("A = \"3\""), "{written}");
+}
+
+#[test]
 fn a_transport_is_not_written_into_what_reads_as_no_definition() {
     assert!(retransported("format = 1\nname = ", &McpMother::given()).is_err());
 }

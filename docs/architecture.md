@@ -1269,8 +1269,13 @@ definition read back as the options would say it (`Given::of`), none when
 it holds what no option says, an input described or required, a program's
 folder, a secret under a name of its own, or an argument read from a
 variable before one written as it is: a form starting from part of it
-would write the rest away, so such a definition is changed as text. The
-grammar refuses the options beside an editor or contents, as beside a
+would write the rest away, so such a definition is changed as text. It
+reads `env` and `headers` back in the order of their keys, the order the
+definition holds them in, which is no order an agent reads, so options
+saying what the file's `transport` and `inputs` hold already, as TOML
+reads their values, leave the file as it is, and `edit` writes nothing:
+a form changed in nothing would otherwise rewrite a file `add` wrote in
+the order typed, and say it was edited. The grammar refuses the options beside an editor or contents, as beside a
 template, through the group clap gives `ServerOptions`, which `--template`,
 `--editor` and `--contents` each conflict with.
 

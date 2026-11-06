@@ -9,7 +9,7 @@ use mindweaver_core::hash;
 use mindweaver_core::install::{self, InstallError, Standing};
 use mindweaver_core::ledger::{Ledger, SourceKind};
 use mindweaver_core::lifecycle::{self, Record, Target};
-use mindweaver_core::mcp::{Address, Given, McpDefinition};
+use mindweaver_core::mcp::{Address, Given, McpDefinition, Program};
 use mindweaver_core::mother::McpMother;
 use mindweaver_core::AgentHomes;
 use mindweaver_core::{
@@ -1924,6 +1924,37 @@ fn a_server_is_given_another_transport_and_keeps_its_name_and_description() {
             .unwrap()
             .changed
     );
+}
+
+#[test]
+fn a_server_told_back_what_it_holds_is_left_as_it_is_whatever_order_its_keys_were_written_in() {
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
+    let given = Given::Program(Program {
+        command: String::from("npx"),
+        env: vec![
+            (String::from("B"), String::from("1")),
+            (String::from("A"), String::from("2")),
+        ],
+        ..Program::default()
+    });
+    let added = lifecycle::add(
+        Some(&workspace),
+        &workspace.own(),
+        Kind::Mcp,
+        "acme",
+        "Acme's tools",
+        Start::Server(&given),
+    )
+    .unwrap();
+    let file = added.artifact.file();
+    let before = fs::read_to_string(&file).unwrap();
+    let read = Given::of(&McpDefinition::parse(&before).unwrap()).unwrap();
+
+    let edited = retransport(&workspace, "mcp:acme", &read).unwrap();
+
+    assert!(!edited.changed);
+    assert_eq!(fs::read_to_string(&file).unwrap(), before);
 }
 
 #[test]
