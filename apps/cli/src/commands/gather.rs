@@ -587,9 +587,10 @@ pub(crate) fn scrubbed(scrub: &Scrub) -> Scrubbed {
 ///
 /// The source is named without credentials, as everywhere a URL is shown.
 /// A gather that got this far was given none, since core refuses them, so
-/// this costs nothing today and still holds if that ever changes.
+/// this costs nothing today and still holds if that ever changes. In
+/// printable text, as its name is: a plugin's URL is its catalog's.
 fn gathered(url: &str, report: &Report) -> Outcome {
-    let url = redacted(url);
+    let url = printable(&redacted(url));
     let mut stdout = String::new();
     let at = report
         .revision
@@ -967,3 +968,7 @@ fn pinned_at(gathered: &Gathered) -> Option<&str> {
 fn short(revision: &str) -> &str {
     revision.get(..7).unwrap_or(revision)
 }
+
+#[cfg(test)]
+#[path = "gather_test.rs"]
+mod tests;
