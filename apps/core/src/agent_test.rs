@@ -520,3 +520,20 @@ fn a_sentence_names_each_agent_by_its_product_and_a_command_line_by_its_binary()
         ]
     );
 }
+
+#[test]
+fn claude_starts_a_server_once_approved_codex_in_a_trusted_project_and_opencode_unasked() {
+    let said: Vec<(Agent, Starts)> = Agent::ALL
+        .into_iter()
+        .map(|agent| (agent, agent.starts_a_server()))
+        .collect();
+
+    assert_eq!(
+        said,
+        [
+            (Agent::Claude, Starts::OnceApproved),
+            (Agent::Codex, Starts::InATrustedProject),
+            (Agent::OpenCode, Starts::Unasked),
+        ]
+    );
+}

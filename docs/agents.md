@@ -655,6 +655,18 @@ stands now that #18's runs have been made:
 | OpenCode | V1's shape, `mcp.<name>`, has no key for a program's folder, where V2's has `cwd`: an entry written in V1's, into a file that keeps its servers so, is written without it. | docs-only | #92; V1's [MCP servers](https://opencode.ai/docs/mcp-servers/) docs give a local server `type`, `command`, `environment`, `enabled` and `timeout`, and none of #18's checks writes a folder. Mindweaver says what it leaves out (`opencode_mcp_v1_cwd`); were V1 to take `cwd`, a server it could be given whole starts where OpenCode starts it. |
 
 
+### What an agent asks before it starts one
+
+What an install says of each agent once it has written a server's entry
+(#95, `Agent::starts_a_server`), from what the runs and the docs below
+say:
+
+| Agent | Before it starts a project's server | Mark | Source |
+|---|---|---|---|
+| Claude Code | Asks somebody working in a session to approve the project's servers; a `-p` run starts every one the file names, approved or not. | docs-only for the session, verified for `-p` | [Claude Code's `.mcp.json`](#claude-codes-mcpjson); `claude-mcp` on 2.1.318 started `probe-unapproved` |
+| Codex | Reads `.codex/config.toml` only in a project its user's config marks trusted, which an install says as `codex_mcp_untrusted` when nothing marks it. | docs-only | [Codex's `.codex/config.toml`](#codexs-codexconfigtoml); `codex-mcp-trusted` and `codex-mcp-untrusted` pending |
+| OpenCode | Asks nothing: it connects to every server the project's file names. | verified for `opencode mcp list` | [OpenCode's `opencode.json`](#opencodes-opencodejson); the OpenCode runs on 2.2.5, 2.1.3 and 1.19.4 connected each stand-in, nothing approved |
+
 ### Running them
 
 ```bash

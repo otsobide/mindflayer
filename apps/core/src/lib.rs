@@ -76,7 +76,7 @@ pub mod watch;
 pub mod workspace;
 
 pub use activate::{ActivateError, Shell, UnknownShell};
-pub use agent::{Agent, AgentHomes, AgentTarget, TargetTable, UnknownAgent};
+pub use agent::{Agent, AgentHomes, AgentTarget, Starts, TargetTable, UnknownAgent};
 pub use artifact::{Artifact, ArtifactCopy, ArtifactError, Declared, Provenance, ValidationIssue};
 pub use catalog::{Catalog, DiscoveryFailure, Reference, QUALIFIER};
 pub use create::{create, create_from, CreateError};
