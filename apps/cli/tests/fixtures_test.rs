@@ -490,7 +490,7 @@ fn shelve(root: &Path) {
     let source = ledger
         .source_for(SourceKind::Git, SOURCE, None, "skills")
         .unwrap();
-    ledger.saw_source(source.id, Some(REVISION)).unwrap();
+    ledger.saw_source(source.id, Some(REVISION), None).unwrap();
     // One with a licence file beside it, which a gather reads its first
     // line of, and one with none.
     for (name, summary, license) in [

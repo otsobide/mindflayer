@@ -30,6 +30,7 @@ pub(crate) fn run_gather(
             path,
             reference,
             name,
+            pin,
         } => {
             let workspace = workspace_here(directory, lookup)?;
             let (ledger, scrub) = workspace.ledger_to_write().map_err(CliError::from)?;
@@ -38,6 +39,7 @@ pub(crate) fn run_gather(
                 .from_subdirectory(path.clone())
                 .at(reference.clone())
                 .named(name.clone())
+                .pinned(pin.clone())
                 .watched_by(watch.clone());
             match gather::gather(&workspace, &ledger, &request) {
                 Ok(report) => Ok(said.before(gathered(url, &report))),

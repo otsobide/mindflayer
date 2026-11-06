@@ -540,6 +540,7 @@ impl LedgerStore for Sqlite {
             revision: None,
             directory,
             name,
+            pin: None,
         })
     }
 
@@ -609,11 +610,16 @@ impl LedgerStore for Sqlite {
             .map_err(|source| self.failed("forgetting a source made one", source))
     }
 
-    fn saw_source(&self, id: i64, revision: Option<&str>) -> Result<(), LedgerError> {
+    fn saw_source(
+        &self,
+        id: i64,
+        revision: Option<&str>,
+        pin: Option<&Revision>,
+    ) -> Result<(), LedgerError> {
         self.connection
             .execute(
-                "UPDATE sources SET revision = ?2, last_seen = ?3 WHERE id = ?1",
-                rusqlite::params![id, revision, self.now()],
+                "UPDATE sources SET revision = ?2, last_seen = ?3, pin = ?4 WHERE id = ?1",
+                rusqlite::params![id, revision, self.now(), pin.map(|pin| pin.as_str())],
             )
             .map(|_| ())
             .map_err(|source| self.failed("updating a source", source))
@@ -683,7 +689,7 @@ impl LedgerStore for Sqlite {
             .prepare(
                 "SELECT a.kind, a.name, a.path, a.summary, a.revision, a.gathered_at,
                         s.id, s.kind, s.url, s.reference, s.subdirectory, s.revision, s.directory,
-                        s.name, a.upstream_path, a.content_hash, a.license
+                        s.name, a.upstream_path, a.content_hash, a.license, s.pin
                    FROM artifacts a
                    JOIN sources s ON s.id = a.source_id
                   ORDER BY a.kind, a.name, s.url",
@@ -714,6 +720,7 @@ impl LedgerStore for Sqlite {
                     upstream_path: row.get(14)?,
                     content_hash: row.get(15)?,
                     license: row.get(16)?,
+                    pin: row.get(17)?,
                 })
             })
             .map_err(|source| self.failed("listing what was gathered", source))?;
@@ -743,6 +750,7 @@ impl LedgerStore for Sqlite {
                     revision: row.source_revision,
                     directory: row.directory,
                     name: SourceName::recorded(row.source_name),
+                    pin: row.pin,
                 },
                 upstream_path: row.upstream_path,
                 content_hash: row.content_hash,
@@ -773,6 +781,7 @@ impl LedgerStore for Sqlite {
                             revision: row.get(5)?,
                             directory: row.get(6)?,
                             name: SourceName::recorded(row.get(7)?),
+                            pin: row.get(8)?,
                         })
                     }),
                 )
@@ -1855,6 +1864,7 @@ struct Row {
     upstream_path: String,
     content_hash: Option<ContentHash>,
     license: Option<String>,
+    pin: Option<Revision>,
 }
 
 /// Where a ledger at `path` is copied before a schema step takes it on from
@@ -1984,7 +1994,8 @@ fn journal_of(path: &Path) -> PathBuf {
 }
 
 /// The columns of `sources` [`read_source`] reads, in its order.
-const SOURCE_COLUMNS: &str = "id, kind, url, reference, subdirectory, revision, directory, name";
+const SOURCE_COLUMNS: &str =
+    "id, kind, url, reference, subdirectory, revision, directory, name, pin";
 
 /// What a `SELECT` of [`SOURCE_COLUMNS`] maps to.
 fn read_source(row: &rusqlite::Row<'_>) -> rusqlite::Result<Source> {
@@ -2009,6 +2020,7 @@ fn read_source(row: &rusqlite::Row<'_>) -> rusqlite::Result<Source> {
         revision: row.get(5)?,
         directory: row.get(6)?,
         name: SourceName::recorded(row.get(7)?),
+        pin: row.get(8)?,
     })
 }
 
@@ -2315,8 +2327,9 @@ CREATE TABLE installation_entries (
 /// HEAD, so the identity behind `sources_by_identity` is never `NULL`.
 /// `name` is what a listing shows and `--from` takes ([`SourceName`]), one
 /// a source. `pin` and `parent_id` are for what a source is pinned to (#99)
-/// and the marketplace it is listed by (#103): nothing reads or writes
-/// either yet.
+/// and the marketplace it is listed by (#103), which nothing wrote at
+/// schema 7: a gather writes the pin from #99 on, and nothing the parent
+/// yet.
 ///
 /// The columns go on the end of the table rather than into a new one,
 /// which would have to be copied in under foreign keys that cascade a

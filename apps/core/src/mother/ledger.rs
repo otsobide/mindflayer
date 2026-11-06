@@ -34,6 +34,7 @@ impl SourceMother {
             revision: Some(RevisionMother::random()),
             directory: random::word(),
             name: SourceName::derived(&crate::url::canonical(url)),
+            pin: random::chance().then(RevisionMother::random),
         }
     }
 }

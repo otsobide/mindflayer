@@ -160,7 +160,7 @@ fn fixture() -> Fixture {
         .source_for(SourceKind::Git, url, None, "skills")
         .unwrap();
     let revision = "4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5e7b9d1f3";
-    ledger.saw_source(source.id, Some(revision)).unwrap();
+    ledger.saw_source(source.id, Some(revision), None).unwrap();
     let shelf = format!(".mindweaver/skills/{}/lint", source.directory);
     common::write_files(
         &hub.join(&shelf),

@@ -192,6 +192,7 @@ export type CoreCode =
   | "gather_no_such_folder"
   | "source_name_invalid"
   | "source_name_taken"
+  | "gather_pin_invalid"
   | "kind_not_gatherable"
   | "gather_read_failed"
   | "source_leftover"

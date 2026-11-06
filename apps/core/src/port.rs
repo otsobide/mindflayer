@@ -236,8 +236,15 @@ pub trait LedgerStore: Debug + Send {
     /// given again from then on, and a merge said for the last time.
     fn cleared_merge(&self, directory: &str) -> Result<(), LedgerError>;
 
-    /// Note which revision a source was last gathered at.
-    fn saw_source(&self, id: i64, revision: Option<&str>) -> Result<(), LedgerError>;
+    /// Note which revision a source was last gathered at, and the commit
+    /// that gather was pinned to, or none: a pin is the last gather's,
+    /// moved or dropped by the next, never a second source.
+    fn saw_source(
+        &self,
+        id: i64,
+        revision: Option<&str>,
+        pin: Option<&Revision>,
+    ) -> Result<(), LedgerError>;
 
     /// Forget a source, and with it what it brought; an installation from it
     /// keeps its `origin` but no longer points at it (see the schema's notes

@@ -140,6 +140,10 @@ pub struct Request {
     /// none is given ([`SourceName::derived`]), and a source gathered
     /// before called this from now on when one is.
     pub name: Option<String>,
+    /// The commit to take, as somebody typed it, rather than whatever the
+    /// branch is at: held to [`pin`] before anything is fetched, and kept
+    /// beside the branch ([`ledger::Source::pin`]).
+    pub pin: Option<String>,
 }
 
 impl Request {
@@ -155,6 +159,7 @@ impl Request {
             watch: Watch::new(),
             remote: Arc::new(Gix),
             name: None,
+            pin: None,
         }
     }
 
@@ -180,6 +185,13 @@ impl Request {
         self
     }
 
+    /// Take the commit `pin` names, when one is given, rather than whatever
+    /// the branch is at.
+    pub fn pinned(mut self, pin: Option<impl Into<String>>) -> Self {
+        self.pin = pin.map(Into::into);
+        self
+    }
+
     /// Report to `watch`, and stop when it is cancelled.
     pub fn watched_by(mut self, watch: Watch) -> Self {
         self.watch = watch;
@@ -192,6 +204,19 @@ impl Request {
         self.remote = remote;
         self
     }
+}
+
+/// The commit `typed` names, when a gather can be pinned to it: its full
+/// id, 40 hexadecimal digits in either case, kept in lowercase as git
+/// spells one, so two spellings of one commit are one pin.
+///
+/// The full id rather than any revision git reads: a pin is what the shelf
+/// is said to hold for good, which an abbreviation another commit may come
+/// to share, or a branch, which moves, cannot say. A branch or a tag is
+/// what `--ref` takes.
+pub fn pin(typed: &str) -> Option<Revision> {
+    let digits = typed.len() == 40 && typed.bytes().all(|byte| byte.is_ascii_hexdigit());
+    digits.then(|| Revision::from(typed.to_ascii_lowercase()))
 }
 
 /// One artifact that reached the workspace.
@@ -504,6 +529,7 @@ fn harvest(
         request.source.reference(),
         Some(request.subdirectory.as_str()),
         request.name.as_deref(),
+        request.pin.as_deref(),
     ];
     if let Some(carrying) = typed
         .into_iter()
@@ -520,6 +546,12 @@ fn harvest(
                 name: typed.clone(),
             })?,
         ),
+        None => None,
+    };
+    let pinned = match &request.pin {
+        Some(typed) => {
+            Some(pin(typed).ok_or_else(|| GatherError::PinInvalid { pin: typed.clone() })?)
+        }
         None => None,
     };
 
@@ -575,7 +607,15 @@ fn harvest(
         source.name = name;
     }
 
-    let outcome = take(workspace, ledger, request, &url, &source, manifest);
+    let outcome = take(
+        workspace,
+        ledger,
+        request,
+        &url,
+        &source,
+        manifest,
+        pinned.as_ref(),
+    );
     if !new && source.name != was && matches!(outcome, Err(GatherError::Cancelled)) {
         // Called what it was again, as a cancel leaves the ledger.
         ledger.rename_source(source.id, &was)?;
@@ -602,7 +642,9 @@ fn harvest(
 /// From the URL typed rather than the one the source was first registered
 /// with, though both are one repository's: the second spelling is the one
 /// somebody asked for now, an ssh one where https needs a credential the
-/// helpers lack, or the reverse.
+/// helpers lack, or the reverse. At `pin` when there is one, which the
+/// source keeps beside its branch from then on, as it keeps none once a
+/// gather takes the branch as it is.
 fn take(
     workspace: &WeaverWorkspace,
     ledger: &Ledger,
@@ -610,6 +652,7 @@ fn take(
     url: &str,
     source: &ledger::Source,
     manifest: &str,
+    pin: Option<&Revision>,
 ) -> Result<Report, GatherError> {
     let watch = &request.watch;
     let cache = workspace.cache_dir().join(&source.directory);
@@ -617,7 +660,7 @@ fn take(
     let clone = match &request.source {
         Source::Git { reference, .. } => request
             .remote
-            .fetch(url, reference.as_deref(), None, &cache, watch)
+            .fetch(url, reference.as_deref(), pin, &cache, watch)
             .map_err(|error| match error {
                 GitError::Cancelled => GatherError::Cancelled,
                 error => error.into(),
@@ -672,7 +715,7 @@ fn take(
     }
     // Noted only now, and not by a gather that fails before it gets here,
     // since the revision a source names is the one its shelf holds.
-    ledger.saw_source(source.id, clone.revision.as_deref())?;
+    ledger.saw_source(source.id, clone.revision.as_deref(), pin)?;
 
     watch.report(Progress::Placing {
         done: 0,
@@ -988,6 +1031,12 @@ pub enum GatherError {
          `--name`"
     )]
     NameTaken { name: SourceName, origin: Origin },
+    /// `--pin` named what is no commit's full id ([`pin`]).
+    #[error(
+        "`{pin}` cannot pin a gather: it has to be a commit's full id, 40 hexadecimal digits \
+         (a branch or a tag goes after --ref)"
+    )]
+    PinInvalid { pin: String },
     #[error("{} cannot be gathered yet", .kind.plural())]
     NotGatherable { kind: Kind },
     #[error("{path}: cannot be read: {source}")]
@@ -1004,6 +1053,7 @@ codes!(GatherError {
     Self::NoSuchFolder { .. } => "gather_no_such_folder",
     Self::NameInvalid { .. } => "source_name_invalid",
     Self::NameTaken { .. } => "source_name_taken",
+    Self::PinInvalid { .. } => "gather_pin_invalid",
     Self::NotGatherable { .. } => "kind_not_gatherable",
     Self::Read { .. } => "gather_read_failed",
 } carried {

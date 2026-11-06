@@ -273,6 +273,8 @@ every_remote![
     a_fetch_into_a_folder_whose_parents_are_not_made_yet_makes_them,
     a_fetch_after_a_new_commit_moves_the_revision_and_the_tree,
     a_fetch_at_a_branch_takes_that_branch_rather_than_the_default,
+    a_fetch_at_a_pin_takes_that_commit_rather_than_the_branchs,
+    a_fetch_at_a_pin_no_history_holds_fails_with_its_code_and_leaves_nothing,
     a_fetch_leaves_the_repository_it_fetched_from_as_it_was,
     a_fetch_of_a_branch_the_repository_lacks_fails_with_a_code_and_leaves_nothing,
     a_fetch_of_a_repository_that_is_not_there_fails_with_a_code_and_leaves_nothing,
@@ -281,7 +283,7 @@ every_remote![
     a_fetch_tells_its_watch_only_the_steps_of_a_fetch,
     a_fresh_clone_has_nothing_to_scrub_and_neither_has_a_folder_never_cloned,
     a_gather_through_the_remote_shelves_every_skill_it_fetched,
-    a_gather_hands_the_remote_its_url_its_branch_and_the_sources_cache_folder,
+    a_gather_hands_the_remote_its_url_its_branch_its_pin_and_the_sources_cache_folder,
     a_gather_again_after_a_commit_says_what_changed,
 ];
 
@@ -540,6 +542,43 @@ fn a_fetch_leaves_the_repository_it_fetched_from_as_it_was<U: Upstream>() {
     assert_eq!(tree_of(&first.root), tree_of(&second.root));
 }
 
+fn a_fetch_at_a_pin_takes_that_commit_rather_than_the_branchs<U: Upstream>() {
+    let (names, files) = skills();
+    let upstream = U::create(&borrowed(&files));
+    let kept = upstream.head();
+    upstream.branch("kept");
+    upstream.commit(&[(
+        &format!("skills/{}/SKILL.md", names[0]),
+        &SkillMother::create(&names[0], "Only after the pin"),
+    )]);
+    let (_cache, into) = destination();
+
+    let pinned = upstream
+        .remote()
+        .fetch(&upstream.url(), None, Some(&kept), &into, &Watch::new())
+        .unwrap();
+
+    assert_eq!(pinned.revision, Some(kept));
+    assert_eq!(tree_of(&pinned.root), tree(&files));
+}
+
+fn a_fetch_at_a_pin_no_history_holds_fails_with_its_code_and_leaves_nothing<U: Upstream>() {
+    let (_, files) = skills();
+    let upstream = U::create(&borrowed(&files));
+    let (_cache, into) = destination();
+    left_there(&into);
+    let pin = RevisionMother::random();
+
+    let error = upstream
+        .remote()
+        .fetch(&upstream.url(), None, Some(&pin), &into, &Watch::new())
+        .unwrap_err();
+
+    assert!(is_a_coded_failure(&error), "{pin}: {error:?}");
+    assert_eq!(error.code(), "git_pin_unreachable", "{error}");
+    assert!(!into.exists(), "{error}");
+}
+
 fn a_fetch_of_a_branch_the_repository_lacks_fails_with_a_code_and_leaves_nothing<U: Upstream>() {
     let (_, files) = skills();
     let upstream = U::create(&borrowed(&files));
@@ -704,11 +743,14 @@ fn a_gather_through_the_remote_shelves_every_skill_it_fetched<U: Upstream>() {
     assert_eq!(ledger.sources().unwrap()[0].revision, Some(upstream.head()));
 }
 
+/// What one fetch was asked for: the URL, the branch, the pin and where.
+type Asked = (String, Option<String>, Option<Revision>, PathBuf);
+
 /// A remote that notes what each fetch is asked for, and hands it on.
 #[derive(Debug)]
 struct Recording {
     inner: Arc<dyn Remote>,
-    asked: Mutex<Vec<(String, Option<String>, PathBuf)>>,
+    asked: Mutex<Vec<Asked>>,
 }
 
 impl Remote for Recording {
@@ -723,6 +765,7 @@ impl Remote for Recording {
         self.asked.lock().unwrap().push((
             url.to_owned(),
             reference.map(str::to_owned),
+            pin.cloned(),
             into.to_path_buf(),
         ));
         self.inner.fetch(url, reference, pin, into, watch)
@@ -733,7 +776,9 @@ impl Remote for Recording {
     }
 }
 
-fn a_gather_hands_the_remote_its_url_its_branch_and_the_sources_cache_folder<U: Upstream>() {
+fn a_gather_hands_the_remote_its_url_its_branch_its_pin_and_the_sources_cache_folder<
+    U: Upstream,
+>() {
     let (_, files) = skills();
     let upstream = U::create(&borrowed(&files));
     upstream.branch("next");
@@ -751,14 +796,31 @@ fn a_gather_hands_the_remote_its_url_its_branch_and_the_sources_cache_folder<U: 
             .through(recording.clone()),
     )
     .unwrap();
+    // The commit the branch is at, in capitals, handed over as git spells
+    // it.
+    let pin = upstream.head();
+    gather::gather(
+        &workspace,
+        &ledger,
+        &Request::git(upstream.url())
+            .at(Some("next"))
+            .pinned(Some(pin.to_uppercase()))
+            .through(recording.clone()),
+    )
+    .unwrap();
 
+    let cache = workspace.cache_dir().join(&report.directory);
     assert_eq!(
         *recording.asked.lock().unwrap(),
-        [(
-            upstream.url(),
-            Some(String::from("next")),
-            workspace.cache_dir().join(&report.directory),
-        )]
+        [
+            (
+                upstream.url(),
+                Some(String::from("next")),
+                None,
+                cache.clone()
+            ),
+            (upstream.url(), Some(String::from("next")), Some(pin), cache),
+        ]
     );
 }
 

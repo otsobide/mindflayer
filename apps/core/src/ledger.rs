@@ -131,6 +131,15 @@ pub struct Source {
     /// somebody named it ([`SourceName::derived`]), what a listing shows
     /// and `--from` takes.
     pub name: SourceName,
+    /// The commit its last gather was pinned to (`gather git --pin`), its
+    /// full id, beside the branch or tag it is on: `None` when that gather
+    /// took whatever the branch was at. Not part of what makes the source:
+    /// gathered at another pin, or none, it is the same source, moved.
+    ///
+    /// Not serialized yet: the envelope and the snapshot are given it once
+    /// a listing shows it.
+    #[serde(skip)]
+    pub pin: Option<Revision>,
 }
 
 impl Source {

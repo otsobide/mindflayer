@@ -94,6 +94,69 @@ fn a_request_takes_the_folder_and_the_branch_it_is_told() {
     }
 }
 
+#[test]
+fn a_request_is_pinned_to_what_it_is_told_and_to_nothing_again_by_none() {
+    let request =
+        Request::git(UrlMother::https()).pinned(Some("4F9C2A7E1B3D5F60A8C4E2B6D0F1A3C5E7B9D1F3"));
+    assert_eq!(
+        request.pin.as_deref(),
+        Some("4F9C2A7E1B3D5F60A8C4E2B6D0F1A3C5E7B9D1F3")
+    );
+    assert_eq!(Request::git(UrlMother::https()).pin, None);
+    assert_eq!(request.pinned(None::<String>).pin, None);
+}
+
+#[test]
+fn a_pin_is_a_commits_full_id_in_lowercase_and_nothing_else() {
+    for _ in 0..DRAWS {
+        let digits: String = (0..40)
+            .map(|_| random::pick(&b"0123456789abcdefABCDEF".map(char::from)))
+            .collect();
+
+        assert_eq!(
+            pin(&digits).as_deref(),
+            Some(digits.to_ascii_lowercase().as_str())
+        );
+    }
+    let full = "4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5e7b9d1f3";
+    for refused in [
+        "4f9c2a7",
+        "main",
+        "v1.0",
+        "",
+        &format!("{full}0"),
+        &format!(" {}", &full[1..]),
+        &full.replace('f', "g"),
+        &"a".repeat(64),
+    ] {
+        assert_eq!(pin(refused), None, "{refused:?}");
+    }
+}
+
+#[test]
+fn a_pin_that_is_no_commits_id_is_refused_before_anything_is_registered_or_fetched() {
+    let (_dir, workspace) = WorkspaceMother::empty();
+    let ledger = Ledger::in_memory().unwrap();
+    let remote = Arc::new(Unreached::default());
+    let request = Request::git(UrlMother::https())
+        .pinned(Some("main"))
+        .through(remote.clone());
+
+    let refused = gather(&workspace, &ledger, &request).unwrap_err();
+
+    assert!(
+        matches!(&refused, GatherError::PinInvalid { pin } if pin == "main"),
+        "{refused:?}"
+    );
+    assert_eq!(
+        refused.to_string(),
+        "`main` cannot pin a gather: it has to be a commit's full id, 40 hexadecimal digits (a \
+         branch or a tag goes after --ref)"
+    );
+    assert_eq!(*remote.asked.lock().unwrap(), 0);
+    assert!(ledger.sources().unwrap().is_empty());
+}
+
 /// `at(None)` is the remote's HEAD again, not the branch asked for before.
 #[test]
 fn a_request_at_no_branch_goes_back_to_the_remote_s_head() {
@@ -202,17 +265,20 @@ fn a_gather_from_any_credentialed_url_is_refused_before_the_remote_is_asked() {
 
 /// A URL typed where the branch or the folder goes would be kept as that
 /// branch or folder, word for word, so it is refused as one typed where the
-/// URL goes is, before anything is registered.
+/// URL goes is, before anything is registered; and one typed as the pin,
+/// which an error would repeat, is refused the same way rather than as no
+/// commit's id.
 #[test]
-fn a_credentialed_url_typed_as_the_branch_the_folder_or_the_name_is_refused_alike() {
+fn a_credentialed_url_typed_as_the_branch_the_folder_the_name_or_the_pin_is_refused_alike() {
     let (_dir, workspace) = WorkspaceMother::empty();
     let ledger = Ledger::in_memory().unwrap();
     for typed in UrlMother::every_credentialed() {
         let remote = Arc::new(Unreached::default());
-        let request = match random::between(0, 2) {
+        let request = match random::between(0, 3) {
             0 => Request::git(UrlMother::https()).at(Some(typed.typed.as_str())),
             1 => Request::git(UrlMother::https()).from_subdirectory(typed.typed.clone()),
-            _ => Request::git(UrlMother::https()).named(Some(typed.typed.as_str())),
+            2 => Request::git(UrlMother::https()).named(Some(typed.typed.as_str())),
+            _ => Request::git(UrlMother::https()).pinned(Some(typed.typed.as_str())),
         }
         .through(remote.clone());
 
@@ -718,6 +784,12 @@ fn each_gather_error_of_its_own_gives_its_own_code() {
                 origin: SourceMother::random().origin(),
             },
             "source_name_taken",
+        ),
+        (
+            GatherError::PinInvalid {
+                pin: String::from("4f9c2a7"),
+            },
+            "gather_pin_invalid",
         ),
         (
             GatherError::NotGatherable { kind: Kind::Rule },

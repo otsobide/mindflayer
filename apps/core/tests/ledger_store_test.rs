@@ -199,6 +199,7 @@ every_store![
     a_source_is_registered_once_and_found_by_its_coordinate,
     every_coordinate_is_a_source_of_its_own_with_a_folder_of_its_own,
     a_source_remembers_the_revision_it_was_last_gathered_at,
+    a_source_keeps_the_pin_its_last_gather_had_and_none_once_one_had_none,
     forgetting_a_source_takes_what_it_brought_and_frees_its_folder,
     every_source_is_listed_by_url_then_branch_then_folder_even_with_nothing_gathered,
     a_gathered_artifact_reads_back_with_its_source,
@@ -1532,25 +1533,64 @@ fn a_source_remembers_the_revision_it_was_last_gathered_at(mut store: Store) {
     let second = RevisionMother::random();
 
     store
-        .saw_source(registered.id, Some(first.as_str()))
+        .saw_source(registered.id, Some(first.as_str()), None)
         .unwrap();
     store.reopen();
     let read = store.sources().unwrap();
     assert_eq!(read[0].revision.as_ref(), Some(&first));
 
     store
-        .saw_source(registered.id, Some(second.as_str()))
+        .saw_source(registered.id, Some(second.as_str()), None)
         .unwrap();
     store.reopen();
     assert_eq!(store.sources().unwrap()[0].revision.as_ref(), Some(&second));
 
-    store.saw_source(registered.id, None).unwrap();
+    store.saw_source(registered.id, None, None).unwrap();
     // One the store never registered changes nothing, and is no failure.
     store
-        .saw_source(registered.id + 1000, Some(first.as_str()))
+        .saw_source(registered.id + 1000, Some(first.as_str()), None)
         .unwrap();
     store.reopen();
     assert_eq!(store.sources().unwrap(), [registered]);
+}
+
+fn a_source_keeps_the_pin_its_last_gather_had_and_none_once_one_had_none(mut store: Store) {
+    let url = UrlMother::https();
+    let registered = source(&store, &url);
+    let name = ArtifactNameMother::random();
+    store
+        .record(
+            &registered,
+            Kind::Skill,
+            &name,
+            &format!("skills/{name}"),
+            None,
+            &UpstreamMother::random(),
+        )
+        .unwrap();
+
+    for pin in [
+        Some(RevisionMother::random()),
+        Some(RevisionMother::random()),
+        None,
+    ] {
+        let at = pin.clone().unwrap_or_else(RevisionMother::random);
+        store
+            .saw_source(registered.id, Some(at.as_str()), pin.as_ref())
+            .unwrap();
+
+        store.reopen();
+        let sources = store.sources().unwrap();
+        assert_eq!(sources.len(), 1, "{sources:#?}");
+        assert_eq!(sources[0].pin, pin);
+        assert_eq!(sources[0].revision, Some(at));
+        let found = store
+            .source(SourceKind::Git, &url, None, "skills")
+            .unwrap()
+            .unwrap();
+        assert_eq!(found, sources[0]);
+        assert_eq!(store.gathered().unwrap()[0].source, sources[0]);
+    }
 }
 
 fn forgetting_a_source_takes_what_it_brought_and_frees_its_folder(mut store: Store) {
@@ -1635,7 +1675,9 @@ fn a_gathered_artifact_reads_back_with_its_source(store: Store) {
     let from = source(&store, &UrlMother::https());
     let upstream = UpstreamMother::random();
     let revision = upstream.revision.clone().unwrap();
-    store.saw_source(from.id, Some(revision.as_str())).unwrap();
+    store
+        .saw_source(from.id, Some(revision.as_str()), None)
+        .unwrap();
     let name = ArtifactNameMother::random();
     let path = format!(".mindweaver/skills/{}/{name}", from.directory);
     let summary = random::chance().then(|| random::text(30));

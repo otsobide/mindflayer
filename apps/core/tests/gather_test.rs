@@ -105,6 +105,115 @@ fn a_skill_that_changed_upstream_is_reported_as_updated() {
     );
 }
 
+/// The commit `repository`'s HEAD is at.
+fn head_of(repository: &TempDir) -> String {
+    gix::open(repository.path())
+        .unwrap()
+        .head_id()
+        .unwrap()
+        .to_string()
+}
+
+/// A repository whose `deploy` said `Ship it` at its first commit and
+/// `Ship it, carefully` at its second, and both commits, oldest first.
+fn moved_on() -> (TempDir, String, String) {
+    let source = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
+    let first = head_of(&source);
+    write_files(
+        source.path(),
+        &[(
+            "skills/deploy/SKILL.md",
+            &skill("deploy", "Ship it, carefully"),
+        )],
+    );
+    commit(source.path());
+    let second = head_of(&source);
+    (source, first, second)
+}
+
+#[test]
+fn a_pinned_gather_takes_that_commit_and_its_source_keeps_the_pin_beside_its_branch() {
+    let (source, first, _) = moved_on();
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    // In capitals, as a commit copied from elsewhere may be, and the same
+    // commit for it.
+    let request = Request::git(url(&source)).pinned(Some(first.to_uppercase()));
+    let report = gather::gather(&workspace, &ledger, &request).unwrap();
+
+    assert_eq!(report.revision.as_deref(), Some(first.as_str()));
+    let gathered = ledger.gathered().unwrap();
+    assert_eq!(gathered[0].summary.as_deref(), Some("Ship it"));
+    assert_eq!(gathered[0].revision.as_deref(), Some(first.as_str()));
+    let sources = ledger.sources().unwrap();
+    assert_eq!(sources[0].pin.as_deref(), Some(first.as_str()));
+    assert_eq!(sources[0].reference, None);
+    assert_eq!(sources[0].revision.as_deref(), Some(first.as_str()));
+}
+
+#[test]
+fn moving_a_sources_pin_or_dropping_it_updates_that_one_source() {
+    let (source, first, second) = moved_on();
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    let gathered_at = |pin: Option<&str>| {
+        gather::gather(&workspace, &ledger, &Request::git(url(&source)).pinned(pin)).unwrap()
+    };
+
+    let pinned = gathered_at(Some(&first));
+    for (pin, revision, summary) in [
+        (Some(second.as_str()), &second, "Ship it, carefully"),
+        (Some(first.as_str()), &first, "Ship it"),
+        (None, &second, "Ship it, carefully"),
+    ] {
+        let report = gathered_at(pin);
+
+        assert_eq!(report.directory, pinned.directory, "{pin:?}");
+        assert_eq!(report.name, pinned.name, "{pin:?}");
+        let sources = ledger.sources().unwrap();
+        assert_eq!(sources.len(), 1, "{pin:?}: {sources:#?}");
+        assert_eq!(sources[0].pin.as_deref(), pin);
+        assert_eq!(
+            sources[0].revision.as_deref(),
+            Some(revision.as_str()),
+            "{pin:?}"
+        );
+        let gathered = ledger.gathered().unwrap();
+        assert_eq!(gathered.len(), 1, "{pin:?}");
+        assert_eq!(gathered[0].summary.as_deref(), Some(summary), "{pin:?}");
+    }
+}
+
+#[test]
+fn a_pin_its_remote_will_not_hand_over_nor_its_branch_reach_is_refused_and_changes_nothing() {
+    let (source, _, second) = moved_on();
+    let elsewhere = repository(&[("README.md", "another repository\n")]);
+    let foreign = head_of(&elsewhere);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap();
+    let before = (ledger.sources().unwrap(), ledger.gathered().unwrap());
+
+    let refused = gather::gather(
+        &workspace,
+        &ledger,
+        &Request::git(url(&source)).pinned(Some(&foreign)),
+    )
+    .unwrap_err();
+
+    assert_eq!(refused.code(), "git_pin_unreachable", "{refused}");
+    assert!(refused.to_string().contains(&foreign), "{refused}");
+    assert_eq!(
+        (ledger.sources().unwrap(), ledger.gathered().unwrap()),
+        before
+    );
+    assert_eq!(before.0[0].revision.as_deref(), Some(second.as_str()));
+    assert_eq!(before.0[0].pin, None);
+    let logged = &ledger.history(1).unwrap()[0];
+    assert_eq!(logged.outcome, "failed");
+}
+
 #[test]
 fn a_file_the_source_deleted_does_not_survive_on_the_shelf() {
     let source = repository(&[

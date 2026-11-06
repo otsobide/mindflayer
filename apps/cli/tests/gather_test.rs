@@ -258,6 +258,40 @@ fn gather_says_the_name_of_its_source_and_name_calls_it_what_it_is_given() {
 }
 
 #[test]
+fn gather_pin_takes_the_commit_it_names_and_refuses_what_is_no_commits_id() {
+    let source = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it"))]);
+    let head = gix::open(source.path())
+        .unwrap()
+        .head_id()
+        .unwrap()
+        .to_string();
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+    let url = source.path().to_string_lossy().into_owned();
+
+    let pinned = weaver(dir.path(), &["gather", "git", &url, "--pin", &head]).unwrap();
+    let short = weaver(dir.path(), &["gather", "git", &url, "--pin", &head[..7]]).unwrap_err();
+
+    assert!(pinned.ok, "{:?}", pinned.stderr);
+    // At the commit pinned, as a gather says the commit it took.
+    let said = pinned.stdout.lines().next().unwrap();
+    assert!(
+        said.ends_with(&format!(": {url} at {}", &head[..7])),
+        "{}",
+        pinned.stdout
+    );
+    assert_eq!(short.error.code(), "gather_pin_invalid");
+    assert_eq!(
+        short.error.to_string(),
+        format!(
+            "`{}` cannot pin a gather: it has to be a commit's full id, 40 hexadecimal digits \
+             (a branch or a tag goes after --ref)",
+            &head[..7]
+        )
+    );
+}
+
+#[test]
 fn an_empty_shelf_says_how_to_fill_it() {
     let dir = TempDir::new().unwrap();
     weaver(dir.path(), &["init"]).unwrap();

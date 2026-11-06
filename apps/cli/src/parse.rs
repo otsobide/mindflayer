@@ -1497,6 +1497,16 @@ pub enum GatherCommand {
         /// before, it is called this from now on.
         #[arg(long, value_name = "NAME")]
         name: Option<String>,
+
+        /// The commit to take, by its full id, instead of whatever the
+        /// branch or tag is at: kept beside it, and moved or dropped by the
+        /// next gather of the source.
+        ///
+        /// Fetched by itself where the remote hands a commit over so, and
+        /// otherwise found in the history of `--ref`, or of the default
+        /// branch, and refused when it is not there.
+        #[arg(long, value_name = "SHA")]
+        pin: Option<String>,
     },
 
     /// List what can be installed from the shelf and from loaded workspaces,
