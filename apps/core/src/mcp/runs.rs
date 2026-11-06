@@ -81,24 +81,53 @@ impl fmt::Display for Runs {
     }
 }
 
-/// `word` as one word of a shell line: as it is when it holds only what no
-/// shell splits or reads as anything but itself, a `$` only where it opens
-/// a reference (`${`), and otherwise between single quotes, a single quote
+/// `word` as one word of a shell line: as it is when a shell reads it as
+/// itself ([`bare`]), and otherwise between single quotes, a single quote
 /// in it closed, escaped and opened again.
 fn quoted(word: &str) -> String {
-    let plain = |c: char| c.is_ascii_alphanumeric() || "-_./:@%+=,{}~^".contains(c);
-    let mut chars = word.chars().peekable();
-    let mut bare = !word.is_empty();
-    while let Some(c) = chars.next() {
-        if !(plain(c) || c == '$' && chars.peek() == Some(&'{')) {
-            bare = false;
-            break;
-        }
-    }
-    if bare {
+    if bare(word) {
         return word.to_owned();
     }
     format!("'{}'", word.replace('\'', r"'\''"))
+}
+
+/// Whether a shell reads `word` as itself: it holds only what no shell
+/// splits or expands, braces only around a reference to a variable
+/// (`${VAR}`, `{env:VAR}`), which is what the agent fills in, and a `~`
+/// only where no shell expands one, past the first character and not after
+/// a `=` or a `:`, where bash expands it in a word that reads as an
+/// assignment. Braces anywhere else are quoted, since `{a,b}` is two words
+/// to bash, and an empty word, which is none.
+fn bare(word: &str) -> bool {
+    let plain = |c: char| c.is_ascii_alphanumeric() || "-_./:@%+=,^".contains(c);
+    let named = |name: &str| {
+        !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+    };
+    let mut rest = word;
+    let mut before: Option<char> = None;
+    while let Some(c) = rest.chars().next() {
+        if let Some(inside) = rest
+            .strip_prefix("${")
+            .or_else(|| rest.strip_prefix("{env:"))
+        {
+            let Some(end) = inside.find('}') else {
+                return false;
+            };
+            if !named(&inside[..end]) {
+                return false;
+            }
+            rest = &inside[end + 1..];
+            before = Some('}');
+            continue;
+        }
+        let tilde = c == '~' && before.is_some_and(|before| before != '=' && before != ':');
+        if !(plain(c) || tilde) {
+            return false;
+        }
+        rest = &rest[c.len_utf8()..];
+        before = Some(c);
+    }
+    !word.is_empty()
 }
 
 /// The member `key` of the object `value`.

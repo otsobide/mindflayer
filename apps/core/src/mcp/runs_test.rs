@@ -122,6 +122,35 @@ fn a_word_a_shell_would_split_or_read_otherwise_is_quoted() {
     );
 }
 
+/// Braces a shell expands into words and a `~` it expands into a home are
+/// quoted, as what the agent is given is the text: only braces around a
+/// reference stay bare.
+#[test]
+fn a_word_a_shell_would_expand_is_quoted_and_a_reference_is_not() {
+    let said = program(
+        "server",
+        &[
+            "{a,b}",
+            "{}",
+            "~/notes",
+            "KEY=~/x",
+            "a:~/y",
+            "a~b",
+            "--token=${EXAMPLE_TOKEN}",
+            "{env:EXAMPLE_KEY}/x",
+            "${}",
+            "${EXAMPLE",
+        ],
+    )
+    .to_string();
+
+    assert_eq!(
+        said,
+        "server '{a,b}' '{}' '~/notes' 'KEY=~/x' 'a:~/y' a~b --token=${EXAMPLE_TOKEN} \
+         {env:EXAMPLE_KEY}/x '${}' '${EXAMPLE'"
+    );
+}
+
 #[test]
 fn an_address_is_said_as_it_is() {
     let said = Runs::Address {
