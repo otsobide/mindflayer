@@ -220,6 +220,8 @@ export type CoreCode =
   | "http_url_invalid"
   | "http_url_refused"
   | "http_credentials_in_url"
+  | "http_header_invalid"
+  | "http_client_unavailable"
   | "http_connect_failed"
   | "http_transfer_failed"
   | "http_timed_out"

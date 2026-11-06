@@ -561,6 +561,15 @@ pub enum HttpError {
     /// A URL [`fetchable`] refuses for its scheme or its host.
     #[error("{url}: only an https URL is fetched, or an http one on this machine")]
     Insecure { url: Redacted },
+    /// A header that cannot be sent as it is, by its name alone, since its
+    /// value may be a credential.
+    #[error(
+        "{url}: the header `{name}` cannot be sent: its name or its value is not one HTTP takes"
+    )]
+    Header { url: Redacted, name: String },
+    /// No transport to send with: the default one could not be built.
+    #[error("cannot fetch over HTTP: {detail}")]
+    Unavailable { detail: Redacted },
     /// A URL with a user name, a password or a token in it.
     #[error(
         "{url}: a password, a token or a user name in the URL is refused, because a fetch's URL \
@@ -600,6 +609,8 @@ codes!(HttpError {
     Self::Url { .. } => "http_url_invalid",
     Self::Insecure { .. } => "http_url_refused",
     Self::CredentialsInUrl { .. } => "http_credentials_in_url",
+    Self::Header { .. } => "http_header_invalid",
+    Self::Unavailable { .. } => "http_client_unavailable",
     Self::Connect { .. } => "http_connect_failed",
     Self::Transfer { .. } => "http_transfer_failed",
     Self::Timeout { .. } => "http_timed_out",
