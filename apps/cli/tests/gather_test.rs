@@ -323,6 +323,25 @@ fn an_address_its_ref_or_path_contradicts_is_refused_before_anything_is_opened()
 }
 
 #[test]
+fn a_tree_url_whose_escapes_spell_no_name_is_refused_before_anything_is_opened() {
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+
+    let refused = weaver(
+        dir.path(),
+        &[
+            "gather",
+            "git",
+            "https://github.com/acme/skills/tree/main/a%2Fb",
+        ],
+    )
+    .unwrap_err();
+
+    assert_eq!(refused.error.code(), "gather_tree_undecodable");
+    assert!(!dir.path().join(".mindweaver/mindweaver.db").exists());
+}
+
+#[test]
 fn an_empty_shelf_says_how_to_fill_it() {
     let dir = TempDir::new().unwrap();
     weaver(dir.path(), &["init"]).unwrap();

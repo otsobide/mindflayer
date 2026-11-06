@@ -838,7 +838,9 @@ repository (`https://github.com/acme/skills/tree/main/plugins/ops`) and GitLab
 does (`https://gitlab.com/acme/skills/-/tree/main/plugins/ops`), is the
 repository at that branch, searched in that folder. Its branch is the one
 segment after `tree`, so a branch with a `/` in it is given with `--ref` and
-the folder with `--path` instead. Either given beside an address that names
+the folder with `--path` instead. It is read as the browser shows it: a
+`?ref_type=heads` after it goes, and `%20` in a folder's name is the space it
+spells. Either given beside an address that names
 one has to say the same, or nothing is gathered:
 
 ```

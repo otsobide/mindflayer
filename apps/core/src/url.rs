@@ -199,6 +199,16 @@ pub struct Address {
     pub path: Option<String>,
 }
 
+/// A tree URL's branch, or a folder in it, that names none once its
+/// escapes are read ([`address`]): the segment as it was typed.
+///
+/// Not an error of its own, since only the gather that reads an address
+/// says it, as one of its own (`gather_tree_undecodable`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Undecodable {
+    pub segment: String,
+}
+
 /// What `typed` addresses: `owner/repo@ref`, `owner/repo` at `ref`; a
 /// GitHub tree URL, `https://github.com/<owner>/<repo>/tree/<ref>/<path>`,
 /// or a GitLab one, `https://gitlab.com/<group>/<repo>/-/tree/<ref>/<path>`,
@@ -212,14 +222,25 @@ pub struct Address {
 /// nest, every segment before the `-` that stands before `tree`, which is
 /// how GitLab spells one. Only on those two forges ([`FORGES`]): elsewhere
 /// a path with `tree` in it is somebody's repository's path.
-pub fn address(typed: &str) -> Address {
-    shorthand(typed)
-        .or_else(|| tree(typed))
-        .unwrap_or_else(|| Address {
-            url: typed.to_owned(),
-            reference: None,
-            path: None,
-        })
+///
+/// Read as a browser hands it over, since that is where one is copied
+/// from: a query or a fragment after the path, which GitLab's
+/// `?ref_type=heads` is, names no folder and goes, and the branch and each
+/// folder are read for their escapes ([`decoded`]), so a folder with a
+/// space or a letter outside ASCII in it is the folder it names. One whose
+/// escapes spell no name ([`Undecodable`]) is refused rather than taken as
+/// the URL it is, which no forge serves a repository at.
+pub fn address(typed: &str) -> Result<Address, Undecodable> {
+    match shorthand(typed) {
+        Some(address) => Ok(address),
+        None => tree(typed).unwrap_or_else(|| {
+            Ok(Address {
+                url: typed.to_owned(),
+                reference: None,
+                path: None,
+            })
+        }),
+    }
 }
 
 /// `owner/repo@ref` as the repository `owner/repo` at `ref`, when what
@@ -235,13 +256,15 @@ fn shorthand(typed: &str) -> Option<Address> {
     })
 }
 
-/// A forge's tree URL as its repository, its branch and its folder.
-fn tree(typed: &str) -> Option<Address> {
+/// A forge's tree URL as its repository, its branch and its folder, or
+/// the segment of it that names neither once its escapes are read.
+fn tree(typed: &str) -> Option<Result<Address, Undecodable>> {
     let (scheme, rest) = typed.split_once("://")?;
     if !(scheme.eq_ignore_ascii_case("https") || scheme.eq_ignore_ascii_case("http")) {
         return None;
     }
     let (authority, path) = rest.split_once('/')?;
+    let path = path.find(['?', '#']).map_or(path, |end| &path[..end]);
     let host = authority
         .rsplit_once('@')
         .map_or(authority, |(_, host)| host);
@@ -261,13 +284,59 @@ fn tree(typed: &str) -> Option<Address> {
     if reference.is_empty() {
         return None;
     }
-    let folder = folder.join("/");
-    let folder = folder.trim_end_matches('/');
-    Some(Address {
-        url: format!("{scheme}://{authority}/{}", repository.join("/")),
-        reference: Some((*reference).to_owned()),
-        path: (!folder.is_empty()).then(|| folder.to_owned()),
-    })
+    let read = |segment: &str| {
+        decoded(segment).ok_or_else(|| Undecodable {
+            segment: segment.to_owned(),
+        })
+    };
+    let url = format!("{scheme}://{authority}/{}", repository.join("/"));
+    Some(read(reference).and_then(|reference| {
+        let folder = folder
+            .iter()
+            .map(|segment| read(segment))
+            .collect::<Result<Vec<_>, _>>()?
+            .join("/");
+        let folder = folder.trim_end_matches('/');
+        Ok(Address {
+            url,
+            reference: Some(reference),
+            path: (!folder.is_empty()).then(|| folder.to_owned()),
+        })
+    }))
+}
+
+/// `segment` of a URL's path with each `%` and the two hexadecimal digits
+/// after it read as the byte they spell, as a browser writes a folder with
+/// a space or a letter outside ASCII in it (`caf%C3%A9`), and a `%` that no
+/// two such digits follow left as it is, as a browser leaves one.
+///
+/// `None` when what it spells is not UTF-8, which no `--ref` or `--path`
+/// can be typed as, or holds a `/`, which would make one segment two: a
+/// branch's `/` after `tree` is what cannot be told from the folder's, and
+/// a folder's name never has one.
+fn decoded(segment: &str) -> Option<String> {
+    let bytes = segment.as_bytes();
+    let digit = |at: usize| {
+        bytes
+            .get(at)
+            .and_then(|byte| char::from(*byte).to_digit(16))
+    };
+    let mut spelled = Vec::with_capacity(bytes.len());
+    let mut at = 0;
+    while let Some(&byte) = bytes.get(at) {
+        match (byte, digit(at + 1), digit(at + 2)) {
+            (b'%', Some(high), Some(low)) => {
+                spelled.push(u8::try_from(high * 16 + low).ok()?);
+                at += 3;
+            }
+            _ => {
+                spelled.push(byte);
+                at += 1;
+            }
+        }
+    }
+    let text = String::from_utf8(spelled).ok()?;
+    (!text.contains('/')).then_some(text)
 }
 
 /// The name of the repository `url` names: the last folder of its path in

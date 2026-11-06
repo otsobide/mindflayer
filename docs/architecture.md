@@ -3219,7 +3219,14 @@ as they go) show a folder of a repository, is the repository, its branch and
 its folder; anything else is the URL it is. Only on those two forges
 (`url::FORGES`): elsewhere `tree` in a path is somebody's folder. The branch
 is the one segment after `tree`: one with a `/` in it cannot be told there
-from the folder after it, and is typed with `--ref` instead. `Request::addressed` holds a `--ref` or a `--path` given beside an
+from the folder after it, and is typed with `--ref` instead. It is read as
+a browser hands it over, where one is copied from: a query or a fragment
+after its path (GitLab's `?ref_type=heads`) names no folder and goes, and
+the branch and each folder are read for their escapes, so `caf%C3%A9` is
+`café`. One whose escapes spell no name, a `%2F` that would make one
+segment two or bytes that are not UTF-8, is refused
+(`gather_tree_undecodable`) rather than fetched as the URL it is, which no
+forge serves a repository at. `Request::addressed` holds a `--ref` or a `--path` given beside an
 address that names one to what it names: the same is no contradiction, and
 another is refused before anything is opened (`gather_ref_contradicted`,
 `gather_path_contradicted`), which of two was meant being nothing to guess,

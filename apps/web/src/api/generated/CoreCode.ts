@@ -200,6 +200,7 @@ export type CoreCode =
   | "kind_not_gatherable"
   | "gather_ref_contradicted"
   | "gather_path_contradicted"
+  | "gather_tree_undecodable"
   | "gather_read_failed"
   | "source_leftover"
   | "clone_unscrubbed"

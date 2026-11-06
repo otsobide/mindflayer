@@ -136,6 +136,24 @@ fn a_request_for_an_address_takes_the_repository_branch_and_folder_it_names() {
             Some("main"),
             "skills",
         ),
+        // As a browser hands them over, a query after them and an escape in
+        // a folder's name.
+        (
+            "https://gitlab.com/acme/skills/-/tree/main/skills?ref_type=heads",
+            Some("main"),
+            Some("skills"),
+            "https://gitlab.com/acme/skills",
+            Some("main"),
+            "skills",
+        ),
+        (
+            "https://github.com/acme/skills/tree/main/skills/caf%C3%A9",
+            None,
+            Some("skills/café"),
+            "https://github.com/acme/skills",
+            Some("main"),
+            "skills/café",
+        ),
     ] {
         let request = Request::addressed(
             typed,
@@ -169,6 +187,21 @@ fn an_address_naming_another_branch_or_folder_than_its_option_is_refused() {
         folder.to_string(),
         "https://github.com/acme/skills/tree/main/skills names the folder `skills`, and --path \
          names `agents`: give one"
+    );
+}
+
+#[test]
+fn a_tree_url_whose_escapes_spell_no_name_is_refused_naming_where() {
+    let typed = "https://github.com/acme/skills/tree/main/skills/a%2Fb";
+
+    let refused = Request::addressed(typed, None, None).unwrap_err();
+
+    assert_eq!(refused.code(), "gather_tree_undecodable");
+    assert_eq!(
+        refused.to_string(),
+        "https://github.com/acme/skills/tree/main/skills/a%2Fb: `a%2Fb` names no branch or \
+         folder once its escapes are read: give the repository's URL, with the branch after \
+         --ref and the folder after --path"
     );
 }
 
@@ -1243,6 +1276,13 @@ fn each_gather_error_of_its_own_gives_its_own_code() {
                 given: String::from("agents"),
             },
             "gather_path_contradicted",
+        ),
+        (
+            GatherError::TreeUndecodable {
+                address: String::from("https://github.com/acme/skills/tree/main/a%2Fb"),
+                segment: String::from("a%2Fb"),
+            },
+            "gather_tree_undecodable",
         ),
         (
             GatherError::Read {

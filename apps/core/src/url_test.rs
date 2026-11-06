@@ -332,13 +332,18 @@ fn a_url_whose_path_ends_in_no_folder_names_no_repository() {
     }
 }
 
-/// An address holding `url`, at `reference`, in `path`.
-fn addressed(url: &str, reference: Option<&str>, path: Option<&str>) -> Address {
-    Address {
+/// An address holding `url`, at `reference`, in `path`, as [`address`]
+/// reads one.
+fn addressed(
+    url: &str,
+    reference: Option<&str>,
+    path: Option<&str>,
+) -> Result<Address, Undecodable> {
+    Ok(Address {
         url: url.to_owned(),
         reference: reference.map(str::to_owned),
         path: path.map(str::to_owned),
-    }
+    })
 }
 
 #[test]
@@ -429,13 +434,109 @@ fn a_gitlab_tree_url_is_its_repository_however_deep_its_groups_go() {
 }
 
 #[test]
+fn a_tree_url_is_read_without_the_query_or_the_fragment_a_browser_adds() {
+    for (typed, url, reference, path) in [
+        (
+            "https://gitlab.com/acme/skills/-/tree/main?ref_type=heads",
+            "https://gitlab.com/acme/skills",
+            "main",
+            None,
+        ),
+        (
+            "https://gitlab.com/acme/skills/-/tree/main/skills?ref_type=heads",
+            "https://gitlab.com/acme/skills",
+            "main",
+            Some("skills"),
+        ),
+        (
+            "https://github.com/acme/skills/tree/main/skills/pdf#readme",
+            "https://github.com/acme/skills",
+            "main",
+            Some("skills/pdf"),
+        ),
+        (
+            "https://github.com/acme/skills/tree/v2/skills/?tab=x#y",
+            "https://github.com/acme/skills",
+            "v2",
+            Some("skills"),
+        ),
+    ] {
+        assert_eq!(
+            address(typed),
+            addressed(url, Some(reference), path),
+            "{typed}"
+        );
+    }
+}
+
+#[test]
+fn a_tree_url_s_branch_and_folders_are_read_for_their_escapes() {
+    for (typed, reference, path) in [
+        (
+            "https://github.com/acme/skills/tree/main/skills/caf%C3%A9",
+            "main",
+            "skills/café",
+        ),
+        (
+            "https://github.com/acme/skills/tree/main/team%20skills/pdf",
+            "main",
+            "team skills/pdf",
+        ),
+        (
+            "https://github.com/acme/skills/tree/v%32/skills",
+            "v2",
+            "skills",
+        ),
+        // A `%` no two hexadecimal digits follow is itself.
+        (
+            "https://github.com/acme/skills/tree/main/100%/x%zz",
+            "main",
+            "100%/x%zz",
+        ),
+    ] {
+        assert_eq!(
+            address(typed),
+            addressed(
+                "https://github.com/acme/skills",
+                Some(reference),
+                Some(path)
+            ),
+            "{typed}"
+        );
+    }
+}
+
+#[test]
+fn a_tree_url_whose_escapes_spell_no_name_names_the_segment_they_are_in() {
+    for (typed, segment) in [
+        (
+            "https://github.com/acme/skills/tree/main/skills/a%2Fb",
+            "a%2Fb",
+        ),
+        (
+            "https://github.com/acme/skills/tree/feature%2fx/skills",
+            "feature%2fx",
+        ),
+        ("https://gitlab.com/acme/skills/-/tree/main/%FF", "%FF"),
+    ] {
+        assert_eq!(
+            address(typed),
+            Err(Undecodable {
+                segment: segment.to_owned()
+            }),
+            "{typed}"
+        );
+    }
+}
+
+#[test]
 fn a_tree_url_keeps_the_credential_it_carries_for_a_gather_to_refuse() {
     let typed = format!(
         "https://{}@github.com/acme/private/tree/main/skills",
         token()
     );
 
-    let read = address(&typed);
+    let read = address(&typed).unwrap();
 
     assert_eq!(
         read.url,

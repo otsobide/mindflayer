@@ -186,14 +186,20 @@ impl Request {
     /// meant is not something to guess. Refused here, before anything is
     /// registered or fetched, in words that quote neither the address nor
     /// the option with a credential in it ([`redacted`]); a credential the
-    /// address carries is refused by the gather, as one in any URL is.
+    /// address carries is refused by the gather, as one in any URL is. So
+    /// is a tree URL whose branch or folder names none once its escapes are
+    /// read (`gather_tree_undecodable`, [`crate::url::Undecodable`]).
     pub fn addressed(
         typed: &str,
         reference: Option<String>,
         subdirectory: Option<String>,
     ) -> Result<Self, GatherError> {
-        let address = crate::url::address(typed);
         let said = |what: &str| redacted(what).into_owned();
+        let address =
+            crate::url::address(typed).map_err(|undecodable| GatherError::TreeUndecodable {
+                address: said(typed),
+                segment: said(&undecodable.segment),
+            })?;
         let reference = agreed(address.reference, reference, |named, given| {
             GatherError::RefContradicted {
                 address: said(typed),
@@ -1753,6 +1759,13 @@ pub enum GatherError {
         named: String,
         given: String,
     },
+    /// A tree URL's branch or a folder in it names none once its escapes
+    /// are read ([`crate::url::Undecodable`]): `segment`, as it was typed.
+    #[error(
+        "{address}: `{segment}` names no branch or folder once its escapes are read: give the \
+         repository's URL, with the branch after --ref and the folder after --path"
+    )]
+    TreeUndecodable { address: String, segment: String },
     #[error("{path}: cannot be read: {source}")]
     Read {
         path: PathBuf,
@@ -1771,6 +1784,7 @@ codes!(GatherError {
     Self::NotGatherable { .. } => "kind_not_gatherable",
     Self::RefContradicted { .. } => "gather_ref_contradicted",
     Self::PathContradicted { .. } => "gather_path_contradicted",
+    Self::TreeUndecodable { .. } => "gather_tree_undecodable",
     Self::Read { .. } => "gather_read_failed",
 } carried {
     Self::Git(error) => error,
