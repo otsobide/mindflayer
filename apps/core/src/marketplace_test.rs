@@ -471,3 +471,55 @@ fn what_a_plugin_holds_beside_its_skills_is_found_by_where_a_plugin_keeps_it() {
         [Holding::Hooks, Holding::McpServers]
     );
 }
+
+#[test]
+fn a_listed_catalog_serializes_each_field_by_its_name_and_leaves_its_failures_to_the_warnings() {
+    let listed = Listed {
+        name: SourceName::parse("anthropic-agent-skills").unwrap(),
+        url: Redacted::new("https://me:s3cret@github.com/anthropics/skills"),
+        reference: Some(String::from("main")),
+        revision: Some(Revision::from("4f9c2a7")),
+        listed: 2,
+        entries: vec![Entry {
+            name: String::from("pdf"),
+            description: None,
+            plugin: Plugin::Relative {
+                route: String::new(),
+            },
+            skills: None,
+            license: None,
+            declares: Vec::new(),
+        }],
+        failures: vec![EntryFailure::Command {
+            name: String::from("run-me"),
+        }],
+    };
+
+    assert_eq!(
+        serde_json::to_string(&listed).unwrap(),
+        concat!(
+            r#"{"name":"anthropic-agent-skills","url":"https://github.com/anthropics/skills","#,
+            r#""reference":"main","revision":"4f9c2a7","listed":2,"#,
+            r#""entries":[{"name":"pdf","description":null,"#,
+            r#""plugin":{"kind":"relative","url":null,"path":"","reference":null,"sha":null},"#,
+            r#""skills":null,"license":null,"declares":[]}]}"#
+        )
+    );
+}
+
+#[test]
+fn gathering_every_plugin_waits_for_a_yes_only_beyond_twenty_five() {
+    let listed = |count: usize| Listed {
+        name: SourceName::parse("m").unwrap(),
+        url: Redacted::new("https://github.com/acme/m"),
+        reference: None,
+        revision: None,
+        listed: count,
+        entries: Vec::new(),
+        failures: Vec::new(),
+    };
+
+    assert_eq!(UNCONFIRMED, 25);
+    assert!(!listed(25).needs_confirming());
+    assert!(listed(26).needs_confirming());
+}

@@ -12,7 +12,12 @@
 //! is, for the front end to make printable as it does a gather's.
 //!
 //! A marketplace is a parent source with one child per entry gathered
-//! (D-13): what is listed is gathered only when somebody picks it.
+//! (D-13): what is listed is gathered only when somebody picks it
+//! ([`gather`], [`Pick`]). The catalog is fetched as a git repository is,
+//! into a clone of its own, and a plugin in the marketplace's own
+//! repository is gathered from that clone, a plugin in a repository of its
+//! own from a clone of that, each a gather of its own into a source of its
+//! own ([`crate::gather`]).
 
 use std::borrow::Cow;
 use std::fmt;
@@ -27,8 +32,14 @@ use thiserror::Error;
 
 use crate::code::codes;
 use crate::copy;
+use crate::gather::{self, GatherError, Search};
+use crate::ledger::{Action, Ledger, LedgerError, Outcome, Source, SourceKind};
+use crate::lock::LockError;
 use crate::paths;
+use crate::port::Cloned;
 use crate::url::{fetched, is_remote, redacted};
+use crate::value::{Redacted, Revision, SourceName};
+use crate::workspace::WeaverWorkspace;
 
 /// Where a marketplace's catalog is, from the folder the marketplace is in:
 /// the root of its repository, unless a tree URL or `--path` names another.
@@ -662,6 +673,569 @@ fn is_archive(url: &str) -> bool {
     ARCHIVES.iter().any(|ending| path.ends_with(ending))
 }
 
+/// How many entries a catalog may list for `--all` to gather them all
+/// without a yes ([`Listed::needs_confirming`]): beyond it, `--all` is a dry
+/// run until it is told.
+///
+/// Twenty-five, a catalog a person reads down in one screen: the official
+/// marketplace lists hundreds, each a repository of its own, and
+/// claude-community thousands, which gathered whole would clone every one.
+pub const UNCONFIRMED: usize = 25;
+
+/// Which of a catalog's entries a gather of a marketplace takes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Pick {
+    /// None: the catalog is recorded and listed, and no plugin is cloned
+    /// (`--list`).
+    Listing,
+    /// These, by the names the catalog lists them by, each once
+    /// (`--plugin`). A name it does not list refuses the whole, before any
+    /// plugin is gathered (`marketplace_plugin_not_listed`).
+    Plugins(Vec<String>),
+    /// Every entry it lists that can be gathered (`--all`).
+    All,
+}
+
+/// One gather of a marketplace: its catalog, fetched as a git source is,
+/// and which of its plugins to gather.
+#[derive(Debug, Clone)]
+pub struct Request {
+    /// Where the marketplace is: its repository, its branch and the folder
+    /// its catalog is in, the name to call it, and the watch and the remote
+    /// its plugins are gathered with too.
+    pub catalog: gather::Request,
+    pub pick: Pick,
+}
+
+impl Request {
+    pub fn new(catalog: gather::Request, pick: Pick) -> Self {
+        Self { catalog, pick }
+    }
+}
+
+/// A marketplace's catalog as a gather found it: what the marketplace is,
+/// or would be, called, where its catalog was fetched from and at which
+/// commit, and what the catalog lists.
+///
+/// What it serializes to is a contract, as a report's is: each field by its
+/// name, the URL only as [`redacted`] leaves it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Listed {
+    /// What the marketplace is called: what `gather sources` lists it by.
+    pub name: SourceName,
+    /// The repository its catalog was fetched from.
+    pub url: Redacted,
+    /// The branch or tag it was fetched at, when one was asked for.
+    pub reference: Option<String>,
+    /// The commit its catalog was read at.
+    pub revision: Option<Revision>,
+    /// How many entries the catalog lists, read or not.
+    pub listed: usize,
+    /// Each entry that can be gathered, in the catalog's order.
+    pub entries: Vec<Entry>,
+    /// Each that cannot, with why. Not serialized: a front end says each as
+    /// a warning, as a gather's failures are.
+    #[serde(skip)]
+    pub failures: Vec<EntryFailure>,
+}
+
+impl Listed {
+    fn of(
+        name: SourceName,
+        url: &str,
+        reference: Option<&str>,
+        revision: Option<Revision>,
+        catalog: Catalog,
+    ) -> Self {
+        Listed {
+            name,
+            url: Redacted::new(url),
+            reference: reference.map(str::to_owned),
+            revision,
+            listed: catalog.listed,
+            entries: catalog.entries,
+            failures: catalog.failures,
+        }
+    }
+
+    /// Whether gathering every entry it lists waits for a yes: it lists
+    /// more than [`UNCONFIRMED`].
+    pub fn needs_confirming(&self) -> bool {
+        self.listed > UNCONFIRMED
+    }
+}
+
+/// One plugin a gather took up: what gathering it into a source of its own
+/// came to, and what of it was left.
+#[derive(Debug)]
+pub struct Child {
+    /// The name the catalog lists it by.
+    pub entry: String,
+    /// Its own gather's report, the source it went into named in it, or why
+    /// it could not be gathered: one plugin that fails is no reason not to
+    /// gather the rest.
+    pub outcome: Result<gather::Report, GatherError>,
+    /// What its plugin holds beside its skills, as its entry declares it or
+    /// its folder keeps it, which is not taken.
+    pub holds: Vec<Holding>,
+}
+
+/// What a gather of a marketplace did: its catalog as fetched, and each
+/// plugin it gathered, in the order the catalog lists them.
+#[derive(Debug)]
+pub struct Report {
+    pub catalog: Listed,
+    pub children: Vec<Child>,
+}
+
+/// Gather the marketplace `request` names into `workspace`, recording it in
+/// `ledger`: its catalog first, recorded as a source of a kind of its own
+/// (D-13), and then each plugin `request` picks, each into a source of its
+/// own under it.
+///
+/// The catalog is held to what a gather refuses before it fetches anything
+/// ([`gather::checked_as`]), and fetched, read and recorded under the
+/// workspace's lock, as one source's gather is. A marketplace this
+/// registered is forgotten again, its clone with it, when its catalog cannot
+/// be fetched or read, or is cancelled: what it is called is the catalog's
+/// to say unless `--name` says it, and one that was never read says nothing.
+/// Its name is `--name`'s, then the one it has, then its catalog's, held to
+/// [`SourceName::parse`] (`marketplace_name_unusable`) and numbered when
+/// another source has it, as a name a URL gives is.
+///
+/// The plugins in its own repository are gathered from that clone while the
+/// lock is still held, so nothing fetches into it between; each other one
+/// is a gather of its own afterwards, holding the lock for itself, as
+/// `gather update` gathers a source after another. Each plugin is a gather
+/// as [`gather::gather`] is one, watched, cancelled before it places, and
+/// logged; once one is cancelled, the rest are not begun, each said
+/// cancelled too.
+pub fn gather(
+    workspace: &WeaverWorkspace,
+    ledger: &Ledger,
+    request: &Request,
+) -> Result<Report, MarketplaceError> {
+    let catalog = &request.catalog;
+    let (checked, found) = gather::checked_as(ledger, catalog, SourceKind::Marketplace)?;
+    let url = fetched(catalog.source.url()).into_owned();
+    let lock = workspace.lock()?;
+    let (parent, clone, read) =
+        recorded_now(workspace, ledger, catalog, &url, checked.name, found)?;
+    let listed = Listed::of(
+        parent.name.clone(),
+        &url,
+        catalog.source.reference(),
+        clone.revision.clone(),
+        read,
+    );
+    let picked = picked(&listed, &request.pick)?;
+
+    let mut children: Vec<Option<Child>> = picked.iter().map(|_| None).collect();
+    let mut cancelled = false;
+    for (at, entry) in picked.iter().enumerate() {
+        let Plugin::Relative { route } = &entry.plugin else {
+            continue;
+        };
+        let child = if cancelled {
+            Child::cancelled(entry)
+        } else {
+            inside(
+                workspace, ledger, catalog, &url, &parent, &clone, entry, route,
+            )
+        };
+        cancelled = matches!(child.outcome, Err(GatherError::Cancelled));
+        children[at] = Some(child);
+    }
+    drop(lock);
+    for (at, entry) in picked.iter().enumerate() {
+        if children[at].is_some() {
+            continue;
+        }
+        let child = if cancelled {
+            Child::cancelled(entry)
+        } else {
+            apart(workspace, ledger, catalog, &parent, entry)
+        };
+        cancelled = matches!(child.outcome, Err(GatherError::Cancelled));
+        children[at] = Some(child);
+    }
+    Ok(Report {
+        catalog: listed,
+        children: children.into_iter().flatten().collect(),
+    })
+}
+
+/// What the catalog `request` names lists, as a gather of it would find it,
+/// a dry run of [`gather`]'s first step: refused for what that is refused
+/// for, fetched as it fetches, and nothing else done.
+///
+/// Nothing registered, recorded or logged, and the workspace's lock not
+/// taken, as for a dry run of a gather ([`gather::preview`]), whose folder
+/// of its own under the cache it fetches into and takes away once read,
+/// with the cache and the workspace's folder when it made them. What `--all`
+/// asks before it gathers more than [`UNCONFIRMED`] plugins, so that one
+/// told no yes writes nothing at all.
+pub fn look(
+    workspace: &WeaverWorkspace,
+    ledger: &Ledger,
+    request: &Request,
+) -> Result<Listed, MarketplaceError> {
+    let catalog = &request.catalog;
+    let (checked, found) = gather::checked_as(ledger, catalog, SourceKind::Marketplace)?;
+    let url = fetched(catalog.source.url()).into_owned();
+    let made: Vec<PathBuf> = [workspace.weaver_dir(), workspace.cache_dir()]
+        .into_iter()
+        .filter(|folder| !folder.exists())
+        .collect();
+    let cache = workspace.cache_dir();
+    let outcome = gather::DryRun::open(&cache)
+        .map_err(|source| MarketplaceError::Read {
+            path: cache.clone(),
+            source,
+        })
+        .and_then(|run| {
+            let clone = gather::fetch(catalog, &url, None, &run.folder.join("clone"))?;
+            let read = Catalog::read(&clone.root, &catalog.subdirectory)?;
+            let name = match (checked.name, found) {
+                (Some(name), _) => name,
+                (None, Some(found)) => found.name,
+                (None, None) => free(ledger, named(&read)?)?,
+            };
+            Ok(Listed::of(
+                name,
+                &url,
+                catalog.source.reference(),
+                clone.revision,
+                read,
+            ))
+        });
+    for folder in made.iter().rev() {
+        let _ = fs::remove_dir(folder);
+    }
+    outcome
+}
+
+/// What the marketplace `request` names listed when it was last gathered,
+/// read from its clone without fetching anything, or `None` when no
+/// marketplace is recorded there: what a front end picks plugins from once
+/// a gather has listed them (`gather marketplace --list`).
+pub fn recorded(
+    workspace: &WeaverWorkspace,
+    ledger: &Ledger,
+    request: &gather::Request,
+) -> Result<Option<Listed>, MarketplaceError> {
+    let url = fetched(request.source.url());
+    let Some(parent) = ledger.source(
+        SourceKind::Marketplace,
+        &url,
+        request.source.reference(),
+        &request.subdirectory,
+    )?
+    else {
+        return Ok(None);
+    };
+    let clone = workspace.cache_dir().join(&parent.directory);
+    let read = Catalog::read(&clone, &request.subdirectory)?;
+    Ok(Some(Listed::of(
+        parent.name,
+        parent.url.as_str(),
+        parent.reference.as_deref(),
+        parent.revision,
+        read,
+    )))
+}
+
+/// The marketplace's source, registered when it is new, its clone, fetched
+/// from `url` into its folder of the cache, and its catalog, read there,
+/// with the source called what it is to be called and logged: or why not,
+/// a new one forgotten again.
+fn recorded_now(
+    workspace: &WeaverWorkspace,
+    ledger: &Ledger,
+    request: &gather::Request,
+    url: &str,
+    name: Option<SourceName>,
+    found: Option<Source>,
+) -> Result<(Source, Cloned, Catalog), MarketplaceError> {
+    let new = found.is_none();
+    let mut parent = ledger.source_for(
+        SourceKind::Marketplace,
+        url,
+        request.source.reference(),
+        &request.subdirectory,
+    )?;
+    let cache = workspace.cache_dir().join(&parent.directory);
+    let outcome = (|| {
+        gather::sweep_dry_runs(&workspace.cache_dir());
+        let clone = gather::fetch(request, url, None, &cache)?;
+        let read = Catalog::read(&clone.root, &request.subdirectory)?;
+        let wanted = match name {
+            Some(name) => Some(name),
+            None if new => Some(free(ledger, named(&read)?)?),
+            None => None,
+        };
+        // The last moment a cancel is honoured, as a gather's last is before
+        // it places: past here the source is called what it is to be and
+        // says the commit its clone holds.
+        if request.watch.is_cancelled() {
+            return Err(MarketplaceError::Gather(GatherError::Cancelled));
+        }
+        if let Some(wanted) = wanted.filter(|wanted| *wanted != parent.name) {
+            ledger.rename_source(parent.id, &wanted)?;
+            parent.name = wanted;
+        }
+        ledger.saw_source(parent.id, clone.revision.as_deref(), None)?;
+        Ok((clone, read))
+    })();
+    match outcome {
+        Ok((clone, read)) => {
+            let detail = format!("a marketplace listing {}", plural(read.listed));
+            ledger.log(Action::Gather, Some(url), Outcome::Ok, Some(&detail))?;
+            Ok((parent, clone, read))
+        }
+        Err(error) => {
+            if new {
+                // Undone rather than never done, as a gather's source is: the
+                // clone needs the folder name registering gives it.
+                ledger.forget_source(parent.id)?;
+                let _ = fs::remove_dir_all(&cache);
+            }
+            if !matches!(error, MarketplaceError::Gather(GatherError::Cancelled)) {
+                let _ = ledger.log(
+                    Action::Gather,
+                    Some(url),
+                    Outcome::Failed,
+                    Some(&error.to_string()),
+                );
+            }
+            Err(error)
+        }
+    }
+}
+
+/// `count` plugins, as a log line says it.
+fn plural(count: usize) -> String {
+    if count == 1 {
+        String::from("1 plugin")
+    } else {
+        format!("{count} plugins")
+    }
+}
+
+/// The name `read`, a catalog, gives its marketplace, held to the rules a
+/// source's name is held to.
+fn named(read: &Catalog) -> Result<SourceName, MarketplaceError> {
+    read.name
+        .as_deref()
+        .and_then(SourceName::parse)
+        .ok_or_else(|| MarketplaceError::NameUnusable {
+            name: read.name.clone(),
+        })
+}
+
+/// `wanted`, or the first of it numbered that no source is called: what a
+/// name the catalog gives is, as a name a URL gives is, rather than refused
+/// as one somebody typed would be.
+fn free(ledger: &Ledger, wanted: SourceName) -> Result<SourceName, LedgerError> {
+    let mut candidate = wanted.clone();
+    for attempt in 2.. {
+        if ledger.source_named(&candidate)?.is_none() {
+            break;
+        }
+        candidate = wanted.numbered(attempt);
+    }
+    Ok(candidate)
+}
+
+/// The entries `pick` takes of `listed`, in the catalog's order, each once,
+/// or the first name it does not list.
+///
+/// A name it lists as an entry that cannot be gathered is no entry to take,
+/// and no refusal either: that entry's failure says why already.
+fn picked<'a>(listed: &'a Listed, pick: &Pick) -> Result<Vec<&'a Entry>, MarketplaceError> {
+    match pick {
+        Pick::Listing => Ok(Vec::new()),
+        Pick::All => Ok(listed.entries.iter().collect()),
+        Pick::Plugins(names) => {
+            for name in names {
+                let lists = listed.entries.iter().any(|entry| entry.name == *name)
+                    || listed
+                        .failures
+                        .iter()
+                        .any(|failure| failure.name() == Some(name));
+                if !lists {
+                    return Err(MarketplaceError::NotListed {
+                        name: name.clone(),
+                        marketplace: listed.name.clone(),
+                    });
+                }
+            }
+            Ok(listed
+                .entries
+                .iter()
+                .filter(|entry| names.contains(&entry.name))
+                .collect())
+        }
+    }
+}
+
+impl Child {
+    /// One not begun, since a plugin before it was cancelled.
+    fn cancelled(entry: &Entry) -> Child {
+        Child {
+            entry: entry.name.clone(),
+            outcome: Err(GatherError::Cancelled),
+            holds: Vec::new(),
+        }
+    }
+}
+
+/// The request a plugin `entry` is gathered with, from `url`: its folder,
+/// its branch and its commit, searched as a plugin, watched and fetched as
+/// `catalog`, its marketplace's, is.
+fn request_for(
+    catalog: &gather::Request,
+    url: &str,
+    reference: Option<&str>,
+    subdirectory: &str,
+    entry: &Entry,
+) -> gather::Request {
+    gather::Request::git(url)
+        .at(reference)
+        .from_subdirectory(subdirectory)
+        .pinned(entry.plugin.sha())
+        .searching(Search::Plugin {
+            skills: entry.skills.clone(),
+            license: entry.license.clone(),
+        })
+        .watched_by(catalog.watch.clone())
+        .through(catalog.remote.clone())
+}
+
+/// What `entry` declares and its folder at `root` holds beside its skills.
+fn holdings(entry: &Entry, root: &Path) -> Vec<Holding> {
+    let mut holds = entry.declares.clone();
+    holds.extend(Holding::held_at(root));
+    holds.sort();
+    holds.dedup();
+    holds
+}
+
+/// Gather the plugin `entry`, in the folder `route` of the marketplace
+/// `parent`'s repository, from the marketplace's own clone, `clone`, which
+/// was fetched from `url`: the lock its catalog was read under still held.
+#[allow(clippy::too_many_arguments)]
+fn inside(
+    workspace: &WeaverWorkspace,
+    ledger: &Ledger,
+    catalog: &gather::Request,
+    url: &str,
+    parent: &Source,
+    clone: &Cloned,
+    entry: &Entry,
+    route: &str,
+) -> Child {
+    let folder = paths::as_route(&paths::normalize(
+        &Path::new(&catalog.subdirectory).join(route),
+    ));
+    let reference = catalog.source.reference();
+    let request = request_for(catalog, url, reference, &folder, entry);
+    let holds = holdings(entry, &clone.root.join(&folder));
+    let placed = (|| {
+        let checked = gather::refused(&request)?;
+        let new = ledger.child(parent.id, &entry.name)?.is_none();
+        let source = ledger.child_for(parent, &entry.name, url, reference, &folder)?;
+        let placed = gather::place(
+            workspace,
+            ledger,
+            &request,
+            url,
+            &source,
+            checked.manifest,
+            None,
+            clone,
+        );
+        if new && matches!(placed, Err(GatherError::Cancelled)) {
+            ledger.forget_source(source.id)?;
+        }
+        placed
+    })();
+    let outcome = gather::logged(ledger, url, &placed).and(placed);
+    Child {
+        entry: entry.name.clone(),
+        outcome,
+        holds,
+    }
+}
+
+/// Gather the plugin `entry` of the marketplace `parent`, in a repository
+/// of its own, into a source of its own: a gather of its own, holding the
+/// workspace's lock from registering its source to its line in the log.
+fn apart(
+    workspace: &WeaverWorkspace,
+    ledger: &Ledger,
+    catalog: &gather::Request,
+    parent: &Source,
+    entry: &Entry,
+) -> Child {
+    let typed = entry.plugin.url().map(Cow::into_owned).unwrap_or_default();
+    let request = request_for(
+        catalog,
+        &typed,
+        entry.plugin.reference(),
+        entry.plugin.path(),
+        entry,
+    );
+    let url = fetched(&typed).into_owned();
+    let mut holds = entry.declares.clone();
+    let outcome = (|| {
+        // Held from its refusals to its line in the log, as a gather of a
+        // source holds it ([`gather::gather`]): one that cannot have it is
+        // not logged, since no gather was attempted.
+        let _lock = workspace.lock()?;
+        let placed = (|| {
+            let checked = gather::refused(&request)?;
+            let new = ledger.child(parent.id, &entry.name)?.is_none();
+            let source = ledger.child_for(
+                parent,
+                &entry.name,
+                &url,
+                entry.plugin.reference(),
+                entry.plugin.path(),
+            )?;
+            gather::sweep_dry_runs(&workspace.cache_dir());
+            let cache = workspace.cache_dir().join(&source.directory);
+            let placed =
+                gather::fetch(&request, &url, checked.pinned.as_ref(), &cache).and_then(|clone| {
+                    holds = holdings(entry, &clone.root.join(entry.plugin.path()));
+                    gather::place(
+                        workspace,
+                        ledger,
+                        &request,
+                        &url,
+                        &source,
+                        checked.manifest,
+                        checked.pinned.as_ref(),
+                        &clone,
+                    )
+                });
+            if new && matches!(placed, Err(GatherError::Cancelled)) {
+                // Undone rather than never done, as a gather's new source
+                // is, and its clone with it.
+                ledger.forget_source(source.id)?;
+                let _ = fs::remove_dir_all(&cache);
+            }
+            placed
+        })();
+        gather::logged(ledger, &url, &placed).and(placed)
+    })();
+    Child {
+        entry: entry.name.clone(),
+        outcome,
+        holds,
+    }
+}
+
 /// Why one entry of a catalog cannot be gathered, as opposed to the catalog
 /// not being one at all ([`MarketplaceError`]): the rest of the catalog is
 /// listed, and gathered, all the same.
@@ -734,10 +1308,28 @@ impl EntryFailure {
     }
 }
 
-/// Why a marketplace could not be read at all, as opposed to one entry of
-/// it ([`EntryFailure`]).
+/// Why a marketplace could not be gathered at all, as opposed to one entry
+/// of it ([`EntryFailure`]) or one plugin ([`Child::outcome`]).
 #[derive(Debug, Error)]
 pub enum MarketplaceError {
+    /// What its catalog's fetch, or any gather's step before it, is refused
+    /// for, a cancel among it.
+    #[error(transparent)]
+    Gather(#[from] GatherError),
+    #[error(transparent)]
+    Ledger(#[from] LedgerError),
+    #[error(transparent)]
+    Lock(#[from] LockError),
+    /// Nothing names the marketplace: no `--name`, and the catalog's own is
+    /// none, or one no source can be called.
+    #[error("{}: give the marketplace a name with --name", match .name { Some(name) => format!("the catalog calls it `{name}`, which cannot name a source: it has to be letters, digits, `.`, `_` and `-`"), None => String::from("the catalog gives it no name") })]
+    NameUnusable { name: Option<String> },
+    /// A `--plugin` its catalog does not list.
+    #[error("the marketplace {marketplace} lists no plugin called `{name}`: `--list` lists them")]
+    NotListed {
+        name: String,
+        marketplace: SourceName,
+    },
     /// The repository holds no catalog where the marketplace is.
     #[error("{}: no such file, so this is no Claude Code marketplace", .path.display())]
     CatalogMissing { path: PathBuf },
@@ -760,11 +1352,17 @@ pub enum MarketplaceError {
 }
 
 codes!(MarketplaceError {
+    Self::NameUnusable { .. } => "marketplace_name_unusable",
+    Self::NotListed { .. } => "marketplace_plugin_not_listed",
     Self::CatalogMissing { .. } => "marketplace_catalog_missing",
     Self::CatalogOutside { .. } => "marketplace_catalog_outside",
     Self::CatalogTooLarge { .. } => "marketplace_catalog_too_large",
     Self::CatalogUnreadable { .. } => "marketplace_catalog_unreadable",
     Self::Read { .. } => "marketplace_read_failed",
+} carried {
+    Self::Gather(error) => error,
+    Self::Ledger(error) => error,
+    Self::Lock(error) => error,
 });
 
 #[cfg(test)]

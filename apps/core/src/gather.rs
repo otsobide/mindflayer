@@ -436,12 +436,22 @@ pub fn gather(
     let outcome = harvest(workspace, ledger, request);
     // What was fetched, `owner/repo` read as the GitHub repository it names.
     let url = fetched(request.source.url());
+    logged(ledger, &url, &outcome)?;
+    outcome
+}
 
-    // The log records what was attempted, not only what worked: a gather that
-    // failed is the entry somebody opens the log to find. A log write that
-    // fails on the error path is swallowed, because the error it would replace
-    // is the more useful of the two.
-    match &outcome {
+/// Note in `ledger`'s log what gathering from `url` came to, `outcome`.
+///
+/// The log records what was attempted, not only what worked: a gather that
+/// failed is the entry somebody opens the log to find. A log write that
+/// fails on the error path is swallowed, because the error it would replace
+/// is the more useful of the two.
+pub(crate) fn logged(
+    ledger: &Ledger,
+    url: &str,
+    outcome: &Result<Report, GatherError>,
+) -> Result<(), GatherError> {
+    match outcome {
         Ok(report) => {
             // What was removed only when something was, so the line every
             // gather before removals wrote reads as it did.
@@ -456,7 +466,7 @@ pub fn gather(
                 report.unchanged.len(),
                 report.failures.len()
             );
-            ledger.log(Action::Gather, Some(&url), Outcome::Ok, Some(&detail))?;
+            ledger.log(Action::Gather, Some(url), Outcome::Ok, Some(&detail))?;
         }
         // Not logged: a cancel leaves the ledger as it found it, and the
         // person who cancelled knows already.
@@ -464,13 +474,13 @@ pub fn gather(
         Err(error) => {
             let _ = ledger.log(
                 Action::Gather,
-                Some(&url),
+                Some(url),
                 Outcome::Failed,
                 Some(&error.to_string()),
             );
         }
     }
-    outcome
+    Ok(())
 }
 
 /// What a gather of a request would take, as a dry run of it found it
@@ -538,8 +548,8 @@ const DRY_RUN_LOCK: &str = ".lock";
 /// the reason a [`copy::Stage`] is held by one: whether a process is still
 /// running is a question each platform answers differently, and a lock let
 /// go of when its process dies answers it on all of them.
-struct DryRun {
-    folder: PathBuf,
+pub(crate) struct DryRun {
+    pub(crate) folder: PathBuf,
     // Only ever dropped, before the folder is taken away.
     lock: Option<fs::File>,
 }
@@ -547,7 +557,7 @@ struct DryRun {
 impl DryRun {
     /// Take a folder of one's own in `cache`, making `cache` first, and
     /// taking away first what interrupted runs left there.
-    fn open(cache: &Path) -> io::Result<DryRun> {
+    pub(crate) fn open(cache: &Path) -> io::Result<DryRun> {
         fs::create_dir_all(cache)?;
         sweep_dry_runs(cache);
         let folder = cache.join(format!("{DRY_RUN}{}", copy::unique_name()));
@@ -585,7 +595,7 @@ impl Drop for DryRun {
 /// Said nowhere, since nothing in it was anybody's but the run's, and one
 /// that will not go is tried again by the next. A folder with no lock in
 /// it yet is a run's that is being made, and is left.
-fn sweep_dry_runs(cache: &Path) {
+pub(crate) fn sweep_dry_runs(cache: &Path) {
     let Ok(entries) = fs::read_dir(cache) else {
         return;
     };
@@ -919,10 +929,10 @@ codes!(ScrubFailure => "clone_unscrubbed");
 /// What a request is refused for before anything is registered or
 /// fetched, and what it is when it is not: the name it gives its source,
 /// the commit it is pinned to, and the manifest a folder of its kind holds.
-struct Checked {
-    name: Option<SourceName>,
-    pinned: Option<Revision>,
-    manifest: &'static str,
+pub(crate) struct Checked {
+    pub(crate) name: Option<SourceName>,
+    pub(crate) pinned: Option<Revision>,
+    pub(crate) manifest: &'static str,
 }
 
 /// Hold `request` to what a gather refuses before it registers or fetches
@@ -933,6 +943,49 @@ fn checked(
     ledger: &Ledger,
     request: &Request,
 ) -> Result<(Checked, Option<ledger::Source>), GatherError> {
+    checked_as(ledger, request, request.source.kind())
+}
+
+/// [`checked`], for a source of the `kind` given rather than its request's
+/// own: a marketplace's catalog is fetched with a git request, and is a
+/// source of a kind of its own (#103).
+pub(crate) fn checked_as(
+    ledger: &Ledger,
+    request: &Request,
+    kind: SourceKind,
+) -> Result<(Checked, Option<ledger::Source>), GatherError> {
+    let checked = refused(request)?;
+
+    // Found by the URL every spelling of it is ([`crate::url::canonical`]),
+    // so a second spelling gathers into the source the first registered,
+    // and registered as fetched.
+    let url = fetched(request.source.url());
+    let found = ledger.source(
+        kind,
+        &url,
+        request.source.reference(),
+        &request.subdirectory,
+    )?;
+    // Refused before anything is registered: one name is one source, and
+    // which of two a `--from` named is not something to guess.
+    if let Some(name) = &checked.name {
+        if let Some(holder) = ledger.source_named(name)? {
+            if found.as_ref().is_none_or(|found| found.id != holder.id) {
+                return Err(GatherError::NameTaken {
+                    name: name.clone(),
+                    origin: holder.origin(),
+                });
+            }
+        }
+    }
+    Ok((checked, found))
+}
+
+/// What `request` is refused for before anything is registered or fetched
+/// whichever source it gathers into, or what it is when it is not: what a
+/// marketplace's plugin is held to, which is found by its entry rather than
+/// its URL (#103).
+pub(crate) fn refused(request: &Request) -> Result<Checked, GatherError> {
     // Refused before anything is registered or fetched, rather than used for
     // this one fetch and dropped from what is stored: a token on the command
     // line is already where `ps` and the shell history show it, and every
@@ -997,35 +1050,11 @@ fn checked(
     if request.watch.is_cancelled() {
         return Err(GatherError::Cancelled);
     }
-
-    // Found by the URL every spelling of it is ([`crate::url::canonical`]),
-    // so a second spelling gathers into the source the first registered,
-    // and registered as fetched.
-    let url = fetched(request.source.url());
-    let found = ledger.source(
-        request.source.kind(),
-        &url,
-        request.source.reference(),
-        &request.subdirectory,
-    )?;
-    // Refused before anything is registered: one name is one source, and
-    // which of two a `--from` named is not something to guess.
-    if let Some(name) = &name {
-        if let Some(holder) = ledger.source_named(name)? {
-            if found.as_ref().is_none_or(|found| found.id != holder.id) {
-                return Err(GatherError::NameTaken {
-                    name: name.clone(),
-                    origin: holder.origin(),
-                });
-            }
-        }
-    }
-    let checked = Checked {
+    Ok(Checked {
         name,
         pinned,
         manifest,
-    };
-    Ok((checked, found))
+    })
 }
 
 /// Whether `subdirectory`, a folder of a repository as somebody typed it
@@ -1125,7 +1154,7 @@ fn take(
 
 /// Fetch `request`'s source from `url` into `into`, at `pin` when there is
 /// one, telling its watch: a cancel said as the gather's.
-fn fetch(
+pub(crate) fn fetch(
     request: &Request,
     url: &str,
     pin: Option<&Revision>,
@@ -1148,7 +1177,7 @@ fn fetch(
 /// registered: what a gather does once it has a clone, whichever fetched
 /// it.
 #[allow(clippy::too_many_arguments)]
-fn place(
+pub(crate) fn place(
     workspace: &WeaverWorkspace,
     ledger: &Ledger,
     request: &Request,
