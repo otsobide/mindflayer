@@ -160,6 +160,7 @@ export type CoreCode =
   | "doctor_codex_no_git_root"
   | "doctor_codex_near_budget"
   | "doctor_codex_over_budget"
+  | "doctor_claude_misses_rules"
   | "exclude_key_invalid"
   | "exclude_pattern_invalid"
   | "exclude_path_unnamable"

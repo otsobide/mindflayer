@@ -34,8 +34,12 @@ use thiserror::Error;
 
 use crate::agent::{Agent, AgentHomes};
 use crate::agents_md::{self, CODEX_BUDGET};
+use crate::claude_md::{self, ClaudeMdError};
+use crate::claude_rules;
 use crate::code::{codes, Said};
 use crate::codex_mcp::{self, CodexMcpError, Trust, UserConfig};
+use crate::install;
+use crate::names::Names;
 use crate::paths;
 use crate::workspace::{same_directory, Member, MindProject, WeaverWorkspace};
 
@@ -163,6 +167,7 @@ impl Examined {
         let mut exam = Exam::new(project, machine);
         exam.codex_trust();
         exam.codex_reads();
+        exam.claude_block();
         Examined {
             entry,
             name: Some(project.name().to_owned()),
@@ -236,6 +241,19 @@ pub enum Symptom {
     /// budget, so it cuts off the end, where `file` is.
     #[error("{file}: the AGENTS.md files Codex reads down to it come to {bytes} bytes, past the {CODEX_BUDGET} it reads, so it cuts off the end, where this one is")]
     CodexOverBudget { file: PathBuf, bytes: u64 },
+    /// Something keeps Claude Code from reading the project's `AGENTS.md`,
+    /// and no import brings it in, so the rules its block holds reach
+    /// Claude through nothing, none of them in Claude's own rules folder
+    /// either. `file` is the one nearest the project that keeps it from
+    /// reading `AGENTS.md`.
+    #[error("{file}: Claude Code reads it in place of the AGENTS.md of {project}, and nothing imports that file, so these rules in its block reach Claude Code nowhere: {}", .routes.join(", "))]
+    ClaudeMissesRules {
+        file: PathBuf,
+        project: PathBuf,
+        /// Each rule the block holds that Claude's rules folder does not,
+        /// in the block's order. Never empty.
+        routes: Vec<String>,
+    },
 }
 
 codes!(Symptom {
@@ -245,6 +263,7 @@ codes!(Symptom {
     Self::CodexNoGitRoot { .. } => "doctor_codex_no_git_root",
     Self::CodexNearBudget { .. } => "doctor_codex_near_budget",
     Self::CodexOverBudget { .. } => "doctor_codex_over_budget",
+    Self::ClaudeMissesRules { .. } => "doctor_claude_misses_rules",
 });
 
 impl Symptom {
@@ -257,6 +276,7 @@ impl Symptom {
             | Symptom::CodexNoGitRoot { .. }
             | Symptom::CodexNearBudget { .. }
             | Symptom::CodexOverBudget { .. } => vec![Agent::Codex],
+            Symptom::ClaudeMissesRules { .. } => vec![Agent::Claude],
         }
     }
 
@@ -275,6 +295,7 @@ impl Symptom {
             | Symptom::CodexNearBudget { file, .. }
             | Symptom::CodexOverBudget { file, .. } => file,
             Symptom::CodexNoGitRoot { project } => project,
+            Symptom::ClaudeMissesRules { file, .. } => file,
         }
     }
 
@@ -311,6 +332,13 @@ impl Symptom {
                 "keep what those files say under {CODEX_BUDGET} bytes, or raise \
                  `project_doc_max_bytes` in Codex's config.toml"
             ),
+            Symptom::ClaudeMissesRules { routes, .. } => format!(
+                "install one of them again (`mind install rule:{}`), which renders every rule \
+                 for Claude Code as the project stands, through an import of AGENTS.md or in \
+                 {}",
+                routes[0],
+                claude_rules::folder().display()
+            ),
         }
     }
 
@@ -338,11 +366,16 @@ pub enum DoctorFailure {
     /// [`agents_md::Warning::Unmeasured`].
     #[error(transparent)]
     Unmeasured(agents_md::Warning),
+    /// A `CLAUDE.md` in or above the project, read to say whether Claude
+    /// reads its `AGENTS.md`.
+    #[error(transparent)]
+    ClaudeMd(ClaudeMdError),
 }
 
 codes!(DoctorFailure {} carried {
     Self::CodexConfig(error) => error,
     Self::Unmeasured(warning) => warning,
+    Self::ClaudeMd(error) => error,
 });
 
 /// One project's examination as it goes: what it has found and what it
@@ -475,6 +508,47 @@ impl<'a> Exam<'a> {
                 }
             };
             self.symptoms.push(symptom);
+        }
+    }
+
+    /// Whether Claude Code reads the rules the block of the project's
+    /// `AGENTS.md` holds: through the file itself, an import of it, or each
+    /// rule's own file in Claude's rules folder. A render chose one when the
+    /// rules were installed ([`claude_md::reach`]), and a `CLAUDE.md` or a
+    /// `CLAUDE.local.md` made since, in the project or above it, keeps
+    /// Claude from the file with nothing said.
+    fn claude_block(&mut self) {
+        if !self.names(Agent::Claude) {
+            return;
+        }
+        let routes = install::rules::block_routes(self.root());
+        if routes.is_empty() {
+            return;
+        }
+        let file = match claude_md::unread_by(self.project, &self.machine.homes) {
+            Ok(Some(file)) => file,
+            Ok(None) => return,
+            Err(error) => {
+                self.failures.push(DoctorFailure::ClaudeMd(error));
+                return;
+            }
+        };
+        // In the folder of either names, where a Mindflayer build filed
+        // them too.
+        let given = |route: &String| {
+            Names::ALL.into_iter().any(|names| {
+                self.root()
+                    .join(claude_rules::file_under(names, route))
+                    .is_file()
+            })
+        };
+        let routes: Vec<String> = routes.into_iter().filter(|route| !given(route)).collect();
+        if !routes.is_empty() {
+            self.symptoms.push(Symptom::ClaudeMissesRules {
+                file,
+                project: self.root().to_path_buf(),
+                routes,
+            });
         }
     }
 }

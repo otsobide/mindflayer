@@ -321,6 +321,42 @@ pub fn reach(
     decide(project, &Survey::of(project.root(), homes)?)
 }
 
+/// Whether Claude Code, started at `project`'s root, reads the block of its
+/// `AGENTS.md` as the files stand now: `None` when it does, natively, as one
+/// of its own files, or through an import a file holds already,
+/// Mindweaver's or somebody's; otherwise the file nearest the project that
+/// keeps it from reading `AGENTS.md`.
+///
+/// [`reach`] says how Claude is to reach the block once a render carries it
+/// out, an import it is yet to add among it; this is what Claude does until
+/// then, which doctor asks of a project rendered while nothing kept Claude
+/// from the file, before a `CLAUDE.local.md` came, say (D-03). Read as
+/// [`reach`] reads, so the two never disagree about what Claude finds.
+pub(crate) fn unread_by(
+    project: &MindProject,
+    homes: &AgentHomes,
+) -> Result<Option<PathBuf>, ClaudeMdError> {
+    let survey = Survey::of(project.root(), homes)?;
+    let Some(nearest) = survey.stopping.first().cloned() else {
+        return Ok(None);
+    };
+    Ok(match decide(project, &survey)? {
+        Reach::Native | Reach::Same(_) | Reach::Imported(_) => None,
+        Reach::Import(file) => {
+            let import = OWN
+                .iter()
+                .find(|(name, _)| joined(&survey.root, name) == file)
+                .map(|(_, import)| *import);
+            let held = match import {
+                Some(import) => read(&file)?.imports(import),
+                None => false,
+            };
+            (!held).then_some(nearest)
+        }
+        Reach::Fallback(_) => Some(nearest),
+    })
+}
+
 /// What [`reach`] and [`render`] look at in a project and above it.
 struct Survey {
     root: PathBuf,

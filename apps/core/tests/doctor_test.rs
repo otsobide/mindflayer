@@ -8,7 +8,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use mindweaver_core::doctor::{Examined, Machine, Report};
-use mindweaver_core::{Agent, AgentHomes, Directories, MindProject, Share, WeaverWorkspace};
+use mindweaver_core::install;
+use mindweaver_core::{
+    claude_md, Agent, AgentHomes, Directories, Kind, MindProject, Share, WeaverWorkspace,
+};
 use tempfile::TempDir;
 
 /// A workspace at the root of a git work tree, linking `app`, a project
@@ -79,6 +82,50 @@ impl Fixture {
     fn examined(&self) -> Examined {
         self.examined_with(&[])
     }
+
+    /// Give the workspace's library the rule `route`, holding `text`, and
+    /// install it into `app`, as `mindweaver install` does.
+    fn install_rule(&self, route: &str, text: &str) {
+        let file = self
+            .workspace
+            .own()
+            .directory_for(Kind::Rule)
+            .unwrap()
+            .join(format!("{route}.md"));
+        self.write(&file, text);
+        let ledger = self.workspace.ledger().unwrap();
+        let candidate = install::offered(
+            &self.workspace,
+            &ledger,
+            &self.project,
+            Kind::Rule,
+            route,
+            None,
+        )
+        .unwrap();
+        install::install(
+            &self.workspace,
+            &ledger,
+            &self.project,
+            &candidate,
+            &self.homes(),
+        )
+        .unwrap();
+    }
+}
+
+/// A fixture held to have nothing above it that Claude would take for a
+/// `CLAUDE.md`, or a test of what Claude reads would pass or fail for the
+/// wrong reason.
+fn clean(agents: &[Agent]) -> Fixture {
+    let fixture = fixture(agents);
+    assert!(
+        claude_md::reads_agents_md(fixture.dir.path(), &AgentHomes::default()).unwrap(),
+        "a CLAUDE.md, .claude/CLAUDE.md or CLAUDE.local.md above {} keeps these tests from \
+         telling anything",
+        fixture.dir.path().display()
+    );
+    fixture
 }
 
 /// The code of each finding, in order.
@@ -281,4 +328,53 @@ fn agents_md_files_near_and_past_codex_s_budget_are_found() {
     let past = fixture.examined();
     assert_eq!(codes(&past), vec!["doctor_codex_over_budget"]);
     assert!(past.findings[0].fix.contains("project_doc_max_bytes"));
+}
+
+#[test]
+fn a_claude_local_md_made_after_the_rules_keeps_them_from_claude_and_is_found() {
+    let fixture = clean(&[Agent::Claude]);
+    fixture.install_rule("commits", "Write commit messages in the imperative.\n");
+    assert!(codes(&fixture.examined()).is_empty());
+
+    let local = fixture.root().join("CLAUDE.local.md");
+    fixture.write(&local, "# Mine\n");
+    let examined = fixture.examined();
+
+    assert_eq!(codes(&examined), vec!["doctor_claude_misses_rules"]);
+    let finding = &examined.findings[0];
+    assert_eq!(finding.path, local);
+    assert_eq!(finding.agents, vec![Agent::Claude]);
+    assert!(
+        finding.message.ends_with(": commits"),
+        "{}",
+        finding.message
+    );
+    assert!(
+        finding.fix.contains("`mind install rule:commits`"),
+        "{}",
+        finding.fix
+    );
+
+    // What the fix says: installed again, every rule is rendered for
+    // Claude as the project now stands.
+    fixture.install_rule("commits", "Write commit messages in the imperative.\n");
+    assert!(codes(&fixture.examined()).is_empty());
+}
+
+#[test]
+fn an_import_of_agents_md_where_claude_reads_its_own_file_is_not_found() {
+    let fixture = clean(&[Agent::Claude]);
+    fixture.install_rule("commits", "Write commit messages in the imperative.\n");
+    fixture.write(&fixture.root().join("CLAUDE.local.md"), "@AGENTS.md\n");
+
+    assert!(codes(&fixture.examined()).is_empty());
+}
+
+#[test]
+fn rules_kept_from_claude_are_not_asked_of_a_project_that_does_not_name_claude() {
+    let fixture = clean(&[Agent::Codex]);
+    fixture.install_rule("commits", "Write commit messages in the imperative.\n");
+    fixture.write(&fixture.root().join("CLAUDE.local.md"), "# Mine\n");
+
+    assert!(codes(&fixture.examined()).is_empty());
 }
