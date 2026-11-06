@@ -24,9 +24,9 @@ const DRAWS: usize = 200;
 /// compile until it is listed here and its slug pinned below.
 fn every_source_kind() -> Vec<SourceKind> {
     let listed = |kind: SourceKind| match kind {
-        SourceKind::Git => kind,
+        SourceKind::Git | SourceKind::Marketplace => kind,
     };
-    vec![listed(SourceKind::Git)]
+    vec![listed(SourceKind::Git), listed(SourceKind::Marketplace)]
 }
 
 /// Every action, as [`every_source_kind`] lists the kinds.
@@ -159,6 +159,12 @@ fn every_source_kind_is_parsed_back_from_its_slug() {
 #[test]
 fn a_git_source_is_written_as_git() {
     assert_eq!(SourceKind::Git.slug(), "git");
+}
+
+/// As `git` is, once a build has written it (#103).
+#[test]
+fn a_marketplace_is_written_as_marketplace() {
+    assert_eq!(SourceKind::Marketplace.slug(), "marketplace");
 }
 
 #[test]

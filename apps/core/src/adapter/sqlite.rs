@@ -31,7 +31,7 @@ use crate::value::{ArtifactName, ContentHash, Origin, Redacted, Revision, Source
 /// Refused if the file on disk is newer, for the same reason a marker file is:
 /// an old binary silently misreading a newer database is the failure that has
 /// no error message.
-pub const SCHEMA_VERSION: u32 = 8;
+pub const SCHEMA_VERSION: u32 = 9;
 
 /// The SQLite store, over one connection to the ledger's file, or to one in
 /// memory.
@@ -325,6 +325,14 @@ impl Sqlite {
                 self.failed("noting where each gathered artifact came from", source)
             })?;
         }
+        if found < 9 {
+            transaction.execute_batch(SCHEMA_V9).map_err(|source| {
+                self.failed(
+                    "giving a marketplace's plugins sources of their own under it",
+                    source,
+                )
+            })?;
+        }
 
         transaction
             .pragma_update(None, "user_version", SCHEMA_VERSION)
@@ -481,7 +489,7 @@ impl LedgerStore for Sqlite {
                 &format!(
                     "SELECT {SOURCE_COLUMNS} FROM sources
                       WHERE kind = ?1 AND canonical_url = ?2 AND reference_key = ?3
-                        AND subdirectory = ?4"
+                        AND subdirectory = ?4 AND parent_id IS NULL"
                 ),
                 rusqlite::params![
                     kind.slug(),
@@ -541,7 +549,118 @@ impl LedgerStore for Sqlite {
             directory,
             name,
             pin: None,
+            parent_id: None,
+            entry: None,
         })
+    }
+
+    fn child(&self, parent: i64, entry: &str) -> Result<Option<Source>, LedgerError> {
+        self.connection
+            .query_row(
+                &format!(
+                    "SELECT {SOURCE_COLUMNS} FROM sources WHERE parent_id = ?1 AND entry = ?2"
+                ),
+                rusqlite::params![parent, entry],
+                read_source,
+            )
+            .optional()
+            .map_err(|source| self.failed("looking up a marketplace's plugin", source))
+    }
+
+    fn child_for(
+        &self,
+        parent: &Source,
+        entry: &str,
+        url: &str,
+        reference: Option<&str>,
+        subdirectory: &str,
+    ) -> Result<Source, LedgerError> {
+        let url = redacted(url);
+        let known_by = canonical(&url);
+        if let Some(existing) = self.child(parent.id, entry)? {
+            let moved = existing.url != url.as_ref()
+                || existing.reference.as_deref() != reference
+                || existing.subdirectory != subdirectory;
+            if !moved {
+                return Ok(existing);
+            }
+            // Where the catalog says it is now: the source is the entry's,
+            // wherever its plugin moved, and keeps its folder, where its
+            // files are.
+            self.connection
+                .execute(
+                    "UPDATE sources
+                        SET url = ?2, canonical_url = ?3, reference = NULL, reference_key = ?4,
+                            subdirectory = ?5
+                      WHERE id = ?1",
+                    rusqlite::params![
+                        existing.id,
+                        url.as_ref(),
+                        known_by,
+                        reference.unwrap_or_default(),
+                        subdirectory
+                    ],
+                )
+                .map_err(|source| self.failed("moving a marketplace's plugin", source))?;
+            return Ok(Source {
+                url: Redacted::new(&url),
+                reference: reference.map(str::to_owned),
+                subdirectory: subdirectory.to_owned(),
+                ..existing
+            });
+        }
+
+        let directory = self.free_directory(&slug(&format!("{}-{entry}", parent.directory)))?;
+        let name = self.free_name(&SourceName::child(&parent.name, entry))?;
+        let at = self.now();
+        // Its branch in `reference_key` alone, for the reason [`SCHEMA_V9`]
+        // gives.
+        self.connection
+            .execute(
+                "INSERT INTO sources
+                     (kind, url, reference, subdirectory, revision, directory, first_seen, last_seen,
+                      name, canonical_url, reference_key, parent_id, entry)
+                 VALUES (?1, ?2, NULL, ?3, NULL, ?4, ?5, ?5, ?6, ?7, ?8, ?9, ?10)",
+                rusqlite::params![
+                    SourceKind::Git.slug(),
+                    url.as_ref(),
+                    subdirectory,
+                    directory,
+                    at,
+                    name.as_str(),
+                    known_by,
+                    reference.unwrap_or_default(),
+                    parent.id,
+                    entry
+                ],
+            )
+            .map_err(|source| self.failed("registering a marketplace's plugin", source))?;
+
+        Ok(Source {
+            id: self.connection.last_insert_rowid(),
+            kind: SourceKind::Git,
+            url: Redacted::new(&url),
+            reference: reference.map(str::to_owned),
+            subdirectory: subdirectory.to_owned(),
+            revision: None,
+            directory,
+            name,
+            pin: None,
+            parent_id: Some(parent.id),
+            entry: Some(entry.to_owned()),
+        })
+    }
+
+    fn children(&self, parent: i64) -> Result<Vec<Source>, LedgerError> {
+        let failed = |source| self.failed("listing a marketplace's plugins", source);
+        let mut statement = self
+            .connection
+            .prepare(&format!(
+                "SELECT {SOURCE_COLUMNS} FROM sources WHERE parent_id = ?1 ORDER BY name"
+            ))
+            .map_err(failed)?;
+        let rows = statement.query_map([parent], read_source).map_err(failed)?;
+        rows.collect::<Result<_, _>>().map_err(failed)
     }
 
     fn source_named(&self, name: &SourceName) -> Result<Option<Source>, LedgerError> {
@@ -698,8 +817,10 @@ impl LedgerStore for Sqlite {
             .connection
             .prepare(
                 "SELECT a.kind, a.name, a.path, a.summary, a.revision, a.gathered_at,
-                        s.id, s.kind, s.url, s.reference, s.subdirectory, s.revision, s.directory,
-                        s.name, a.upstream_path, a.content_hash, a.license, s.pin
+                        s.id, s.kind, s.url, coalesce(s.reference, nullif(s.reference_key, '')),
+                        s.subdirectory, s.revision, s.directory,
+                        s.name, a.upstream_path, a.content_hash, a.license, s.pin,
+                        s.parent_id, s.entry
                    FROM artifacts a
                    JOIN sources s ON s.id = a.source_id
                   ORDER BY a.kind, a.name, s.url",
@@ -731,6 +852,8 @@ impl LedgerStore for Sqlite {
                     content_hash: row.get(15)?,
                     license: row.get(16)?,
                     pin: row.get(17)?,
+                    parent_id: row.get(18)?,
+                    entry: row.get(19)?,
                 })
             })
             .map_err(|source| self.failed("listing what was gathered", source))?;
@@ -761,6 +884,8 @@ impl LedgerStore for Sqlite {
                     directory: row.directory,
                     name: SourceName::recorded(row.source_name),
                     pin: row.pin,
+                    parent_id: row.parent_id,
+                    entry: row.entry,
                 },
                 upstream_path: row.upstream_path,
                 content_hash: row.content_hash,
@@ -792,6 +917,8 @@ impl LedgerStore for Sqlite {
                             directory: row.get(6)?,
                             name: SourceName::recorded(row.get(7)?),
                             pin: row.get(8)?,
+                            parent_id: row.get(9)?,
+                            entry: row.get(10)?,
                         })
                     }),
                 )
@@ -1913,6 +2040,8 @@ struct Row {
     content_hash: Option<ContentHash>,
     license: Option<String>,
     pin: Option<Revision>,
+    parent_id: Option<i64>,
+    entry: Option<String>,
 }
 
 /// Where a ledger at `path` is copied before a schema step takes it on from
@@ -2041,9 +2170,12 @@ fn journal_of(path: &Path) -> PathBuf {
     path.with_file_name(name)
 }
 
-/// The columns of `sources` [`read_source`] reads, in its order.
-const SOURCE_COLUMNS: &str =
-    "id, kind, url, reference, subdirectory, revision, directory, name, pin";
+/// The columns of `sources` [`read_source`] reads, in its order: the branch
+/// from `reference_key` for a marketplace's plugin, whose `reference` is
+/// left `NULL` ([`SCHEMA_V9`]), and from `reference` for every other
+/// source, whose `reference_key` says the same.
+const SOURCE_COLUMNS: &str = "id, kind, url, coalesce(reference, nullif(reference_key, '')),
+    subdirectory, revision, directory, name, pin, parent_id, entry";
 
 /// What a `SELECT` of [`SOURCE_COLUMNS`] maps to.
 fn read_source(row: &rusqlite::Row<'_>) -> rusqlite::Result<Source> {
@@ -2069,6 +2201,8 @@ fn read_source(row: &rusqlite::Row<'_>) -> rusqlite::Result<Source> {
         directory: row.get(6)?,
         name: SourceName::recorded(row.get(7)?),
         pin: row.get(8)?,
+        parent_id: row.get(9)?,
+        entry: row.get(10)?,
     })
 }
 
@@ -2474,6 +2608,45 @@ UPDATE artifacts
           FROM walk
          WHERE walk.id = artifacts.source_id AND rest = '')
        || replace(path, rtrim(path, replace(path, '/', '')), '');
+";
+
+/// The ninth schema: a marketplace's plugins, each a source of its own under
+/// it (#103, D-13).
+///
+/// A source gains `entry`, the name its marketplace's catalog lists its
+/// plugin by, beside the `parent_id` schema 7 gave it for this: a child is
+/// the entry of its parent, one source an entry, found again in the catalog
+/// a later gather reads by that name whatever the source is called
+/// (`sources_by_entry`). A plugin's own identity is no longer the
+/// repository it is in: anthropics/skills lists two plugins, each the whole
+/// of its repository, and two marketplaces can list one repository's
+/// plugin. So the identity a gather finds a source by
+/// (`sources_by_identity`) holds among the sources gathered on their own
+/// alone, where a marketplace is one too, of a kind of its own.
+///
+/// Version 1's `UNIQUE (kind, url, reference, subdirectory)`, which no
+/// `ALTER` drops, would still refuse a second plugin of one repository at
+/// one branch from one folder, but never one whose `reference` is `NULL`,
+/// which SQLite finds equal to nothing. So a plugin's branch is kept in
+/// `reference_key` alone, its `reference` left `NULL`, and read back from
+/// there ([`SOURCE_COLUMNS`]), where a source gathered on its own keeps
+/// both, as it always has. Making the table again without it was the other
+/// way, and is rejected: the copy has to drop the old table under foreign
+/// keys that cascade a dropped `sources` into every artifact, and SQLite
+/// takes the switch that turns them off only outside a transaction, where
+/// every step runs; renaming the old table away first follows it with every
+/// reference to it, whatever `legacy_alter_table` says, while they are on.
+///
+/// Nothing older is filled in: no build before this one gathered a
+/// marketplace, so every row is a source gathered on its own, with no
+/// entry.
+const SCHEMA_V9: &str = "
+ALTER TABLE sources ADD COLUMN entry TEXT;
+
+DROP INDEX sources_by_identity;
+CREATE UNIQUE INDEX sources_by_identity
+    ON sources (kind, canonical_url, reference_key, subdirectory) WHERE parent_id IS NULL;
+CREATE UNIQUE INDEX sources_by_entry ON sources (parent_id, entry) WHERE parent_id IS NOT NULL;
 ";
 
 /// What the step to schema 7 is handed of one source: what no SQL can work

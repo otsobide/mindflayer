@@ -231,9 +231,13 @@ impl Request {
     /// another (`gather git --pin`), never by one told to bring the source
     /// up to date. From its URL as it was recorded, so a relative path is
     /// read from where the gather runs, as one typed is.
+    ///
+    /// A marketplace's is the request its catalog is fetched with, a git
+    /// repository as any other (#103): what is gathered of it is its
+    /// children's, each a source of its own.
     pub fn again(source: &ledger::Source) -> Self {
         match source.kind {
-            SourceKind::Git => Request::git(source.url.as_str())
+            SourceKind::Git | SourceKind::Marketplace => Request::git(source.url.as_str())
                 .from_subdirectory(source.subdirectory.clone())
                 .at(source.reference.clone())
                 .pinned(source.pin.as_ref().map(|pin| pin.as_str().to_owned())),

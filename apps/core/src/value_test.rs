@@ -196,3 +196,20 @@ fn a_source_is_named_after_its_owner_and_repository() {
         "acme-skills-2"
     );
 }
+
+#[test]
+fn a_plugin_a_marketplace_lists_is_named_after_both_and_is_a_name_too() {
+    let parent = SourceName::parse("anthropic-agent-skills").unwrap();
+    for (entry, name) in [
+        ("document-skills", "anthropic-agent-skills.document-skills"),
+        ("Commit Commands", "anthropic-agent-skills.commit-commands"),
+        ("@acme/tools", "anthropic-agent-skills.acme-tools"),
+        ("..", "anthropic-agent-skills.plugin"),
+        ("café", "anthropic-agent-skills.caf"),
+        ("-x-", "anthropic-agent-skills.x"),
+    ] {
+        let child = SourceName::child(&parent, entry);
+        assert_eq!(child, name, "{entry}");
+        assert!(SourceName::parse(&child).is_some(), "{entry} gave {child}");
+    }
+}

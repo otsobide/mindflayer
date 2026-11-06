@@ -466,6 +466,33 @@ impl SourceName {
         }
     }
 
+    /// The name a plugin a marketplace lists is given as a source of its
+    /// own unless somebody renames it (#103): the marketplace's and the
+    /// plugin's, a `.` between them, `anthropic-agent-skills.pdf`, with
+    /// every character of the plugin's a name cannot hold a `-`, lowercase,
+    /// as [`derived`](Self::derived) spells a URL's folders. `plugin` after
+    /// the `.` when nothing of the entry's is left.
+    ///
+    /// The marketplace's name in it, rather than the entry's alone: two
+    /// marketplaces list plugins of one name (`github`, `commit-commands`),
+    /// and one of them numbered `-2` would say nothing of which it is. The
+    /// ledger still numbers one another source has
+    /// ([`numbered`](Self::numbered)).
+    pub fn child(parent: &SourceName, entry: &str) -> Self {
+        let mut plugin = String::with_capacity(entry.len());
+        for character in entry.chars() {
+            let character = character.to_ascii_lowercase();
+            if character.is_ascii_alphanumeric() || matches!(character, '.' | '_' | '-') {
+                plugin.push(character);
+            } else {
+                plugin.push('-');
+            }
+        }
+        let plugin = plugin.trim_matches(|character| matches!(character, '-' | '.'));
+        let plugin = if plugin.is_empty() { "plugin" } else { plugin };
+        SourceName(format!("{}.{plugin}", parent.0))
+    }
+
     /// The `n`th of this name, `acme-skills-2`, for a source that would
     /// take a name another has: still a name, since a `-` and digits are.
     pub fn numbered(&self, n: usize) -> Self {

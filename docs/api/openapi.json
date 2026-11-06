@@ -3510,7 +3510,8 @@
       "SourceKind": {
         "description": "What kind of place a source is.",
         "enum": [
-          "git"
+          "git",
+          "marketplace"
         ],
         "type": "string"
       },

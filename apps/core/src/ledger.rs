@@ -62,6 +62,11 @@ pub const FLAYER_LEDGER_FILE: &str = "mindflayer.db";
 pub enum SourceKind {
     /// A git repository, cloned into the workspace cache.
     Git,
+    /// A Claude Code plugin marketplace (#103): a git repository cloned
+    /// into the workspace cache as one is, whose catalog lists the plugins
+    /// gathered into sources of their own, its children (D-13). It
+    /// supplies nothing to the shelf itself.
+    Marketplace,
 }
 
 impl SourceKind {
@@ -69,12 +74,14 @@ impl SourceKind {
     pub const fn slug(self) -> &'static str {
         match self {
             SourceKind::Git => "git",
+            SourceKind::Marketplace => "marketplace",
         }
     }
 
     pub(crate) fn parse(slug: &str) -> Option<Self> {
         match slug {
             "git" => Some(SourceKind::Git),
+            "marketplace" => Some(SourceKind::Marketplace),
             _ => None,
         }
     }
@@ -91,7 +98,7 @@ impl Serialize for SourceKind {
 #[cfg(any(feature = "ts", feature = "schema"))]
 crate::described::words! {
     /// What kind of place a source is.
-    SourceKind by slug { Git }
+    SourceKind by slug { Git, Marketplace }
 }
 
 /// A place artifacts have been gathered from.
@@ -139,6 +146,17 @@ pub struct Source {
     /// took whatever the branch was at. Not part of what makes the source:
     /// gathered at another pin, or none, it is the same source, moved.
     pub pin: Option<Revision>,
+    /// The marketplace it is a plugin of, by that source's row id (#103):
+    /// `None` for one gathered on its own. Not serialized, as the id is
+    /// not; `gather sources` says the marketplace by its name.
+    #[serde(skip)]
+    pub parent_id: Option<i64>,
+    /// The name its marketplace's catalog lists its plugin by, which is
+    /// what finds it again in the catalog a later gather reads, whatever it
+    /// is called: `None` for one gathered on its own. Not serialized here,
+    /// for the reason the parent is not.
+    #[serde(skip)]
+    pub entry: Option<String>,
 }
 
 impl Source {

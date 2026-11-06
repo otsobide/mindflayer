@@ -2088,6 +2088,8 @@ fn a_candidate_from_the_shelf_serializes_without_the_credentials_its_source_carr
                 directory: String::from("github.com-acme-skills"),
                 name: mindweaver_core::value::SourceName::parse("acme-skills").unwrap(),
                 pin: None,
+                parent_id: None,
+                entry: None,
             },
             upstream_path: String::from("skills/review"),
             content_hash: None,

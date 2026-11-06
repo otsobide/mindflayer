@@ -2009,6 +2009,8 @@ fn gathered_from(url: &str) -> Gathered {
             directory: String::from("github.com-acme-skills"),
             name: SourceName::recorded(String::from("acme-skills")),
             pin: Some(Revision::from("4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5e7b9d1f3")),
+            parent_id: None,
+            entry: None,
         },
         upstream_path: String::from("skills/deploy"),
         content_hash: Some(recorded(&"a".repeat(64))),

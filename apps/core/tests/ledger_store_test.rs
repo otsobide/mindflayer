@@ -213,6 +213,11 @@ every_store![
     nothing_stored_through_the_port_is_left_to_scrub,
     every_spelling_of_one_repository_is_one_source,
     a_source_is_found_by_its_name_and_takes_another_when_renamed,
+    a_marketplace_s_plugin_is_registered_once_by_its_entry_and_never_by_its_coordinate,
+    plugins_of_one_repository_are_sources_of_their_own_beside_one_gathered_on_its_own,
+    a_plugin_found_again_is_moved_where_it_is_said_to_be_and_keeps_its_folder,
+    a_plugin_is_named_after_its_marketplace_and_numbered_when_the_name_is_taken,
+    forgetting_a_marketplace_forgets_its_plugins_and_what_they_brought,
     a_project_is_known_by_its_id_at_the_route_it_was_last_seen_at,
     an_id_seen_at_another_route_moves_there_unless_it_was_last_seen_at_a_stale_one,
     a_route_seen_holding_another_id_forgets_the_one_it_held,
@@ -2193,6 +2198,164 @@ fn a_source_is_found_by_its_name_and_takes_another_when_renamed(mut store: Store
     assert_eq!(refused.code(), "ledger_query_failed");
     store.reopen();
     assert_eq!(store.source_named(&name).unwrap(), Some(renamed));
+}
+
+/// A marketplace registered for `url`, at no branch, from its root.
+fn marketplace(store: &Store, url: &str) -> Source {
+    store
+        .source_for(
+            SourceKind::Marketplace,
+            url,
+            None,
+            mindweaver_core::DEFAULT_SUBDIRECTORY,
+        )
+        .unwrap()
+}
+
+fn a_marketplace_s_plugin_is_registered_once_by_its_entry_and_never_by_its_coordinate(
+    mut store: Store,
+) {
+    let url = UrlMother::https();
+    let market = marketplace(&store, &url);
+    let (entry, folder) = (random::word(), random::word());
+    assert_eq!(store.child(market.id, &entry).unwrap(), None);
+
+    let registered = store
+        .child_for(&market, &entry, &url, None, &folder)
+        .unwrap();
+
+    store.reopen();
+    assert_eq!(registered.kind, SourceKind::Git);
+    assert_eq!(registered.parent_id, Some(market.id));
+    assert_eq!(registered.entry.as_deref(), Some(entry.as_str()));
+    assert_eq!(registered.subdirectory, folder);
+    assert_eq!(
+        store.child(market.id, &entry).unwrap(),
+        Some(registered.clone())
+    );
+    assert_eq!(
+        store
+            .child_for(&market, &entry, &url, None, &folder)
+            .unwrap(),
+        registered
+    );
+    // Its coordinate is a gather's of a source of its own, which finds no
+    // plugin there, and nor does the marketplace's kind.
+    assert_eq!(
+        store.source(SourceKind::Git, &url, None, &folder).unwrap(),
+        None
+    );
+    assert_eq!(store.children(market.id).unwrap(), [registered]);
+}
+
+fn plugins_of_one_repository_are_sources_of_their_own_beside_one_gathered_on_its_own(
+    mut store: Store,
+) {
+    let url = UrlMother::https();
+    let reference = Some(random::word());
+    let alone = store
+        .source_for(SourceKind::Git, &url, reference.as_deref(), "")
+        .unwrap();
+    let market = marketplace(&store, &url);
+    let other = marketplace(&store, &UrlMother::https());
+
+    // Each the whole of the repository at one branch, as two entries of
+    // one catalog are, and as one of another catalog is.
+    let one = store
+        .child_for(&market, "one", &url, reference.as_deref(), "")
+        .unwrap();
+    let two = store
+        .child_for(&market, "two", &url, reference.as_deref(), "")
+        .unwrap();
+    let elsewhere = store
+        .child_for(&other, "one", &url, reference.as_deref(), "")
+        .unwrap();
+
+    store.reopen();
+    let ids: BTreeSet<i64> = [&alone, &market, &one, &two, &elsewhere]
+        .iter()
+        .map(|source| source.id)
+        .collect();
+    assert_eq!(ids.len(), 5);
+    let folders: BTreeSet<String> = [&alone, &market, &one, &two, &elsewhere]
+        .iter()
+        .map(|source| source.directory.clone())
+        .collect();
+    assert_eq!(folders.len(), 5, "each has a folder of its own");
+    assert_eq!(
+        store
+            .source(SourceKind::Git, &url, reference.as_deref(), "")
+            .unwrap(),
+        Some(alone)
+    );
+    assert_eq!(store.children(other.id).unwrap(), [elsewhere]);
+    assert_eq!(store.sources().unwrap().len(), 6);
+}
+
+fn a_plugin_found_again_is_moved_where_it_is_said_to_be_and_keeps_its_folder(mut store: Store) {
+    let market = marketplace(&store, &UrlMother::https());
+    let first = store
+        .child_for(&market, "tools", &UrlMother::https(), None, "")
+        .unwrap();
+    let (url, reference, folder) = (UrlMother::https(), random::word(), random::word());
+
+    let moved = store
+        .child_for(&market, "tools", &url, Some(&reference), &folder)
+        .unwrap();
+
+    store.reopen();
+    assert_eq!(moved.id, first.id);
+    assert_eq!(moved.directory, first.directory);
+    assert_eq!(moved.name, first.name);
+    assert_eq!(moved.url, url.as_str());
+    assert_eq!(moved.reference.as_deref(), Some(reference.as_str()));
+    assert_eq!(moved.subdirectory, folder);
+    assert_eq!(store.child(market.id, "tools").unwrap(), Some(moved));
+}
+
+fn a_plugin_is_named_after_its_marketplace_and_numbered_when_the_name_is_taken(mut store: Store) {
+    let url = UrlMother::https();
+    let market = marketplace(&store, &url);
+    let wanted = SourceName::child(&market.name, "tools");
+    let holder = source(&store, &UrlMother::https());
+    store.rename_source(holder.id, &wanted).unwrap();
+
+    let tools = store.child_for(&market, "tools", &url, None, "").unwrap();
+    let lint = store.child_for(&market, "lint", &url, None, "").unwrap();
+
+    store.reopen();
+    assert_eq!(tools.name, wanted.numbered(2));
+    assert_eq!(lint.name, SourceName::child(&market.name, "lint"));
+    assert_eq!(store.source_named(&tools.name).unwrap(), Some(tools));
+}
+
+fn forgetting_a_marketplace_forgets_its_plugins_and_what_they_brought(mut store: Store) {
+    let url = UrlMother::https();
+    let market = marketplace(&store, &url);
+    let plugin = store.child_for(&market, "tools", &url, None, "").unwrap();
+    let alone = source(&store, &UrlMother::https());
+    for from in [&plugin, &alone] {
+        let name = ArtifactNameMother::random();
+        store
+            .record(
+                from,
+                Kind::Skill,
+                &name,
+                &format!("skills/{name}"),
+                None,
+                &UpstreamMother::at(None),
+            )
+            .unwrap();
+    }
+
+    assert!(store.forget_source(market.id).unwrap());
+
+    store.reopen();
+    assert_eq!(store.child(market.id, "tools").unwrap(), None);
+    assert_eq!(store.sources().unwrap(), std::slice::from_ref(&alone));
+    let gathered = store.gathered().unwrap();
+    assert_eq!(gathered.len(), 1);
+    assert_eq!(gathered[0].source.id, alone.id);
 }
 
 // ---------------------------------------------------------------------------

@@ -187,7 +187,9 @@ pub trait LedgerStore: Debug + Send {
     /// The source at this coordinate, if it has been gathered before: the
     /// one whose URL is `url` however it was spelled
     /// ([`crate::url::canonical`]), at the same branch, or at the remote's
-    /// HEAD when `reference` is `None`, and from the same folder.
+    /// HEAD when `reference` is `None`, and from the same folder. Among the
+    /// sources gathered on their own alone: a marketplace's plugin is found
+    /// by its entry ([`child`](Self::child)), wherever it is.
     fn source(
         &self,
         kind: SourceKind,
@@ -209,6 +211,31 @@ pub trait LedgerStore: Debug + Send {
         reference: Option<&str>,
         subdirectory: &str,
     ) -> Result<Source, LedgerError>;
+
+    /// The plugin the marketplace `parent`, a source's row id, lists as
+    /// `entry`, if it has been gathered before (#103): one source an entry
+    /// of its marketplace, whatever repository its plugin is in.
+    fn child(&self, parent: i64, entry: &str) -> Result<Option<Source>, LedgerError>;
+
+    /// The source of the plugin `parent` lists as `entry`, at `url`, on
+    /// `reference` and in `subdirectory`, registering it the first time, of
+    /// the kind git, under the name [`SourceName::child`] gives it,
+    /// numbered when another source has that.
+    ///
+    /// Found again, it is moved to where it is said to be now, since the
+    /// catalog says where its plugin is: its folder stays, where its files
+    /// already are.
+    fn child_for(
+        &self,
+        parent: &Source,
+        entry: &str,
+        url: &str,
+        reference: Option<&str>,
+        subdirectory: &str,
+    ) -> Result<Source, LedgerError>;
+
+    /// The plugins of the marketplace `parent` gathered so far, by name.
+    fn children(&self, parent: i64) -> Result<Vec<Source>, LedgerError>;
 
     /// The source called `name`, if one is.
     fn source_named(&self, name: &SourceName) -> Result<Option<Source>, LedgerError>;

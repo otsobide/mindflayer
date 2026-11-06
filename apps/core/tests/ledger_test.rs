@@ -88,6 +88,13 @@ const SOURCES_AS_WRITTEN: &str = "SELECT id, kind, url, reference, subdirectory,
                                          directory, first_seen, last_seen
                                     FROM sources ORDER BY id";
 
+/// Every column of `sources` a version before 9 had, which schema 9 adds
+/// to as it makes the table again: what it keeps of each row.
+const SOURCES_OF_SCHEMA_8: &str = "SELECT id, kind, url, reference, subdirectory, revision,
+                                          directory, first_seen, last_seen, name,
+                                          canonical_url, reference_key, pin, parent_id
+                                     FROM sources ORDER BY id";
+
 /// Every column of `artifacts` a version before 8 had, which schema 8 adds
 /// to: what a step after it keeps of each row it is not about.
 const ARTIFACTS_AS_WRITTEN: &str = "SELECT id, kind, name, source_id, path, summary, revision,
@@ -1164,7 +1171,7 @@ fn a_version_7_ledger_keeps_every_row_and_knows_where_each_artifact_is_upstream(
     let after = Connection::open(&path).unwrap();
     assert_eq!(version_of(&after), SCHEMA_VERSION);
     for query in [
-        "SELECT * FROM sources ORDER BY id",
+        SOURCES_OF_SCHEMA_8,
         ARTIFACTS_AS_WRITTEN,
         "SELECT * FROM actions ORDER BY id",
         "SELECT * FROM installations ORDER BY id",
@@ -1259,6 +1266,153 @@ fn a_version_7_ledger_is_copied_aside_and_the_copy_opens_at_version_7() {
     ] {
         assert_eq!(rows(&copy, query), rows(&before, query), "{query}");
     }
+}
+
+/// What schema 8 wrote, dumped from a ledger it made: two repositories
+/// gathered from their root, one pinned, and three skills installed from
+/// them into two projects.
+const VERSION_8: &str = include_str!("fixtures/ledger-v8.sql");
+
+#[test]
+fn a_version_8_ledger_keeps_every_row_and_holds_the_identity_among_sources_gathered_alone() {
+    let dir = TempDir::new().unwrap();
+    let path = written_at(dir.path(), VERSION_8);
+    let before = as_written(VERSION_8);
+
+    Ledger::open(&path).unwrap();
+
+    let after = Connection::open(&path).unwrap();
+    assert_eq!(version_of(&after), SCHEMA_VERSION);
+    for query in [
+        SOURCES_OF_SCHEMA_8,
+        "SELECT * FROM artifacts ORDER BY id",
+        "SELECT * FROM actions ORDER BY id",
+        "SELECT * FROM installations ORDER BY id",
+        "SELECT * FROM installation_targets ORDER BY installation_id, path",
+        "SELECT * FROM projects ORDER BY id",
+    ] {
+        let kept = rows(&after, query);
+        assert_eq!(kept, rows(&before, query), "{query}");
+        assert!(!kept.is_empty(), "{query} reads nothing to compare");
+    }
+    // A source gathered on its own is the entry of no marketplace.
+    assert_eq!(
+        rows(&after, "SELECT id, entry FROM sources ORDER BY id"),
+        [
+            [Value::Integer(1), Value::Null],
+            [Value::Integer(2), Value::Null]
+        ]
+    );
+    assert_eq!(
+        rows(
+            &after,
+            "SELECT name, sql LIKE '%WHERE parent_id IS NULL%',
+                    sql LIKE '%WHERE parent_id IS NOT NULL%'
+               FROM sqlite_master WHERE name LIKE 'sources_by_%' ORDER BY name"
+        ),
+        [
+            [
+                text("sources_by_entry"),
+                Value::Integer(0),
+                Value::Integer(1)
+            ],
+            [
+                text("sources_by_identity"),
+                Value::Integer(1),
+                Value::Integer(0)
+            ],
+            [
+                text("sources_by_name"),
+                Value::Integer(0),
+                Value::Integer(0)
+            ],
+        ]
+    );
+}
+
+#[test]
+fn a_version_8_ledger_is_copied_aside_and_the_copy_opens_at_version_8() {
+    let dir = TempDir::new().unwrap();
+    let path = written_at(dir.path(), VERSION_8);
+    let before = as_written(VERSION_8);
+
+    Ledger::open(&path).unwrap();
+
+    let backup = dir.path().join("mindweaver.db.v8.bak");
+    assert_eq!(backup_path(&path, 8), backup);
+    let copy = Connection::open(&backup).unwrap();
+    assert_eq!(version_of(&copy), 8);
+    for query in [
+        "SELECT * FROM sources ORDER BY id",
+        "SELECT * FROM artifacts ORDER BY id",
+        "SELECT * FROM actions ORDER BY id",
+        "SELECT * FROM installations ORDER BY id",
+        "SELECT type, name, sql FROM sqlite_master ORDER BY name",
+    ] {
+        assert_eq!(rows(&copy, query), rows(&before, query), "{query}");
+    }
+}
+
+#[test]
+fn a_source_of_a_version_8_ledger_forgotten_takes_what_it_brought_and_leaves_its_installs() {
+    let dir = TempDir::new().unwrap();
+    let path = written_at(dir.path(), VERSION_8);
+    let ledger = Ledger::open(&path).unwrap();
+    let acme = ledger
+        .sources()
+        .unwrap()
+        .into_iter()
+        .find(|source| source.name == "acme-skills")
+        .unwrap();
+
+    assert!(ledger.forget_source(acme.id).unwrap());
+
+    // What it gathered went with it, by the cascade copied into the new
+    // table's references, and what was installed from it points at none.
+    let after = Connection::open(&path).unwrap();
+    assert_eq!(
+        rows(&after, "SELECT source_id FROM artifacts ORDER BY id"),
+        [[Value::Integer(2)]]
+    );
+    assert_eq!(
+        rows(
+            &after,
+            "SELECT id, source_id FROM installations ORDER BY id"
+        ),
+        [
+            [Value::Integer(1), Value::Null],
+            [Value::Integer(2), Value::Null],
+            [Value::Integer(3), Value::Integer(2)],
+        ]
+    );
+}
+
+#[test]
+fn a_version_8_ledger_takes_two_plugins_of_one_repository_at_one_branch_beside_it() {
+    let dir = TempDir::new().unwrap();
+    let path = written_at(dir.path(), VERSION_8);
+    let ledger = Ledger::open(&path).unwrap();
+    let url = "https://github.com/acme/skills";
+    let market = ledger
+        .source_for(
+            mindweaver_core::SourceKind::Marketplace,
+            url,
+            Some("main"),
+            "",
+        )
+        .unwrap();
+
+    // Each the whole of the repository a source gathered on its own is
+    // already, at one branch: what version 1's `UNIQUE` would refuse.
+    let one = ledger
+        .child_for(&market, "one", url, Some("main"), "")
+        .unwrap();
+    let two = ledger
+        .child_for(&market, "two", url, Some("main"), "")
+        .unwrap();
+
+    assert_ne!(one.id, two.id);
+    assert_eq!(ledger.children(market.id).unwrap(), [one, two]);
 }
 
 #[test]
