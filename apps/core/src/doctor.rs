@@ -42,11 +42,14 @@ use crate::claude_rules;
 use crate::code::{codes, Said};
 use crate::codex_mcp::{self, CodexMcpError, Trust, UserConfig};
 use crate::hash;
-use crate::install;
+use crate::install::{self, Offer};
 use crate::kind::Kind;
+use crate::ledger::{InstallRecord, LedgerError};
+use crate::mcp::McpDefinition;
 use crate::names::Names;
+use crate::opencode_mcp::{self, OpenCodeMcpError};
 use crate::paths;
-use crate::value::ContentHash;
+use crate::value::{ContentHash, VariableName};
 use crate::workspace::{same_directory, Member, MindProject, WeaverWorkspace};
 
 /// What a front end tells doctor of the machine a project is on: where each
@@ -167,7 +170,7 @@ impl Examined {
     fn of(
         project: &MindProject,
         entry: Option<String>,
-        _workspace: Option<&WeaverWorkspace>,
+        workspace: Option<&WeaverWorkspace>,
         machine: &Machine,
     ) -> Examined {
         let mut exam = Exam::new(project, machine);
@@ -176,6 +179,7 @@ impl Examined {
         exam.claude_block();
         exam.skill_copies();
         exam.user_skills();
+        exam.servers(workspace);
         Examined {
             entry,
             name: Some(project.name().to_owned()),
@@ -284,6 +288,30 @@ pub enum Symptom {
         /// The project's agents that read both, in report order.
         agents: Vec<Agent>,
     },
+    /// An MCP server installed into the project whose name a server in
+    /// `agent`'s own config at user scope holds too: Codex reads a
+    /// project's servers over the user's key by key, and OpenCode merges a
+    /// project's config over its global one, so the two are read as one
+    /// server made of both (docs/agents.md, docs-only).
+    #[error("{config}: holds a server `{name}` too, and {} reads the project's over it key by key, so the two are read as one server made of both", .agent.title())]
+    ServerAtUserScope {
+        agent: Agent,
+        name: String,
+        config: PathBuf,
+    },
+    /// A variable an input of an MCP server installed into the project is
+    /// read from, which is not set where doctor runs, so the agents starting
+    /// it there give it nothing in its place (D-11).
+    #[error("{file}: `{server}` is given {variable}{} where {} start{} it, and it is not set here", if *.secret { " (a secret)" } else { "" }, titled(.agents), if .agents.len() == 1 { "s" } else { "" })]
+    VariableUnset {
+        server: String,
+        variable: VariableName,
+        secret: bool,
+        /// The agents its installation gave an entry, in report order.
+        agents: Vec<Agent>,
+        /// The first of their config files.
+        file: PathBuf,
+    },
 }
 
 /// `paths`, each as it is written, in a list a sentence holds.
@@ -323,6 +351,8 @@ codes!(Symptom {
     Self::ClaudeMissesRules { .. } => "doctor_claude_misses_rules",
     Self::CopiesDiffer { .. } => "doctor_copies_differ",
     Self::UserSkillDiffers { .. } => "doctor_user_skill_differs",
+    Self::ServerAtUserScope { .. } => "doctor_server_at_user_scope",
+    Self::VariableUnset { .. } => "doctor_variable_unset",
 });
 
 impl Symptom {
@@ -337,7 +367,10 @@ impl Symptom {
             | Symptom::CodexOverBudget { .. } => vec![Agent::Codex],
             Symptom::ClaudeMissesRules { .. } => vec![Agent::Claude],
             Symptom::CopiesDiffer { agent, .. } => vec![*agent],
-            Symptom::UserSkillDiffers { agents, .. } => agents.clone(),
+            Symptom::UserSkillDiffers { agents, .. } | Symptom::VariableUnset { agents, .. } => {
+                agents.clone()
+            }
+            Symptom::ServerAtUserScope { agent, .. } => vec![*agent],
         }
     }
 
@@ -359,6 +392,8 @@ impl Symptom {
             Symptom::ClaudeMissesRules { file, .. } => file,
             Symptom::CopiesDiffer { copies, .. } => &copies[0],
             Symptom::UserSkillDiffers { copy, .. } => copy,
+            Symptom::ServerAtUserScope { config, .. } => config,
+            Symptom::VariableUnset { file, .. } => file,
         }
     }
 
@@ -408,6 +443,16 @@ impl Symptom {
             Symptom::UserSkillDiffers { .. } => String::from(
                 "rename the project's or the one at user scope, or make them hold the same",
             ),
+            Symptom::ServerAtUserScope { name, config, .. } => format!(
+                "rename or remove the server `{name}` in {}, or uninstall `mcp:{name}` from the \
+                 project",
+                config.display()
+            ),
+            Symptom::VariableUnset {
+                variable, server, ..
+            } => {
+                format!("set {variable} where the agents start `{server}`: no file holds its value")
+            }
         }
     }
 
@@ -444,6 +489,14 @@ pub enum DoctorFailure {
     /// as discovery says each.
     #[error(transparent)]
     Discovery(DiscoveryFailure),
+    /// OpenCode's own config in its folder, read for a server of an
+    /// installed one's name.
+    #[error(transparent)]
+    OpenCodeConfig(OpenCodeMcpError),
+    /// The ledger, read for the MCP servers installed into the project and
+    /// where each came from.
+    #[error(transparent)]
+    Ledger(LedgerError),
 }
 
 codes!(DoctorFailure {} carried {
@@ -451,6 +504,8 @@ codes!(DoctorFailure {} carried {
     Self::Unmeasured(warning) => warning,
     Self::ClaudeMd(error) => error,
     Self::Discovery(failure) => failure,
+    Self::OpenCodeConfig(error) => error,
+    Self::Ledger(error) => error,
 });
 
 /// One project's examination as it goes: what it has found and what it
@@ -787,6 +842,137 @@ impl<'a> Exam<'a> {
             });
         }
     }
+
+    /// What keeps an MCP server installed into the project from its
+    /// agents beyond the project: a server of its name in an agent's own
+    /// config at user scope, read as an install reads it, and a variable
+    /// its inputs are read from that is not set where doctor runs, by the
+    /// names the front end says are set, which say nothing of what a V2
+    /// OpenCode server started elsewhere holds (docs/agents.md, D-11).
+    ///
+    /// The servers are what `workspace`'s ledger records, read and never
+    /// written, each one's inputs from the definition it came from
+    /// ([`defined`]). One no longer offered says nothing of its inputs,
+    /// which `status` says is orphaned.
+    fn servers(&mut self, workspace: Option<&WeaverWorkspace>) {
+        let Some(workspace) =
+            workspace.filter(|workspace| workspace.linked_as(self.root()).is_some())
+        else {
+            return;
+        };
+        let named = install::entry_for_root(workspace, self.root());
+        let read = workspace.ledger_for_reading().and_then(|ledger| {
+            let records = ledger.records(&named, Kind::Mcp)?;
+            let offers = if records.is_empty() {
+                Vec::new()
+            } else {
+                install::offers(workspace, &ledger, Kind::Mcp)?
+            };
+            Ok((records, offers))
+        });
+        let (records, offers) = match read {
+            Ok(read) => read,
+            Err(error) => {
+                self.failures.push(DoctorFailure::Ledger(error));
+                return;
+            }
+        };
+        for record in &records {
+            self.at_user_scope(record);
+            if let Some(definition) = defined(workspace, record, &offers) {
+                self.unset(record, &definition);
+            }
+        }
+    }
+
+    /// A server of `record`'s name in the own config of an agent it was
+    /// given an entry for: Codex's, read as an install reads it
+    /// ([`UserConfig`]), and OpenCode's global one. Claude Code's servers
+    /// at user scope are kept in a `.claude.json` beside its folder, or in
+    /// it, as `$CLAUDE_CONFIG_DIR` says, which [`AgentHomes`] does not tell
+    /// apart, so they are not read (docs/architecture.md, open questions).
+    fn at_user_scope(&mut self, record: &InstallRecord) {
+        let name = record.name.as_str();
+        let mut agents: Vec<Agent> = record.entries.iter().map(|entry| entry.agent).collect();
+        agents.sort();
+        agents.dedup();
+        for agent in agents {
+            // Matched with no wildcard, so an agent added says here where
+            // its servers at user scope are.
+            let held = match agent {
+                Agent::Claude => continue,
+                Agent::Codex => match UserConfig::read(&self.machine.homes) {
+                    Ok(Some(user)) => match user.get(&[codex_mcp::SERVERS, name]) {
+                        Ok(held) => held.map(|_| user.path),
+                        Err(error) => {
+                            self.failures.push(DoctorFailure::CodexConfig(error));
+                            continue;
+                        }
+                    },
+                    Ok(None) => None,
+                    Err(error) => {
+                        self.failures.push(DoctorFailure::CodexConfig(error));
+                        continue;
+                    }
+                },
+                Agent::OpenCode => match opencode_mcp::held_by_user(&self.machine.homes, name) {
+                    Ok(held) => held,
+                    Err(error) => {
+                        self.failures.push(DoctorFailure::OpenCodeConfig(error));
+                        continue;
+                    }
+                },
+            };
+            if let Some(config) = held {
+                self.symptoms.push(Symptom::ServerAtUserScope {
+                    agent,
+                    name: name.to_owned(),
+                    config,
+                });
+            }
+        }
+    }
+
+    /// Each variable `definition`'s inputs are read from that is not set
+    /// where doctor runs, as an install names them to set
+    /// ([`install::mcp::variables`]).
+    fn unset(&mut self, record: &InstallRecord, definition: &McpDefinition) {
+        let Some(first) = record.entries.first() else {
+            return;
+        };
+        let mut agents: Vec<Agent> = record.entries.iter().map(|entry| entry.agent).collect();
+        agents.sort();
+        agents.dedup();
+        for variable in install::mcp::variables(definition) {
+            if self.machine.set.contains(variable.name.as_str()) {
+                continue;
+            }
+            self.symptoms.push(Symptom::VariableUnset {
+                server: record.name.to_string(),
+                variable: variable.name,
+                secret: variable.secret,
+                agents: agents.clone(),
+                file: self.root().join(&first.file),
+            });
+        }
+    }
+}
+
+/// The definition `record`, an MCP server's installation, came from,
+/// among `offers`: the first offered from where it came from that reads,
+/// which is what an update would write, and the inputs of what was written
+/// unless the offer has moved on, which `status` says as outdated. None
+/// when none is offered, or none reads.
+fn defined(
+    workspace: &WeaverWorkspace,
+    record: &InstallRecord,
+    offers: &[Offer],
+) -> Option<McpDefinition> {
+    install::offered_for(record, offers)
+        .into_iter()
+        .find_map(|offer| {
+            McpDefinition::parse(&fs::read_to_string(offer.source(workspace)).ok()?).ok()
+        })
 }
 
 #[cfg(test)]

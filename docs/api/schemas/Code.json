@@ -241,6 +241,8 @@
         "doctor_claude_misses_rules",
         "doctor_copies_differ",
         "doctor_user_skill_differs",
+        "doctor_server_at_user_scope",
+        "doctor_variable_unset",
         "exclude_key_invalid",
         "exclude_pattern_invalid",
         "exclude_path_unnamable",

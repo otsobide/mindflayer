@@ -93,16 +93,27 @@ impl Fixture {
             .unwrap()
             .join(format!("{route}.md"));
         self.write(&file, text);
+        self.install(Kind::Rule, route);
+    }
+
+    /// Give the workspace's library the MCP server `name`, defined by
+    /// `text`, and install it into `app`.
+    fn install_server(&self, name: &str, text: &str) {
+        let file = self
+            .workspace
+            .own()
+            .directory_for(Kind::Mcp)
+            .unwrap()
+            .join(format!("{name}.toml"));
+        self.write(&file, text);
+        self.install(Kind::Mcp, name);
+    }
+
+    /// Install the library's `name` of `kind` into `app`.
+    fn install(&self, kind: Kind, name: &str) {
         let ledger = self.workspace.ledger().unwrap();
-        let candidate = install::offered(
-            &self.workspace,
-            &ledger,
-            &self.project,
-            Kind::Rule,
-            route,
-            None,
-        )
-        .unwrap();
+        let candidate =
+            install::offered(&self.workspace, &ledger, &self.project, kind, name, None).unwrap();
         install::install(
             &self.workspace,
             &ledger,
@@ -530,4 +541,96 @@ fn a_skill_in_claude_s_own_folder_differing_from_the_project_s_is_found_for_clau
     assert_eq!(codes(&examined), vec!["doctor_user_skill_differs"]);
     assert_eq!(examined.findings[0].path, ours);
     assert_eq!(examined.findings[0].agents, vec![Agent::Claude]);
+}
+
+/// A server started as a program, its environment given the secret read
+/// from `variable`.
+fn server(name: &str, variable: &str) -> String {
+    format!(
+        "format = 1\nname = \"{name}\"\ndescription = \"Issues and code\"\n\n\
+         [transport]\ntype = \"stdio\"\ncommand = \"github-mcp\"\n\
+         env = {{ {variable} = \"{{{variable}}}\" }}\n\n\
+         [[inputs]]\nname = \"{variable}\"\nkind = \"env\"\nsecret = true\n\
+         env_var = \"{variable}\"\n"
+    )
+}
+
+/// The findings of `examined` of `code`.
+fn of<'a>(examined: &'a Examined, code: &str) -> Vec<&'a mindweaver_core::doctor::Finding> {
+    examined
+        .findings
+        .iter()
+        .filter(|finding| finding.code == code)
+        .collect()
+}
+
+#[test]
+fn a_variable_an_installed_server_reads_that_is_not_set_is_found_as_a_secret() {
+    let fixture = fixture(&[Agent::Claude, Agent::OpenCode]);
+    fixture.install_server("github", &server("github", "DOCTOR_TEST_TOKEN"));
+
+    let unset = fixture.examined();
+
+    assert_eq!(codes(&unset), vec!["doctor_variable_unset"]);
+    let finding = &unset.findings[0];
+    assert_eq!(finding.agents, vec![Agent::Claude, Agent::OpenCode]);
+    assert_eq!(finding.path, fixture.root().join(".mcp.json"));
+    assert!(
+        finding
+            .message
+            .contains("`github` is given DOCTOR_TEST_TOKEN (a secret) where Claude Code and OpenCode start it"),
+        "{}",
+        finding.message
+    );
+
+    assert!(codes(&fixture.examined_with(&["DOCTOR_TEST_TOKEN"])).is_empty());
+}
+
+#[test]
+fn a_server_of_an_installed_one_s_name_at_codex_s_and_opencode_s_user_scope_is_found() {
+    let fixture = fixture(&[Agent::Claude, Agent::Codex, Agent::OpenCode]);
+    fixture.write(
+        &fixture.codex_config(),
+        &trusting(fixture.root(), "trusted"),
+    );
+    fixture.install_server("github", &server("github", "DOCTOR_TEST_TOKEN"));
+    let set = ["DOCTOR_TEST_TOKEN"];
+    assert!(codes(&fixture.examined_with(&set)).is_empty());
+
+    fixture.write(
+        &fixture.codex_config(),
+        &format!(
+            "{}\n[mcp_servers.github]\nurl = \"https://example.com/mcp\"\n",
+            trusting(fixture.root(), "trusted")
+        ),
+    );
+    let opencode = fixture
+        .homes()
+        .opencode_config_dir
+        .unwrap()
+        .join("opencode.jsonc");
+    fixture.write(
+        &opencode,
+        "// Mine.\n{\"mcp\": {\"servers\": {\"github\": {\"type\": \"remote\"}}},}\n",
+    );
+    let examined = fixture.examined_with(&set);
+
+    let found = of(&examined, "doctor_server_at_user_scope");
+    let at: Vec<(&[Agent], &Path)> = found
+        .iter()
+        .map(|finding| (finding.agents.as_slice(), finding.path.as_path()))
+        .collect();
+    assert_eq!(
+        at,
+        vec![
+            (&[Agent::Codex][..], fixture.codex_config().as_path()),
+            (&[Agent::OpenCode][..], opencode.as_path()),
+        ]
+    );
+    assert_eq!(codes(&examined).len(), 2, "{:?}", codes(&examined));
+    assert!(
+        found[0].fix.contains("uninstall `mcp:github`"),
+        "{}",
+        found[0].fix
+    );
 }

@@ -1083,8 +1083,9 @@ fn planned(
 }
 
 /// Each variable `definition`'s inputs are read from, in the order they are
-/// declared, each once, a secret when any input read from it is.
-fn variables(definition: &McpDefinition) -> Vec<Variable> {
+/// declared, each once, a secret when any input read from it is: what an
+/// install says to set, and what doctor finds unset (`crate::doctor`).
+pub(crate) fn variables(definition: &McpDefinition) -> Vec<Variable> {
     let mut variables: Vec<Variable> = Vec::new();
     for input in &definition.inputs {
         let Some(name) = &input.env_var else {
