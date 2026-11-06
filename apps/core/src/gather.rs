@@ -1790,11 +1790,11 @@ pub fn license_of(stated: Option<&str>, folder: &Path) -> Option<String> {
 /// a repository is.
 ///
 /// A package in the Agent Plugins format, the folder searched or one the
-/// search comes to (`plugin`, [`plugin::is_package`]), offers its
-/// `skills/<child>` alone, never deeper, as that format says, a `SKILL.md`
-/// at its root among what it does not offer: one the search of a
-/// repository would find further down is no skill of it. What its entry
-/// names is a plugin's skills all the same, as the catalog says them.
+/// search comes to ([`plugin::is_package`]), offers its `skills/<child>`
+/// alone, never deeper, as that format says, a `SKILL.md` at its root
+/// among what it does not offer: one the search of a repository would find
+/// further down is no skill of it. What its entry names is a plugin's
+/// skills all the same, as the catalog says them.
 ///
 /// Either way, a link that is itself a skill's folder is taken when it
 /// leads to a folder inside the clone, as a copy follows it
@@ -1814,7 +1814,11 @@ fn candidates(
         path: clone.to_path_buf(),
         source,
     })?;
-    let package = plugin.is_some_and(|plugin| plugin.format == plugin::Format::AgentPlugins);
+    // By its `plugin.json` alone, as a package the search comes to is, and
+    // not by `plugin`: an agent's own manifest, read before it for a plugin
+    // a catalog lists (`plugin::Format::read_for`), would otherwise have a
+    // folder `gather git` takes as a package searched to `SEARCH_DEPTH`.
+    let package = plugin::is_package(root, &bound);
     let mut found = Vec::new();
     match &request.search {
         Search::Plugin {

@@ -1582,6 +1582,42 @@ fn a_plugin_a_catalog_lists_that_is_a_package_offers_its_skills_children_alone()
 }
 
 #[test]
+fn a_package_a_catalog_lists_is_one_beside_an_agents_own_manifest_read_before_it() {
+    let source = repository(&[
+        ("plugins/kit/plugin.json", PACKAGE),
+        (
+            "plugins/kit/.claude-plugin/plugin.json",
+            r#"{"name": "kit"}"#,
+        ),
+        (
+            "plugins/kit/.codex-plugin/plugin.json",
+            r#"{"name": "kit"}"#,
+        ),
+        ("plugins/kit/SKILL.md", &skill("kit", "The package itself")),
+        (
+            "plugins/kit/skills/deploy/SKILL.md",
+            &skill("deploy", "Ship it"),
+        ),
+        (
+            "plugins/kit/skills/team/review/SKILL.md",
+            &skill("review", "Nested below a child"),
+        ),
+    ]);
+
+    let whole = found(&Request::git(url(&source)).from_subdirectory("plugins/kit"));
+    assert_eq!(whole, named(&[("deploy", "plugins/kit/skills/deploy")]));
+    for dialect in [Dialect::Claude, Dialect::Codex] {
+        let listed = found(
+            &Request::git(url(&source))
+                .from_subdirectory("plugins/kit")
+                .searching(listed_by(dialect)),
+        );
+
+        assert_eq!(listed, whole, "{dialect:?}");
+    }
+}
+
+#[test]
 fn a_folder_the_source_does_not_have_is_named_in_the_error() {
     let source = repository(&[("README.md", "nothing to gather\n")]);
     let (_dir, workspace) = workspace();
