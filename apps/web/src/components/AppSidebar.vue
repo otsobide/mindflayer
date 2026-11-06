@@ -26,6 +26,7 @@ export const VIEWS: readonly View[] = [
   { label: 'Assign', icon: 'i-lucide-grid-3x3', to: '/assign' },
   { label: 'Updates', icon: 'i-lucide-circle-arrow-up', to: '/updates' },
   { label: 'Library', icon: 'i-lucide-library-big', to: '/library', lights: ['/artifact', '/edit', '/new'] },
+  { label: 'MCP servers', icon: 'i-lucide-plug', to: '/mcp' },
   { label: 'Loads', icon: 'i-lucide-layers', to: '/loads' },
   { label: 'Shelf', icon: 'i-lucide-package', to: '/shelf' },
   { label: 'Sources', icon: 'i-lucide-git-branch', to: '/sources' }

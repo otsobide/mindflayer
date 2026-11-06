@@ -35,6 +35,7 @@ declare module 'vue' {
     RenameForm: typeof import('./components/RenameForm.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    ServerForm: typeof import('./components/ServerForm.vue')['default']
     SettingsForm: typeof import('./components/SettingsForm.vue')['default']
     ShortcutSheet: typeof import('./components/ShortcutSheet.vue')['default']
     SnapshotGate: typeof import('./components/SnapshotGate.vue')['default']
