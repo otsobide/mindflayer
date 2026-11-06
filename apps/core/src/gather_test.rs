@@ -117,6 +117,11 @@ fn a_request_for_a_git_source_searches_the_whole_repository_at_its_head() {
         "no folder: the repository from its root"
     );
     assert_eq!(request.kind, Kind::Skill);
+    assert_eq!(
+        request.search,
+        Search::Layouts,
+        "every layout, as a repository's"
+    );
     assert!(!request.watch.is_cancelled());
 }
 
@@ -735,7 +740,14 @@ fn a_scrub_of_a_ledger_with_no_credential_asks_the_remote_nothing() {
 /// searches it, with what keeps any from being taken.
 fn found_in(root: &Path) -> (Vec<PathBuf>, Vec<Failure>) {
     let mut failures = Vec::new();
-    let found = candidates(root, root, "SKILL.md", &mut failures).unwrap();
+    let found = candidates(
+        root,
+        root,
+        &Request::git("unused"),
+        "SKILL.md",
+        &mut failures,
+    )
+    .unwrap();
     (found, failures)
 }
 
@@ -877,6 +889,39 @@ fn a_skill_s_folder_linking_out_of_the_repository_is_refused_and_said() {
     assert_eq!(failures[0].code(), "gathered_link_outside");
 }
 
+#[cfg(unix)]
+#[test]
+fn a_skill_a_plugin_names_through_a_link_out_of_the_repository_is_refused_and_said() {
+    use std::os::unix::fs::symlink;
+
+    let outside = TempDir::new().unwrap();
+    write(&outside.path().join("SKILL.md"), "x");
+    let dir = TempDir::new().unwrap();
+    write(&dir.path().join("skills/xlsx/SKILL.md"), "x");
+    symlink(outside.path(), dir.path().join("skills/keys")).unwrap();
+    let request = Request::git("unused").searching(Search::Plugin {
+        skills: Some(vec![
+            String::from("./skills/xlsx"),
+            String::from("./skills/keys"),
+        ]),
+        license: None,
+    });
+    let mut failures = Vec::new();
+
+    let found = candidates(dir.path(), dir.path(), &request, "SKILL.md", &mut failures).unwrap();
+
+    assert_eq!(found, [dir.path().join("skills/xlsx")]);
+    assert!(
+        matches!(
+            &failures[..],
+            [Failure::LinkOutside { path, to }]
+                if *path == dir.path().join("skills/keys")
+                    && *to == fs::canonicalize(outside.path()).unwrap()
+        ),
+        "{failures:?}"
+    );
+}
+
 /// The folder was checked to be there just before: one that cannot be
 /// listed is a gather that cannot happen, unlike discovery's absence.
 #[test]
@@ -884,7 +929,14 @@ fn candidates_in_a_folder_that_is_not_there_cannot_be_read() {
     let dir = TempDir::new().unwrap();
     let missing = dir.path().join("skills");
 
-    let refused = candidates(&missing, dir.path(), "SKILL.md", &mut Vec::new()).unwrap_err();
+    let refused = candidates(
+        &missing,
+        dir.path(),
+        &Request::git("unused"),
+        "SKILL.md",
+        &mut Vec::new(),
+    )
+    .unwrap_err();
 
     assert!(
         matches!(&refused, GatherError::Read { path, .. } if path == &missing),
@@ -1343,6 +1395,27 @@ fn each_gather_failure_names_its_path_and_gives_its_code() {
          at .claude/skills/pdf, vendor/pdf, so neither is gathered: gather the one you want \
          with --path naming its folder"
     );
+    let listed_outside = Failure::ListedOutside {
+        path: PathBuf::from("/w/.mindweaver/cache/s/../../etc"),
+        listed: String::from("../../etc"),
+    };
+    assert_eq!(
+        listed_outside.path(),
+        Path::new("/w/.mindweaver/cache/s/../../etc")
+    );
+    assert_eq!(
+        listed_outside.to_string(),
+        "/w/.mindweaver/cache/s/../../etc: its plugin's catalog entry names `../../etc` as a \
+         skill, which is no folder of the repository, so it is not gathered"
+    );
+    let listed_missing = Failure::ListedMissing {
+        path: PathBuf::from("/w/.mindweaver/cache/s/skills/gone"),
+    };
+    assert_eq!(
+        listed_missing.to_string(),
+        "/w/.mindweaver/cache/s/skills/gone: its plugin's catalog entry names it as a skill, \
+         and it holds no SKILL.md, so it is not gathered"
+    );
     assert_eq!(
         Failure::CODES,
         [
@@ -1352,7 +1425,9 @@ fn each_gather_failure_names_its_path_and_gives_its_code() {
             "gathered_unremoved",
             "gathered_link_outside",
             "gathered_root_unnamed",
-            "gathered_name_clash"
+            "gathered_name_clash",
+            "gathered_listed_outside",
+            "gathered_listed_missing"
         ]
     );
 }

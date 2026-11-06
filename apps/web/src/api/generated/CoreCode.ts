@@ -191,6 +191,8 @@ export type CoreCode =
   | "gathered_link_outside"
   | "gathered_root_unnamed"
   | "gathered_name_clash"
+  | "gathered_listed_outside"
+  | "gathered_listed_missing"
   | "gather_cancelled"
   | "credentials_in_url"
   | "gather_no_such_folder"

@@ -33,7 +33,7 @@ use crate::kind::{Kind, Layout};
 use crate::ledger::{self, Action, Ledger, LedgerError, Merged, Outcome, SourceKind, Upstream};
 use crate::lock::LockError;
 use crate::paths;
-use crate::port::{GitError, Remote};
+use crate::port::{Cloned, GitError, Remote};
 use crate::url::{carries_credentials, fetched, redacted};
 use crate::value::{ArtifactName, Origin, Redacted, Revision, SourceName};
 use crate::workspace::WeaverWorkspace;
@@ -155,6 +155,40 @@ pub struct Request {
     /// branch is at: held to [`pin`] before anything is fetched, and kept
     /// beside the branch ([`ledger::Source::pin`]).
     pub pin: Option<String>,
+    /// How the folder searched is looked through: every common layout, as
+    /// for a repository, unless it is a plugin a marketplace lists (#103).
+    pub search: Search,
+}
+
+/// How a gather looks through the folder it searches for skills.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum Search {
+    /// Every common layout, as far down as [`SEARCH_DEPTH`]: a repository's
+    /// skills, wherever its tools keep them, as `gather git` takes them.
+    #[default]
+    Layouts,
+    /// A plugin a marketplace's catalog lists (#103), the folder searched
+    /// being its root: the skills its entry names, each a folder from
+    /// there, when it names them, and otherwise its `skills/` folder, as
+    /// far down as [`SEARCH_DEPTH`], or a `SKILL.md` at its root, which
+    /// makes it one skill. What else of it a plugin holds is no skill.
+    Plugin {
+        /// The skills its entry names, as the catalog writes each.
+        skills: Option<Vec<String>>,
+        /// Its licence, as the catalog gives it: a skill's own for one
+        /// whose manifest and licence file say none ([`license_of`]).
+        license: Option<String>,
+    },
+}
+
+impl Search {
+    /// The licence a skill found this way has when it says none itself.
+    fn license(&self) -> Option<&str> {
+        match self {
+            Search::Layouts => None,
+            Search::Plugin { license, .. } => license.as_deref(),
+        }
+    }
 }
 
 impl Request {
@@ -171,6 +205,7 @@ impl Request {
             remote: Arc::new(Gix),
             name: None,
             pin: None,
+            search: Search::default(),
         }
     }
 
@@ -270,6 +305,13 @@ impl Request {
     /// the branch is at.
     pub fn pinned(mut self, pin: Option<impl Into<String>>) -> Self {
         self.pin = pin.map(Into::into);
+        self
+    }
+
+    /// Look through the folder searched as `search` says, rather than for
+    /// every common layout.
+    pub fn searching(mut self, search: Search) -> Self {
+        self.search = search;
         self
     }
 
@@ -638,16 +680,7 @@ fn look(
     into: &Path,
 ) -> Result<Preview, GatherError> {
     let watch = &request.watch;
-    watch.report(Progress::Connecting);
-    let clone = match &request.source {
-        Source::Git { reference, .. } => request
-            .remote
-            .fetch(url, reference.as_deref(), pin, &into.join("clone"), watch)
-            .map_err(|error| match error {
-                GitError::Cancelled => GatherError::Cancelled,
-                error => error.into(),
-            })?,
-    };
+    let clone = fetch(request, url, pin, &into.join("clone"))?;
     let mut failures = Vec::new();
     let Offered { taken, .. } = offered(&clone.root, request, url, manifest, &mut failures)?;
     if watch.is_cancelled() {
@@ -1082,20 +1115,50 @@ fn take(
     manifest: &str,
     pin: Option<&Revision>,
 ) -> Result<Report, GatherError> {
-    let watch = &request.watch;
     sweep_dry_runs(&workspace.cache_dir());
     let cache = workspace.cache_dir().join(&source.directory);
-    watch.report(Progress::Connecting);
-    let clone = match &request.source {
+    let clone = fetch(request, url, pin, &cache)?;
+    place(
+        workspace, ledger, request, url, source, manifest, pin, &clone,
+    )
+}
+
+/// Fetch `request`'s source from `url` into `into`, at `pin` when there is
+/// one, telling its watch: a cancel said as the gather's.
+fn fetch(
+    request: &Request,
+    url: &str,
+    pin: Option<&Revision>,
+    into: &Path,
+) -> Result<Cloned, GatherError> {
+    request.watch.report(Progress::Connecting);
+    match &request.source {
         Source::Git { reference, .. } => request
             .remote
-            .fetch(url, reference.as_deref(), pin, &cache, watch)
+            .fetch(url, reference.as_deref(), pin, into, &request.watch)
             .map_err(|error| match error {
                 GitError::Cancelled => GatherError::Cancelled,
                 error => error.into(),
-            })?,
-    };
+            }),
+    }
+}
 
+/// Read what the repository at `clone`, fetched from `url`, offers as
+/// `request` searches it, and put that on the shelf of `source`, which is
+/// registered: what a gather does once it has a clone, whichever fetched
+/// it.
+#[allow(clippy::too_many_arguments)]
+fn place(
+    workspace: &WeaverWorkspace,
+    ledger: &Ledger,
+    request: &Request,
+    url: &str,
+    source: &ledger::Source,
+    manifest: &str,
+    pin: Option<&Revision>,
+    clone: &Cloned,
+) -> Result<Report, GatherError> {
+    let watch = &request.watch;
     let shelf = workspace.gathered_dir(request.kind).join(&source.directory);
     let mut report = Report {
         revision: clone.revision.clone(),
@@ -1185,6 +1248,12 @@ fn take(
         let stated = artifact
             .manifest()
             .and_then(|manifest| manifest.license.as_deref());
+        // A plugin's licence, as its catalog gives it, for a skill that says
+        // none of its own, after its manifest and its licence file: what the
+        // skill says of itself is nearer to it than what a catalog says of
+        // the plugin it is in.
+        let license = license_of(stated, &destination)
+            .or_else(|| request.search.license().map(str::to_owned));
         let recorded = relative(workspace, &destination);
         ledger.record(
             source,
@@ -1196,7 +1265,7 @@ fn take(
                 revision: clone.revision.clone(),
                 path: upstream(directory, &clone.root, folder),
                 content_hash,
-                license: license_of(stated, &destination),
+                license,
             },
         )?;
 
@@ -1268,7 +1337,7 @@ fn offered(
             url: url.to_owned(),
         });
     }
-    let found = candidates(&searched, clone, manifest, failures)?;
+    let found = candidates(&searched, clone, request, manifest, failures)?;
     // What a skill at the repository's root is filed under.
     let repository = crate::url::repository(url);
     let mut taken = Vec::with_capacity(found.len());
@@ -1584,38 +1653,75 @@ pub fn license_of(stated: Option<&str>, folder: &Path) -> Option<String> {
 }
 
 /// The directories under `root`, in the repository cloned at `clone`, that
-/// hold a `manifest`, in order, each at most [`SEARCH_DEPTH`] folders down,
-/// with what keeps one found from being taken among `failures`: `root`
-/// alone when it holds one, as a repository with a `SKILL.md` at its root
-/// is one skill.
+/// hold a `manifest`, found as `request` searches ([`Search`]), in order,
+/// with what keeps one found from being taken among `failures`.
 ///
-/// A folder holding one is not looked into, for the reason discovery has:
-/// the directory belongs to the artifact, assets and all, and a skill that
-/// ships another as an example ships it as a file of its own. Nor is one
-/// named in [`PASSED_OVER`], nor a link: a folder found through a link
-/// would be found again where it leads, and a link out of the clone, or
-/// back up it, would lead the search where no repository's own skills are.
-/// A link that is itself a skill's folder is taken when it leads to a
-/// folder inside the clone, as a copy follows it ([`copy::tree`]'s
-/// `within`), and refused otherwise; one leading to a folder found on its
-/// own is that folder, found once, where it is rather than where the link
-/// is, so a repository linking `.claude/skills/<name>` to `skills/<name>`
-/// offers one skill and not two of one name.
+/// For every layout, each at most [`SEARCH_DEPTH`] folders down: `root`
+/// alone when it holds one, as a repository with a `SKILL.md` at its root
+/// is one skill. A folder holding one is not looked into, for the reason
+/// discovery has: the directory belongs to the artifact, assets and all,
+/// and a skill that ships another as an example ships it as a file of its
+/// own. Nor is one named in [`PASSED_OVER`], nor a link: a folder found
+/// through a link would be found again where it leads, and a link out of
+/// the clone, or back up it, would lead the search where no repository's
+/// own skills are.
+///
+/// For a plugin a marketplace lists, the skills its entry names, each a
+/// folder from `root` held to the repository lexically, as `--path` is
+/// (`gathered_listed_outside`), and holding a `manifest`
+/// (`gathered_listed_missing`); with none named, `root` alone when it holds
+/// one, and otherwise what its `skills/` folder holds, searched as a
+/// repository is.
+///
+/// Either way, a link that is itself a skill's folder is taken when it
+/// leads to a folder inside the clone, as a copy follows it
+/// ([`copy::tree`]'s `within`), and refused otherwise; one leading to a
+/// folder found on its own is that folder, found once, where it is rather
+/// than where the link is, so a repository linking `.claude/skills/<name>`
+/// to `skills/<name>` offers one skill and not two of one name.
 fn candidates(
     root: &Path,
     clone: &Path,
+    request: &Request,
     manifest: &str,
     failures: &mut Vec<Failure>,
 ) -> Result<Vec<PathBuf>, GatherError> {
     let mut found = Vec::new();
-    if root.join(manifest).is_file() {
+    match &request.search {
+        Search::Plugin {
+            skills: Some(listed),
+            ..
+        } => {
+            for each in listed {
+                let route = Path::new(&request.subdirectory).join(each);
+                let path = root.join(each);
+                if outside(&route.to_string_lossy()) {
+                    failures.push(Failure::ListedOutside {
+                        path,
+                        listed: each.clone(),
+                    });
+                } else if path.join(manifest).is_file() {
+                    found.push(paths::normalize(&path));
+                } else {
+                    failures.push(Failure::ListedMissing {
+                        path: paths::normalize(&path),
+                    });
+                }
+            }
+        }
         // The folder searched is one skill, the repository itself when it
         // is its root, and nothing in it is another's.
-        found.push(root.to_path_buf());
-    } else {
-        search(root, 1, manifest, &mut found)?;
+        _ if root.join(manifest).is_file() => found.push(root.to_path_buf()),
+        Search::Plugin { skills: None, .. } => {
+            let skills = root.join("skills");
+            if skills.is_dir() {
+                search(&skills, 1, manifest, &mut found)?;
+            }
+        }
+        Search::Layouts => search(root, 1, manifest, &mut found)?,
     }
     found.sort();
+    found.dedup();
 
     let bound = fs::canonicalize(clone).map_err(|source| GatherError::Read {
         path: clone.to_path_buf(),
@@ -1770,6 +1876,15 @@ pub enum Failure {
     /// a gather follows nowhere ([`copy::tree`]'s `within`).
     #[error("{path}: links to {to}, outside the repository, so it is not gathered")]
     LinkOutside { path: PathBuf, to: PathBuf },
+    /// A skill a plugin's entry names (`listed`, as its catalog writes it)
+    /// whose folder is absolute or climbs out of the repository, lexically
+    /// ([`outside`]): no folder of it is looked at.
+    #[error("{path}: its plugin's catalog entry names `{listed}` as a skill, which is no folder of the repository, so it is not gathered")]
+    ListedOutside { path: PathBuf, listed: String },
+    /// A skill a plugin's entry names whose folder holds no manifest, or is
+    /// not there.
+    #[error("{path}: its plugin's catalog entry names it as a skill, and it holds no SKILL.md, so it is not gathered")]
+    ListedMissing { path: PathBuf },
 }
 
 codes!(Failure {
@@ -1780,6 +1895,8 @@ codes!(Failure {
     Self::LinkOutside { .. } => "gathered_link_outside",
     Self::Unnamed { .. } => "gathered_root_unnamed",
     Self::Clash { .. } => "gathered_name_clash",
+    Self::ListedOutside { .. } => "gathered_listed_outside",
+    Self::ListedMissing { .. } => "gathered_listed_missing",
 } carried {
     Self::Artifact(error) => error,
 });
@@ -1814,6 +1931,11 @@ impl Failure {
                 path: route(path),
                 source,
             },
+            Failure::ListedOutside { path, listed } => Failure::ListedOutside {
+                path: route(path),
+                listed,
+            },
+            Failure::ListedMissing { path } => Failure::ListedMissing { path: route(path) },
             Failure::Unhashed { .. } | Failure::Unremoved { .. } => self,
         }
     }
@@ -1824,6 +1946,8 @@ impl Failure {
             Failure::Artifact(error) => error.path(),
             Failure::UnusableName { path }
             | Failure::Unnamed { path }
+            | Failure::ListedMissing { path }
+            | Failure::ListedOutside { path, .. }
             | Failure::Clash { path, .. }
             | Failure::Copy { path, .. }
             | Failure::Unhashed { path, .. }

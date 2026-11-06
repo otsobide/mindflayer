@@ -6,7 +6,7 @@ use std::fs;
 use std::sync::{Arc, Mutex};
 
 use common::{commit, repository, skill, url, workspace, write_files};
-use mindweaver_core::gather::{self, GatherError, Progress, Request, Warning, Watch};
+use mindweaver_core::gather::{self, GatherError, Progress, Request, Search, Warning, Watch};
 use mindweaver_core::ledger::{Action, Ledger, SourceKind};
 use mindweaver_core::value::SourceName;
 use mindweaver_core::{Kind, MindProject, ValidationIssue, WeaverWorkspace, DEFAULT_SUBDIRECTORY};
@@ -1094,6 +1094,179 @@ fn a_gathered_skills_licence_is_its_manifests_else_its_licence_files_else_unknow
                 Some(String::from("MIT OR Apache-2.0"))
             ),
             (String::from("unknown"), None),
+        ]
+    );
+}
+
+/// A plugin's search: its entry's `skills`, when it names them, and its
+/// licence.
+fn plugin(skills: Option<&[&str]>, license: Option<&str>) -> Search {
+    Search::Plugin {
+        skills: skills.map(|skills| skills.iter().map(|skill| (*skill).to_owned()).collect()),
+        license: license.map(str::to_owned),
+    }
+}
+
+#[test]
+fn a_plugin_naming_no_skills_offers_its_skills_folder_and_nothing_else_of_it() {
+    let source = repository(&[
+        (
+            "plugins/ops/skills/deploy/SKILL.md",
+            &skill("deploy", "Ship it"),
+        ),
+        (
+            "plugins/ops/skills/team/review/SKILL.md",
+            &skill("review", "Look"),
+        ),
+        (
+            "plugins/ops/agents/helper/SKILL.md",
+            &skill("helper", "Not one"),
+        ),
+        ("plugins/ops/other/SKILL.md", &skill("other", "Not one")),
+        ("skills/lint/SKILL.md", &skill("lint", "Another plugin's")),
+    ]);
+
+    let gathered = found(
+        &Request::git(url(&source))
+            .from_subdirectory("plugins/ops")
+            .searching(plugin(None, None)),
+    );
+
+    assert_eq!(
+        gathered,
+        named(&[
+            ("deploy", "plugins/ops/skills/deploy"),
+            ("review", "plugins/ops/skills/team/review"),
+        ])
+    );
+}
+
+#[test]
+fn a_plugin_with_a_skill_md_at_its_root_is_that_one_skill() {
+    let source = repository(&[
+        ("plugins/pdf/SKILL.md", &skill("pdf", "Read a PDF")),
+        (
+            "plugins/pdf/skills/inner/SKILL.md",
+            &skill("inner", "Its own"),
+        ),
+    ]);
+
+    let gathered = found(
+        &Request::git(url(&source))
+            .from_subdirectory("plugins/pdf")
+            .searching(plugin(None, None)),
+    );
+
+    assert_eq!(gathered, named(&[("pdf", "plugins/pdf")]));
+}
+
+#[test]
+fn the_skills_a_plugin_names_are_its_skills_and_no_others() {
+    let source = repository(&[
+        ("skills/xlsx/SKILL.md", &skill("xlsx", "Sheets")),
+        ("skills/docx/SKILL.md", &skill("docx", "Documents")),
+        ("skills/art/SKILL.md", &skill("art", "Another plugin's")),
+        ("tools/pdf/SKILL.md", &skill("pdf", "Elsewhere")),
+    ]);
+
+    let gathered = found(&Request::git(url(&source)).searching(plugin(
+        Some(&[
+            "./skills/xlsx",
+            "skills/docx/",
+            "./tools/pdf",
+            "./skills/xlsx",
+        ]),
+        None,
+    )));
+
+    assert_eq!(
+        gathered,
+        named(&[
+            ("docx", "skills/docx"),
+            ("pdf", "tools/pdf"),
+            ("xlsx", "skills/xlsx"),
+        ])
+    );
+}
+
+#[test]
+fn a_skill_a_plugin_names_that_is_no_skill_or_no_folder_of_the_repository_is_said_and_the_rest_taken(
+) {
+    let source = repository(&[
+        ("skills/xlsx/SKILL.md", &skill("xlsx", "Sheets")),
+        ("skills/empty/README.md", "no skill here\n"),
+    ]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let report = gather::gather(
+        &workspace,
+        &ledger,
+        &Request::git(url(&source)).searching(plugin(
+            Some(&[
+                "./skills/xlsx",
+                "./skills/empty",
+                "./skills/gone",
+                "../../etc",
+                "/etc",
+            ]),
+            None,
+        )),
+    )
+    .unwrap();
+
+    assert_eq!(report.added.len(), 1, "{report:?}");
+    let codes: Vec<&str> = report
+        .failures
+        .iter()
+        .map(|failure| failure.code())
+        .collect();
+    assert_eq!(
+        codes,
+        [
+            "gathered_listed_outside",
+            "gathered_listed_outside",
+            "gathered_listed_missing",
+            "gathered_listed_missing",
+        ],
+        "{:?}",
+        report.failures
+    );
+}
+
+#[test]
+fn a_plugins_licence_is_a_skills_that_says_none_after_its_manifest_and_its_licence_file() {
+    let source = repository(&[
+        (
+            "skills/stated/SKILL.md",
+            "---\nname: stated\ndescription: Says it\nlicense: Apache-2.0\n---\n",
+        ),
+        ("skills/filed/SKILL.md", &skill("filed", "Keeps a file")),
+        ("skills/filed/LICENSE", "MIT License\n"),
+        ("skills/silent/SKILL.md", &skill("silent", "Says nothing")),
+    ]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    gather::gather(
+        &workspace,
+        &ledger,
+        &Request::git(url(&source)).searching(plugin(None, Some("BSD-3-Clause"))),
+    )
+    .unwrap();
+
+    let licenses: Vec<(String, Option<String>)> = ledger
+        .gathered()
+        .unwrap()
+        .into_iter()
+        .map(|artifact| (artifact.name.to_string(), artifact.license))
+        .collect();
+    assert_eq!(
+        licenses,
+        [
+            (String::from("filed"), Some(String::from("MIT License"))),
+            (String::from("silent"), Some(String::from("BSD-3-Clause"))),
+            (String::from("stated"), Some(String::from("Apache-2.0"))),
         ]
     );
 }
