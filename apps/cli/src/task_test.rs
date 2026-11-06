@@ -1410,6 +1410,8 @@ fn a_front_end_with_no_terminal_refuses_what_draws_edits_activates_gathers_or_sh
             "mindweaver gather git https://example.com/skills.git",
             Refusal::Unwatched,
         ),
+        ("mindweaver gather update acme", Refusal::Unwatched),
+        ("mind weaver gather update --all", Refusal::Unwatched),
         ("mind show deploy", Refusal::Unheld),
         ("mind -C alpha show --json rule:style", Refusal::Unheld),
         ("mindweaver show -p alpha deploy", Refusal::Unheld),

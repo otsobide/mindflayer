@@ -1001,9 +1001,9 @@ pub enum Refusal {
     /// nothing anywhere else.
     #[error("prints code for a shell to run, which only a shell can")]
     Shell,
-    /// `mindweaver gather git`: the network, for as long as it takes, which only
-    /// a screen that shows how far it got and stops it on a key can watch,
-    /// until #112 brings both to the server.
+    /// `mindweaver gather git` and `gather update`: the network, for as long
+    /// as it takes, which only a screen that shows how far it got and stops
+    /// it on a key can watch, until #112 brings both to the server.
     #[error(
         "fetches over the network for as long as that takes, which only the TUI or a shell shows, and stops"
     )]
@@ -1095,7 +1095,9 @@ impl Refusal {
             Some(WeaverCommand::Edit { editing, .. }) => Refusal::of_edit(editing),
             Some(WeaverCommand::Activate { .. }) => Some(Refusal::Shell),
             Some(WeaverCommand::Show { .. }) => Some(Refusal::Unheld),
-            Some(WeaverCommand::Gather(GatherCommand::Git { .. })) => Some(Refusal::Unwatched),
+            Some(WeaverCommand::Gather(
+                GatherCommand::Git { .. } | GatherCommand::Update { .. },
+            )) => Some(Refusal::Unwatched),
             #[cfg(feature = "ui")]
             Some(WeaverCommand::Ui(_)) => Some(Refusal::Panel),
             Some(

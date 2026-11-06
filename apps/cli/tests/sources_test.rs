@@ -266,3 +266,185 @@ fn gather_rename_in_a_workspace_that_never_gathered_makes_no_ledger() {
     assert_eq!(failure.error.code(), "source_not_found");
     assert!(!dir.path().join(WEAVER_DIR).join("mindweaver.db").exists());
 }
+
+// ---------------------------------------------------------------------------
+// gather update
+// ---------------------------------------------------------------------------
+
+use mindweaver_core::mother::GitRepositoryMother;
+
+/// `collapse`, a project linked in `dir`, given each of `skills` from the
+/// shelf.
+fn installed_in_collapse(dir: &Path, skills: &[&str]) {
+    let project = dir.join("collapse");
+    fs::create_dir(&project).unwrap();
+    new_project(&project);
+    weaver(dir, &["link", "collapse"]).unwrap();
+    for name in skills {
+        let installed = weaver(dir, &["install", "-p", "collapse", name]).unwrap();
+        assert!(installed.ok, "{:?}", installed.stderr);
+    }
+}
+
+/// How `status -p collapse` says each artifact of it stands, by its name.
+fn standing_in_collapse(dir: &Path) -> Vec<(String, String)> {
+    let status = weaver(dir, &["status", "-p", "collapse"]).unwrap();
+    status
+        .stdout
+        .lines()
+        .map(|line| {
+            let words: Vec<&str> = line.split_whitespace().collect();
+            (words[0].to_owned(), words[1].to_owned())
+        })
+        .collect()
+}
+
+#[test]
+fn after_gather_update_status_shows_a_copy_of_what_moved_outdated_and_of_what_went_orphaned() {
+    let (dir, source, url) = gathered_from(&["deploy", "review", "notes"]);
+    weaver(dir.path(), &["gather", "git", &url, "--name", "acme"]).unwrap();
+    installed_in_collapse(dir.path(), &["deploy", "review", "notes"]);
+    GitRepositoryMother::write(
+        source.path(),
+        &[(
+            "skills/deploy/SKILL.md",
+            &skill_file("deploy", "Ship it, carefully"),
+        )],
+    );
+    fs::remove_dir_all(source.path().join("skills").join("review")).unwrap();
+    GitRepositoryMother::commit(source.path());
+    assert_eq!(
+        standing_in_collapse(dir.path()),
+        [
+            (String::from("deploy"), String::from("current")),
+            (String::from("notes"), String::from("current")),
+            (String::from("review"), String::from("current")),
+        ]
+    );
+
+    let updated = weaver(dir.path(), &["gather", "update", "acme"]).unwrap();
+
+    assert!(updated.ok, "{:?}", updated.stderr);
+    assert_eq!(
+        updated.stdout,
+        format!(
+            "acme: {url} at {}\n\
+             \x20 updated    deploy  Ship it, carefully\n\
+             \x20 removed    review  About review\n\
+             \x20 unchanged  notes   About notes\n\
+             \n\
+             2 skills: 0 added, 1 updated, 1 unchanged, 1 removed\n",
+            &head(&source)[..7]
+        )
+    );
+    assert_eq!(
+        standing_in_collapse(dir.path()),
+        [
+            (String::from("deploy"), String::from("outdated")),
+            (String::from("notes"), String::from("current")),
+            (String::from("review"), String::from("orphaned")),
+        ]
+    );
+}
+
+#[test]
+fn gather_update_all_gathers_every_source_again_one_after_another() {
+    let (dir, first, first_url) = gathered_from(&["deploy"]);
+    let (_other_dir, second, second_url) = gathered_from(&["review"]);
+    weaver(dir.path(), &["gather", "git", &first_url, "--name", "a"]).unwrap();
+    weaver(dir.path(), &["gather", "git", &second_url, "--name", "b"]).unwrap();
+    GitRepositoryMother::write(
+        second.path(),
+        &[("skills/sign/SKILL.md", &skill_file("sign", "About sign"))],
+    );
+    GitRepositoryMother::commit(second.path());
+
+    let updated = weaver(dir.path(), &["gather", "update", "--all"]).unwrap();
+
+    assert!(updated.ok, "{:?}", updated.stderr);
+    // In the order `gather sources` lists them, by URL.
+    let mut expected = vec![
+        (
+            first_url.clone(),
+            format!(
+                "a: {first_url} at {}\n\
+                 \x20 unchanged  deploy  About deploy\n\
+                 \n\
+                 1 skill: 0 added, 0 updated, 1 unchanged\n",
+                &head(&first)[..7]
+            ),
+        ),
+        (
+            second_url.clone(),
+            format!(
+                "b: {second_url} at {}\n\
+                 \x20 added      sign    About sign\n\
+                 \x20 unchanged  review  About review\n\
+                 \n\
+                 2 skills: 1 added, 0 updated, 1 unchanged\n",
+                &head(&second)[..7]
+            ),
+        ),
+    ];
+    expected.sort();
+    let expected: Vec<String> = expected.into_iter().map(|(_, said)| said).collect();
+    assert_eq!(updated.stdout, expected.join("\n"));
+}
+
+#[test]
+fn a_source_gather_update_cannot_reach_is_a_warning_beside_the_rest() {
+    let (dir, gone, gone_url) = gathered_from(&["deploy"]);
+    let (_other_dir, kept, kept_url) = gathered_from(&["review"]);
+    weaver(dir.path(), &["gather", "git", &gone_url, "--name", "gone"]).unwrap();
+    weaver(dir.path(), &["gather", "git", &kept_url, "--name", "kept"]).unwrap();
+    drop(gone);
+
+    let updated = weaver(dir.path(), &["gather", "update", "--all"]).unwrap();
+
+    assert!(!updated.ok);
+    assert!(
+        updated
+            .stdout
+            .starts_with(&format!("kept: {kept_url} at {}", &head(&kept)[..7])),
+        "{}",
+        updated.stdout
+    );
+    assert_eq!(updated.stderr.len(), 1, "{:?}", updated.stderr);
+    assert!(
+        updated.stderr[0]
+            .text
+            .starts_with(&format!("warning: gone: {gone_url}")),
+        "{}",
+        updated.stderr[0]
+    );
+    assert!(updated.stderr[0]
+        .code
+        .is_some_and(|code| code.starts_with("git_")));
+}
+
+#[test]
+fn gather_update_names_what_it_gathers_or_every_source_and_nothing_unknown() {
+    let (dir, _source, url) = gathered_from(&["deploy"]);
+    weaver(dir.path(), &["gather", "git", &url, "--name", "acme"]).unwrap();
+
+    let unknown = weaver(dir.path(), &["gather", "update", "acme", "nobody"]).unwrap_err();
+    let neither = WeaverCli::try_parse_from(["mindweaver", "gather", "update"]);
+    let both = WeaverCli::try_parse_from(["mindweaver", "gather", "update", "--all", "acme"]);
+
+    assert_eq!(unknown.error.code(), "source_not_found");
+    assert!(neither.is_err() && both.is_err());
+}
+
+#[test]
+fn gather_update_all_with_no_sources_says_how_to_gather_one() {
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+
+    let updated = weaver(dir.path(), &["gather", "update", "--all"]).unwrap();
+
+    assert_eq!(
+        updated.stdout,
+        "no sources yet\n  take some with `mindweaver gather git <url>`\n"
+    );
+    assert!(!dir.path().join(WEAVER_DIR).join("mindweaver.db").exists());
+}

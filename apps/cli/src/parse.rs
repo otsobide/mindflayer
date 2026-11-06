@@ -1534,6 +1534,23 @@ pub enum GatherCommand {
         to: String,
     },
 
+    /// Gather sources again, each as it was gathered last, and say what each
+    /// added, updated and removed: what a source no longer holds is taken
+    /// off the shelf.
+    ///
+    /// A source pinned to a commit is gathered at its pin, which only
+    /// `gather git --pin` moves.
+    Update {
+        /// Each source to gather again, by its name, as `gather sources`
+        /// lists it.
+        #[arg(value_name = "NAME", required_unless_present = "all")]
+        names: Vec<String>,
+
+        /// Every source the shelf is filled from.
+        #[arg(long, conflicts_with = "names")]
+        all: bool,
+    },
+
     /// List the sources the shelf is filled from: each by its name, with
     /// its URL, the branch or tag and the commit it is pinned to, how many
     /// skills it holds and when it was last gathered.

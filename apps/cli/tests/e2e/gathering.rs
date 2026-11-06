@@ -384,6 +384,49 @@ fn gather_rename_calls_a_source_another_name_from_then_on() {
 }
 
 #[test]
+fn gather_update_gathers_a_source_again_and_status_then_says_what_moved_and_what_went() {
+    let scenario = acme();
+    scenario
+        .given("~/Projects", "mindweaver gather git ../src/acme-skills")
+        .given("~/Projects", "mindweaver install -p collapse commit-style")
+        .given("~/Projects", "mindweaver install -p collapse ddd-reviewer")
+        .change(
+            SOURCE,
+            &[(
+                "skills/commit-style/SKILL.md",
+                &format!(
+                    "{}Keep the subject short.\n",
+                    skill("commit-style", "How this repo writes commit messages")
+                ),
+            )],
+        );
+    std::fs::remove_dir_all(scenario.at("~/src/acme-skills/skills/ddd-reviewer")).unwrap();
+    scenario.change(SOURCE, &[]);
+
+    scenario
+        .run("~/Projects", "mindweaver gather update src-acme-skills")
+        .succeeds()
+        .prints(&format!(
+            "src-acme-skills: ../src/acme-skills at {}\n\
+             \x20 updated  commit-style  How this repo writes commit messages\n\
+             \x20 removed  ddd-reviewer  Review a change against the DDD layering rules\n\
+             \n\
+             1 skill: 0 added, 1 updated, 0 unchanged, 1 removed\n",
+            scenario.head(SOURCE)
+        ))
+        .quiet();
+
+    scenario
+        .run("~/Projects", "mindweaver status")
+        .succeeds()
+        .prints(
+            "commit-style  outdated  claude,codex,opencode  ../src/acme-skills\n\
+             ddd-reviewer  orphaned  claude,codex,opencode  ../src/acme-skills\n",
+        )
+        .quiet();
+}
+
+#[test]
 fn a_gathered_skill_installs_from_the_source_it_came_from() {
     let scenario = acme();
     scenario.given("~/Projects", "mindweaver gather git ../src/acme-skills");

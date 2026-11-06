@@ -7,7 +7,7 @@ use std::path::Path;
 use mindweaver_core::gather::{self, Gathered, Report, Request, Scrub, Watch};
 use mindweaver_core::install::{offered_by_loads, Offer};
 use mindweaver_core::ledger::{Ledger, SourceListing};
-use mindweaver_core::sources::{self, Renamed};
+use mindweaver_core::sources::{self, Regathered, Renamed, Which};
 use mindweaver_core::url::redacted;
 use mindweaver_core::{Kind, WeaverWorkspace};
 
@@ -68,6 +68,22 @@ pub(crate) fn run_gather(
                 }),
             }
         }
+        GatherCommand::Update { names, all } => {
+            let workspace = workspace_here(directory, lookup)?;
+            let (ledger, said) = ledger_to_change(&workspace)?;
+            let which = if *all {
+                Which::Every
+            } else {
+                Which::Named(names)
+            };
+            match sources::update(&workspace, &ledger, which, watch) {
+                Ok(updated) => Ok(said.before(regathered(&updated))),
+                Err(error) => Err(Failure {
+                    error: Box::new(error.into()),
+                    warnings: said.lines(),
+                }),
+            }
+        }
         GatherCommand::Sources { json } => {
             let mut found = None;
             let text = reading_workspace(directory, lookup, |workspace| {
@@ -109,6 +125,49 @@ fn renamed_source(renamed: &Renamed) -> Outcome {
         stderr: Vec::new(),
         ok: true,
     }
+}
+
+/// What gathering each source again came to, a source after another, an
+/// empty line apart: each as `gather git` says one, by its name and the URL
+/// it was gathered from, and one that could not be gathered as a warning,
+/// by its name, beside the rest, failing the command as a gather that
+/// failed would.
+fn regathered(updated: &[Regathered]) -> Outcome {
+    if updated.is_empty() {
+        return Outcome {
+            stdout: String::from(
+                "no sources yet\n  take some with `mindweaver gather git <url>`\n",
+            ),
+            stderr: Vec::new(),
+            ok: true,
+        };
+    }
+    let mut outcome = Outcome {
+        stdout: String::new(),
+        stderr: Vec::new(),
+        ok: true,
+    };
+    for each in updated {
+        match &each.outcome {
+            Ok(report) => {
+                let said = gathered(each.source.url.as_str(), report);
+                if !outcome.stdout.is_empty() {
+                    outcome.stdout.push('\n');
+                }
+                outcome.stdout.push_str(&said.stdout);
+                outcome.stderr.extend(said.stderr);
+                outcome.ok &= said.ok;
+            }
+            Err(error) => {
+                outcome.stderr.push(Warning::coded(
+                    error.code(),
+                    format!("warning: {}: {error}", printable(&each.source.name)),
+                ));
+                outcome.ok = false;
+            }
+        }
+    }
+    outcome
 }
 
 /// `mindweaver gather sources`: every source the shelf is filled from, from
