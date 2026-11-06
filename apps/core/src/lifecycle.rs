@@ -290,7 +290,11 @@ pub fn find_to_change(
     Err(if received(Kind::Rule) {
         LifecycleError::Received { typed, project }
     } else if received(Kind::Mcp) {
-        LifecycleError::ReceivedServer { typed, project }
+        LifecycleError::ReceivedServer {
+            typed,
+            project,
+            qualified: format!("{}{QUALIFIER}{name}", Kind::Mcp.slug()),
+        }
     } else {
         LifecycleError::NotFound { typed }
     })
@@ -1281,9 +1285,16 @@ pub enum LifecycleError {
     Received { typed: String, project: String },
     /// Not authored in the project but received: an MCP server written into
     /// its agents' config files from the definition it was installed from
-    /// ([`find_to_change`]).
-    #[error("`{typed}` is an MCP server {project} received, an entry in its agents' config files written from the definition it was installed from rather than kept in it, so it is not changed from here: uninstall it, or change its definition in the library it came from and update")]
-    ReceivedServer { typed: String, project: String },
+    /// ([`find_to_change`]). Uninstalled by `qualified`, its name qualified
+    /// as a server's, however it was typed: the one form an uninstall finds
+    /// a server by until #95, so a hint naming what was typed bare would
+    /// lead to "nothing to take out".
+    #[error("`{typed}` is an MCP server {project} received, an entry in its agents' config files written from the definition it was installed from rather than kept in it, so it is not changed from here: uninstall it as `{qualified}`, or change its definition in the library it came from and update")]
+    ReceivedServer {
+        typed: String,
+        project: String,
+        qualified: String,
+    },
     /// Listed, from a folder the project's agents read, but in none the
     /// project authors in: installed there, or somebody's own.
     #[error("`{typed}` is at {path}, in a folder this project's agents read and it does not author in, so it is not changed from here")]

@@ -778,17 +778,21 @@ fn a_change_aimed_at_a_server_the_project_received_is_refused_as_received() {
     let received = find(Some(&fixture.workspace), &qualified);
 
     assert!(
-        matches!(&received, LifecycleError::ReceivedServer { typed, project }
+        matches!(&received, LifecycleError::ReceivedServer { typed, project, .. }
             if *typed == qualified && project == "app"),
         "{received:?}"
     );
     assert_eq!(received.code(), "change_received_mcp");
-    assert!(received.to_string().ends_with(
-        "uninstall it, or change its definition in the library it came from and update"
-    ));
+    assert!(received.to_string().ends_with(&format!(
+        "uninstall it as `{qualified}`, or change its definition in the library it came from \
+         and update"
+    )));
+    // Typed bare, the hint names it qualified all the same: the one form an
+    // uninstall finds a server by.
     assert!(matches!(
         find(Some(&fixture.workspace), &fixture.name),
-        LifecycleError::ReceivedServer { .. }
+        LifecycleError::ReceivedServer { typed, qualified: hint, .. }
+            if *typed == fixture.name && *hint == qualified
     ));
     assert!(matches!(
         find(Some(&fixture.workspace), &format!("skill:{}", fixture.name)),

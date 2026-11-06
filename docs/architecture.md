@@ -9904,7 +9904,9 @@ so is an MCP server the project received, an entry in each of its agents'
 config files written from the library's definition (`ReceivedServer`,
 `change_received_mcp`), saying to uninstall it, or to change its definition
 in the library it came from and update: a change made in a file is read as
-an edit (D-04), never one the next install keeps. A rule is asked of first,
+an edit (D-04), never one the next install keeps. The hint names it
+qualified as a server's (`mcp:github`) however it was typed, since a name
+typed bare finds no server to uninstall until #95. A rule is asked of first,
 and a name received as both is one a qualifier settles. The TUI lists unreadable files in the same way, by the name their place gives
 them (`lifecycle::identify`), so they can be reached with a key rather than
 only read about in a warning.

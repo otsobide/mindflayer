@@ -976,15 +976,22 @@ fn a_change_aimed_at_a_server_the_project_received_is_refused_with_what_to_do_in
             refused.error.to_string(),
             "`mcp:github` is an MCP server app received, an entry in its agents' config files \
              written from the definition it was installed from rather than kept in it, so it is \
-             not changed from here: uninstall it, or change its definition in the library it \
-             came from and update",
+             not changed from here: uninstall it as `mcp:github`, or change its definition in \
+             the library it came from and update",
             "{line:?}"
         );
     }
     assert_eq!(fs::read_to_string(app.join(".mcp.json")).unwrap(), before);
-    // Typed bare, the name is found received as well.
+    // Typed bare, the name is found received as well, and the hint names
+    // the form an uninstall finds it by.
     let bare = mind(&app, &["rename", "github", "octocat"]).unwrap_err();
     assert_eq!(bare.error.code(), "change_received_mcp");
+    assert!(bare
+        .error
+        .to_string()
+        .contains("uninstall it as `mcp:github`"));
+    let uninstalled = mind(&app, &["uninstall", "mcp:github"]).unwrap();
+    assert_eq!(uninstalled.stdout, "removed mcp github from app\n");
 }
 
 #[test]
