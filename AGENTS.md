@@ -1228,9 +1228,11 @@ These are easy to break from a single file without noticing.
     `WeaverWorkspace::known`), and schema 7 each source's identity, the
     name a gather would give it and its URL without a credential
     (`url::canonical`, `SourceName::derived`, `url::redacted`), worked out
-    before the step (`spelled_sources`). A step that makes two rows one hands back the rows
-    that went (`LedgerStore::merged`), whose folders whoever opened the
-    ledger clears (`gather::clear_merged`) and a command that writes says.
+    before the step (`spelled_sources`). A step that makes two rows one
+    keeps the rows that went (schema 7's `merged_sources`,
+    `LedgerStore::merged`) until the first command that writes has said
+    them and removed their folders (`gather::scrub`), since a read takes
+    the step as often as a write does and says nothing.
 - **What is written outside the code is Mindweaver's, and a Mindflayer
   build's is read beside it, in one constant each.** Mindweaver was
   Mindflayer (D-26, in `docs/architecture.md`): what a build writes on the

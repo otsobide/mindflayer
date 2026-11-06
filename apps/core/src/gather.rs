@@ -294,9 +294,10 @@ pub struct Scrub {
     /// Folders of a source that became one with another, which nothing
     /// points into any more and which could not be removed.
     pub leftovers: Vec<Leftover>,
-    /// The sources the step to schema 7 made one with another as the ledger
-    /// was opened ([`Merged`]): said once, as what the scrub takes out is,
-    /// by the command that opened it to write.
+    /// The sources the step to schema 7 made one with another ([`Merged`]):
+    /// said by the first command that writes, whichever command took the
+    /// step, as what the scrub takes out is, and again by each after it
+    /// while a folder of one will not go ([`Self::leftovers`]).
     pub merged: Vec<Merged>,
 }
 
@@ -348,14 +349,27 @@ impl Scrub {
 /// what it shows is redacted on the way out anyway, and reading should not
 /// write.
 ///
+/// First it removes the clone and the shelf folders of each source the step
+/// to schema 7 made one with another
+/// ([`LedgerStore::merged`](crate::port::LedgerStore::merged)), and hands
+/// back each merge to be said. Removed rather than left, because the shelf
+/// is read from its folders ([`crate::Catalog::discover_gathered`]): one
+/// left behind would be listed as skills no source owns, and its clone
+/// keeps whatever credential it was made with. Here, rather than by
+/// whichever command took the step, because that is a read as often as
+/// not, which says nothing and removes nothing: the ledger keeps each merge
+/// until a command that writes has removed its folders, so a folder that
+/// will not go is tried again, and said again with its merge, each time.
+///
 /// The workspace is held ([`WeaverWorkspace::lock_waiting`], up to `wait`)
-/// while clones are rewritten, since a gather beside it would be cloning
-/// into those same folders. Only then: with no clone to rewrite, which is
-/// every time but the first after an older build stored a credential, the
-/// scrub writes nothing but rows, which SQLite keeps apart, and a change to
-/// an artifact opening the ledger to drop a record does not wait behind a
-/// gather to do it. The sources are looked for again once it is held, since
-/// a scrub kept waiting may find that another has done its work.
+/// while clones are rewritten or removed, since a gather beside it would be
+/// cloning into those same folders. Only then: with no clone to rewrite or
+/// remove, which is every time but the first after an older build stored a
+/// credential or an upgrade made two sources one, the scrub writes nothing
+/// but rows, which SQLite keeps apart, and a change to an artifact opening
+/// the ledger to drop a record does not wait behind a gather to do it. The
+/// sources are looked for again once it is held, since a scrub kept waiting
+/// may find that another has done its work.
 ///
 /// Each clone is scrubbed through `remote`, the adapter that knows which of
 /// its files name the URL it was made from.
@@ -366,11 +380,19 @@ pub(crate) fn scrub(
     remote: &dyn Remote,
 ) -> Result<Scrub, LedgerError> {
     let mut scrub = Scrub::default();
-    let _lock = if ledger.tainted_sources()?.is_empty() {
+    let _lock = if ledger.tainted_sources()?.is_empty() && ledger.merged()?.is_empty() {
         None
     } else {
         Some(workspace.lock_waiting(wait)?)
     };
+    for merged in ledger.merged()? {
+        let left = scrub.leftovers.len();
+        remove_folders_of(workspace, &merged.directory, &mut scrub.leftovers);
+        if scrub.leftovers.len() == left {
+            ledger.cleared_merge(&merged.directory)?;
+        }
+        scrub.merged.push(merged);
+    }
     for source in ledger.tainted_sources()? {
         // The clone first and the row after it: a row rewritten first would
         // no longer say that its clone still needs the same.
@@ -390,25 +412,6 @@ pub(crate) fn scrub(
     }
     scrub.actions = ledger.scrub_log()?;
     Ok(scrub)
-}
-
-/// Remove the clone and the shelf folders of every source the step to
-/// schema 7 made one with another as `ledger` was opened ([`Merged`]),
-/// handing back each that will not go.
-///
-/// Removed rather than left, because the shelf is read from its folders
-/// ([`crate::Catalog::discover_gathered`]): one left behind would be listed
-/// as skills no source owns, and its clone keeps whatever credential it was
-/// made with. Whoever opened the ledger does it, a read too, since the step
-/// that made them nobody's is the one write a read may make, and only that
-/// opening knows which they are: the next would find the ledger at schema 7
-/// and nothing to clear.
-pub(crate) fn clear_merged(workspace: &WeaverWorkspace, ledger: &Ledger) -> Vec<Leftover> {
-    let mut leftovers = Vec::new();
-    for merged in ledger.merged() {
-        remove_folders_of(workspace, &merged.directory, &mut leftovers);
-    }
-    leftovers
 }
 
 /// Remove the clone and the shelf folders of a source called `directory`

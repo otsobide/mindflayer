@@ -198,14 +198,23 @@ pub trait LedgerStore: Debug + Send {
     /// a store refuses a name two sources would hold as a failure.
     fn rename_source(&self, id: i64, name: &SourceName) -> Result<(), LedgerError>;
 
-    /// The sources the step to schema 7 made one with another as this store
-    /// was opened ([`Merged`]), for the command that opened it to say and to
-    /// clear their folders: none when it was at schema 7 already, which is
-    /// every opening but the first after an upgrade, and none from a store
-    /// that never had an older schema to step from.
-    fn merged(&self) -> &[Merged] {
-        &[]
-    }
+    /// The sources the step to schema 7 made one with another ([`Merged`])
+    /// whose folders are not gone yet, in the order the step made them one.
+    ///
+    /// Kept from the step until then, rather than handed back by the opening
+    /// that took it: a read takes the step as often as a write does, the
+    /// first command after an upgrade being a `status` or a `list` as often
+    /// as not, and says nothing of it, so the first command that writes is
+    /// the one to say each merge and clear its folders
+    /// ([`crate::gather::scrub`]), whichever opened the ledger first. None
+    /// once that is done, and none from a store that never had an older
+    /// schema to step from.
+    fn merged(&self) -> Result<Vec<Merged>, LedgerError>;
+
+    /// Forget the merge [`merged`](Self::merged) hands back with the folders
+    /// called `directory`, once they are gone: a folder name a source may be
+    /// given again from then on, and a merge said for the last time.
+    fn cleared_merge(&self, directory: &str) -> Result<(), LedgerError>;
 
     /// Note which revision a source was last gathered at.
     fn saw_source(&self, id: i64, revision: Option<&str>) -> Result<(), LedgerError>;

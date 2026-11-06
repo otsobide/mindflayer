@@ -400,7 +400,7 @@ fn the_step_to_seven_makes_two_spellings_of_one_url_one_source_the_fresher_kept(
     assert_eq!(sources[0].id, 1);
     assert_eq!(sources[0].name, "acme-skills");
     assert_eq!(
-        ledger.merged(),
+        ledger.merged().unwrap(),
         [Merged {
             url: Redacted::new("https://github.com/Acme/Skills"),
             reference: None,
@@ -434,9 +434,38 @@ fn the_step_to_seven_makes_two_spellings_of_one_url_one_source_the_fresher_kept(
             "{spelling}"
         );
     }
-    // Opened again, there is nothing more to make one.
+    // Opened again, there is nothing more to make one, and the merge is
+    // kept for a command that writes to say, until it clears it.
     drop(ledger);
-    assert!(Sqlite::open(&path).unwrap().merged().is_empty());
+    let again = Sqlite::open(&path).unwrap();
+    assert_eq!(again.merged().unwrap().len(), 1);
+    again.cleared_merge("github.com-acme-skills-2").unwrap();
+    assert!(again.merged().unwrap().is_empty());
+}
+
+#[test]
+fn a_folder_name_a_merge_is_kept_by_is_given_to_no_new_source_until_it_is_cleared() {
+    let (_dir, path) = at_six(
+        "INSERT INTO sources (id, kind, url, reference, subdirectory, directory, first_seen, last_seen)
+             VALUES (1, 'git', 'https://h/a', NULL, 'skills', 'h-a', 0, 0),
+                    (2, 'git', 'https://h/a/', NULL, 'skills', 'h-a-2', 10, 10);",
+    );
+    let ledger = Sqlite::open(&path).unwrap();
+    // The row tried earlier went, and the folder name `h-a` with it.
+    assert_eq!(ledger.merged().unwrap()[0].directory, "h-a");
+
+    // A new source whose readable name is `h-a` is given another folder.
+    let held = ledger
+        .source_for(SourceKind::Git, "https://h-a", None, "skills")
+        .unwrap();
+    assert_eq!(held.directory, "h-a-3");
+
+    // Once its folders are gone it is free, for another place there.
+    ledger.cleared_merge("h-a").unwrap();
+    let freed = ledger
+        .source_for(SourceKind::Git, "https://h-a", None, "agents")
+        .unwrap();
+    assert_eq!(freed.directory, "h-a");
 }
 
 #[test]
@@ -467,8 +496,8 @@ fn the_step_to_seven_keeps_the_fresher_rows_artifacts_and_lets_the_others_go_wit
         .map(|g| (g.name.as_str(), g.source.id, g.path.as_str()))
         .collect();
     assert_eq!(names, [("deploy", 2, ".mindweaver/skills/h-a-2/deploy")]);
-    let merged: Vec<(&str, i64)> = ledger
-        .merged()
+    let merged = ledger.merged().unwrap();
+    let merged: Vec<(&str, i64)> = merged
         .iter()
         .map(|merged| (merged.directory.as_str(), merged.into.id))
         .collect();

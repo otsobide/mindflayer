@@ -41,9 +41,6 @@ pub struct Sqlite {
     path: PathBuf,
     /// What every row it writes is stamped by.
     clock: Arc<dyn Clock>,
-    /// What the step to schema 7 made one as it was opened
-    /// ([`LedgerStore::merged`]).
-    merged: Vec<Merged>,
 }
 
 impl Sqlite {
@@ -79,13 +76,12 @@ impl Sqlite {
                 path: path.clone(),
                 source: source.into(),
             })?;
-        let mut ledger = Self {
+        let ledger = Self {
             connection,
             path,
             clock: Arc::new(SystemClock),
-            merged: Vec::new(),
         };
-        ledger.merged = ledger.migrate(known)?;
+        ledger.migrate(known)?;
         // And write-ahead logging, so that readers and a writer do not wait
         // for each other at all: a reader goes on reading the ledger as the
         // last write left it while the next is made. It needs every process
@@ -141,17 +137,13 @@ impl Sqlite {
                 path: path.clone(),
                 source: source.into(),
             })?;
-        let mut ledger = Self {
+        let ledger = Self {
             connection,
             path,
             clock: Arc::new(SystemClock),
-            merged: Vec::new(),
         };
         match ledger.migrate(known) {
-            Ok(merged) => {
-                ledger.merged = merged;
-                Ok(Some(ledger))
-            }
+            Ok(()) => Ok(Some(ledger)),
             Err(error) if cannot_make_the_log(&ledger.path, &error) => {
                 Self::open_immutable(&ledger.path).map(Some).ok_or(error)
             }
@@ -186,7 +178,6 @@ impl Sqlite {
             connection,
             path: path.to_path_buf(),
             clock: Arc::new(SystemClock),
-            merged: Vec::new(),
         };
         ledger.migrate(Vec::new).ok()?;
         Some(ledger)
@@ -202,7 +193,6 @@ impl Sqlite {
             connection,
             path: PathBuf::from(":memory:"),
             clock: Arc::new(SystemClock),
-            merged: Vec::new(),
         };
         ledger.migrate(Vec::new)?;
         Ok(ledger)
@@ -226,13 +216,7 @@ impl Sqlite {
     /// `known` is asked only by the step to schema 5, for each project's id
     /// and route ([`open_knowing`](Self::open_knowing)), and not at all by a
     /// ledger already there, so opening a current one reads no project.
-    ///
-    /// Hands back the sources the step to schema 7 made one with another
-    /// ([`seven`]), none when it took no such step.
-    fn migrate(
-        &self,
-        known: impl FnOnce() -> Vec<(ProjectId, String)>,
-    ) -> Result<Vec<Merged>, LedgerError> {
+    fn migrate(&self, known: impl FnOnce() -> Vec<(ProjectId, String)>) -> Result<(), LedgerError> {
         self.connection
             .execute_batch("PRAGMA foreign_keys = ON;")
             .map_err(|source| self.failed("enabling foreign keys", source))?;
@@ -249,7 +233,7 @@ impl Sqlite {
         // writes nothing, and still works on a file it may only read.
         let found = self.schema_version()?;
         if found == SCHEMA_VERSION {
-            return Ok(Vec::new());
+            return Ok(());
         }
 
         // Every step and the stamp in one transaction. Run one statement at a
@@ -264,7 +248,7 @@ impl Sqlite {
         // migrated it in the meantime.
         let found = self.schema_version()?;
         if found == SCHEMA_VERSION {
-            return Ok(Vec::new());
+            return Ok(());
         }
         // Copied under the lock too, not before it: a copy taken after the
         // first read could be of what another process has since migrated,
@@ -328,14 +312,13 @@ impl Sqlite {
                 self.failed("giving installations the entries they write", source)
             })?;
         }
-        let mut merged = Vec::new();
         if found < 7 {
             let failed =
                 |source| self.failed("naming each source and knowing it by its URL", source);
             // What no SQL can work out of a URL, handed to the step as
             // values, as the step to schema 5 is handed each project's id.
             let spelled = spelled_sources(&transaction).map_err(failed)?;
-            merged = seven(&transaction, &spelled).map_err(failed)?;
+            seven(&transaction, &spelled).map_err(failed)?;
         }
 
         transaction
@@ -343,8 +326,7 @@ impl Sqlite {
             .map_err(|source| self.failed("stamping the schema version", source))?;
         transaction
             .commit()
-            .map_err(|source| self.failed("finishing the migration", source))?;
-        Ok(merged)
+            .map_err(|source| self.failed("finishing the migration", source))
     }
 
     /// Copy the database, at schema `version`, to [`backup_path`] before a
@@ -434,7 +416,8 @@ impl Sqlite {
             let taken = self
                 .connection
                 .query_row(
-                    "SELECT 1 FROM sources WHERE directory = ?1",
+                    "SELECT 1 FROM sources WHERE directory = ?1
+                     UNION ALL SELECT 1 FROM merged_sources WHERE directory = ?1",
                     [&candidate],
                     |_| Ok(()),
                 )
@@ -576,8 +559,49 @@ impl LedgerStore for Sqlite {
             .map_err(|source| self.failed("renaming a source", source))
     }
 
-    fn merged(&self) -> &[Merged] {
-        &self.merged
+    fn merged(&self) -> Result<Vec<Merged>, LedgerError> {
+        let failed = |source| self.failed("reading the sources made one", source);
+        let pending: Vec<(String, Option<String>, String, i64)> = {
+            let mut statement = self
+                .connection
+                .prepare(
+                    "SELECT url, reference, directory, into_id FROM merged_sources ORDER BY id",
+                )
+                .map_err(failed)?;
+            let rows = statement
+                .query_map([], |row| {
+                    Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+                })
+                .map_err(failed)?;
+            rows.collect::<Result<_, _>>().map_err(failed)?
+        };
+        let mut merged = Vec::new();
+        for (url, reference, directory, into) in pending {
+            merged.push(Merged {
+                url: Redacted::new(&url),
+                reference,
+                directory,
+                into: self
+                    .connection
+                    .query_row(
+                        &format!("SELECT {SOURCE_COLUMNS} FROM sources WHERE id = ?1"),
+                        [into],
+                        read_source,
+                    )
+                    .map_err(failed)?,
+            });
+        }
+        Ok(merged)
+    }
+
+    fn cleared_merge(&self, directory: &str) -> Result<(), LedgerError> {
+        self.connection
+            .execute(
+                "DELETE FROM merged_sources WHERE directory = ?1",
+                [directory],
+            )
+            .map(|_| ())
+            .map_err(|source| self.failed("forgetting a source made one", source))
     }
 
     fn saw_source(&self, id: i64, revision: Option<&str>) -> Result<(), LedgerError> {
@@ -2269,6 +2293,17 @@ CREATE TABLE installation_entries (
 /// which would have to be copied in under foreign keys that cascade a
 /// dropped `sources` into every artifact. The old `UNIQUE` stays, and holds
 /// nothing the new index does not.
+///
+/// `merged_sources` holds each row the step made one with another
+/// ([`Merged`]): the URL it was gathered from without a credential, its
+/// branch, the folder name it had and the source it is one with, until the
+/// first command that writes has said it and removed its folders
+/// ([`LedgerStore::merged`]). Kept in the file rather than handed back by
+/// the opening that took the step, which is a read as often as not and says
+/// nothing; and while a row is there its folder name is given to no new
+/// source, whose clone would otherwise be removed as the merge's. Forgotten
+/// with the source it is one with, which `gather forget` removes only once
+/// it has opened the ledger to write, and so said the merge.
 const SCHEMA_V7: &str = "
 ALTER TABLE sources ADD COLUMN name TEXT NOT NULL DEFAULT '';
 ALTER TABLE sources ADD COLUMN canonical_url TEXT NOT NULL DEFAULT '';
@@ -2277,6 +2312,14 @@ ALTER TABLE sources ADD COLUMN pin TEXT;
 ALTER TABLE sources ADD COLUMN parent_id INTEGER REFERENCES sources(id) ON DELETE CASCADE;
 
 UPDATE sources SET reference_key = coalesce(reference, '');
+
+CREATE TABLE merged_sources (
+    id        INTEGER PRIMARY KEY,
+    directory TEXT    NOT NULL UNIQUE,
+    url       TEXT    NOT NULL,
+    reference TEXT,
+    into_id   INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE
+);
 ";
 
 /// What the seventh schema holds once every row has its identity and name.
@@ -2344,15 +2387,16 @@ fn spelled_sources(transaction: &Transaction<'_>) -> rusqlite::Result<Vec<Spelle
 /// its origin rewritten to the kept one's as version 3 spelled an origin,
 /// without the credential the kept one's URL may hold, so an update finds
 /// where it came from offered there and no row is given a credential it
-/// did not hold. The rows that went are handed back ([`Merged`]), for the
-/// folders they had to go too, which nothing points into any more.
+/// did not hold. Each row that went is kept in `merged_sources`
+/// ([`Merged`]), for the first command that writes to say and to remove its
+/// folders, which nothing points into any more.
 ///
 /// A credential is left where the scrub finds it, which every command that
 /// writes runs ([`crate::gather::scrub`]): it rewrites a clone before its
 /// row, and a row this rewrote first would no longer say that its clone
 /// still holds the credential. The identity, the name and an origin this
 /// writes never hold one.
-fn seven(transaction: &Transaction<'_>, spelled: &[Spelled]) -> rusqlite::Result<Vec<Merged>> {
+fn seven(transaction: &Transaction<'_>, spelled: &[Spelled]) -> rusqlite::Result<()> {
     transaction.execute_batch(SCHEMA_V7)?;
     let of = |id: i64| {
         spelled
@@ -2402,7 +2446,13 @@ fn seven(transaction: &Transaction<'_>, spelled: &[Spelled]) -> rusqlite::Result
             _ => kept = Some(row),
         }
     }
-    for (gone, _, _, into) in &pairs {
+    for (gone, reference, directory, into) in &pairs {
+        // Said as it was gathered, which a script may still name it by.
+        transaction.execute(
+            "INSERT INTO merged_sources (directory, url, reference, into_id)
+             VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![directory, of(*gone)?.clean, reference, into],
+        )?;
         let reference: Option<String> = transaction.query_row(
             "SELECT reference FROM sources WHERE id = ?1",
             [into],
@@ -2439,22 +2489,7 @@ fn seven(transaction: &Transaction<'_>, spelled: &[Spelled]) -> rusqlite::Result
         )?;
         taken.push(name);
     }
-    transaction.execute_batch(SCHEMA_V7_INDEXES)?;
-
-    let mut merged = Vec::new();
-    for (gone, reference, directory, into) in pairs {
-        merged.push(Merged {
-            url: Redacted::new(&of(gone)?.clean),
-            reference,
-            directory,
-            into: transaction.query_row(
-                &format!("SELECT {SOURCE_COLUMNS} FROM sources WHERE id = ?1"),
-                [into],
-                read_source,
-            )?,
-        });
-    }
-    Ok(merged)
+    transaction.execute_batch(SCHEMA_V7_INDEXES)
 }
 
 #[cfg(test)]

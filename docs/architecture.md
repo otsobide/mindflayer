@@ -3512,15 +3512,21 @@ exception, and of another kind: what it is handed is what today's rules say
 of each row, since no SQL can tell that two URLs are one repository's, and
 once written into the row it is what a gather finds its source by. A build
 that changes a rule changes which URLs are one, and so takes a step of its
-own to write each identity again. The rows that went are
-handed back (`LedgerStore::merged`), and whoever opened the ledger removes
-their clones and shelf folders, which nothing points into any more
-(`gather::clear_merged`), a read too, since the step that made them nobody's
-is the one write a read may make and only that opening knows which they are.
-A command that writes says each merge, once, as it says what the scrub took
-out; a read says nothing, as it says nothing of the step. A credential is
-left where the scrub finds it, which rewrites a clone before its row, and
-which the first command that writes runs next.
+own to write each identity again. Each row that went is kept in a table of
+the step's own, `merged_sources`, by the URL it was gathered from without a
+credential, its branch, its folder name and the source it is one with
+(`LedgerStore::merged`), until the first command that writes has said it and
+removed its clone and shelf folders, which nothing points into any more
+(`gather::scrub`, holding the workspace while it does). Kept in the file
+rather than handed back by the opening that took the step, because that is a
+read as often as not, a `status` or a `list` after an upgrade, which says
+nothing of the step and removes no folder: whichever command took it, the
+first that writes says each merge, as it says what the scrub took out, and
+says it again with each folder that will not go, which every command that
+writes tries again, until it goes. While a merge is kept its folder name is
+given to no new source, so no gather can clone into a folder about to be
+removed. A credential is left where the scrub finds it, which rewrites a
+clone before its row, and which the first command that writes runs next.
 D-04's states (#47) took no step of their own: what tells them apart is the hash each copy was written with, which versions
 3 and 4 keep, and what the place it came from offers now, which is read where
 it is offered rather than kept. A record with no hash is held to its offer
@@ -9030,7 +9036,11 @@ asked for. Every migration copies the database aside before its first step
 ([Why the ledger is SQLite](#why-the-ledger-is-sqlite)), and a read migrates
 through the same migration (`Sqlite::migrate`), so it leaves that copy too: the first
 `mindweaver gather list` after an upgrade puts `mindweaver.db.v2.bak` beside a
-ledger version 2 wrote.
+ledger version 2 wrote. The step to schema 7 is among it: on a read too it
+makes two sources of one repository one, and keeps the one that went in the
+file, for the first command that writes to say and to remove its folders
+([Why the ledger is SQLite](#why-the-ledger-is-sqlite)); a read removes no
+folder and says nothing of it.
 
 ## Agents, and where each kind reaches them
 
@@ -13050,18 +13060,9 @@ it once as it closes.
   that step would run on a read as well, rewriting clones as well as the file,
   and a read would then have to say what it took out, as only a command that
   writes does now. Schema 7 (#98) left it where it was for the same reason:
-  its step makes rows one and clears the folders of those that went, on a
-  read too, but leaves a credential to the scrub, which rewrites a clone
-  before its row and is the one that says what it took out.
-- **Clearing a merge without the lock.** The folders of a source the step
-  to schema 7 made one with another are removed by whoever opened the
-  ledger, a read among them, which never takes the workspace's lock: a
-  gather of this build that registers a new source between the step and
-  the removal, and is given the folder name that went, would have its
-  clone removed under it. It needs a URL whose readable name is exactly
-  that folder's, within moments of an upgrade. Keeping the folder name
-  reserved until its folders are gone would close it, with a table of its
-  own.
+  its step makes rows one, on a read too, but leaves their folders and a
+  credential to the scrub, which rewrites a clone before its row and is the
+  one that says what it did.
 - **`owner/repo` is GitHub's.** A gather reads two plain names with one `/`
   between them as the GitHub repository they name, so a relative path of
   two folders has to be written `./skills/repo` to be gathered from this

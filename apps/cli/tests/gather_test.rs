@@ -571,6 +571,34 @@ fn the_first_command_that_writes_after_the_step_says_which_sources_are_one_now()
 }
 
 #[test]
+fn a_read_that_takes_the_step_leaves_saying_what_it_made_one_to_the_first_command_that_writes() {
+    let token = format!("ghp_{}", "T0k3n".repeat(7) + "x");
+    let source = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it"))]);
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+    rusqlite::Connection::open(dir.path().join(WEAVER_DIR).join("mindweaver.db"))
+        .unwrap()
+        .execute_batch(&VERSION_6.replace("<token>", &token))
+        .unwrap();
+
+    let listed = weaver(dir.path(), &["gather", "list"]).unwrap();
+    let gathered = weaver(
+        dir.path(),
+        &["gather", "git", &source.path().to_string_lossy()],
+    )
+    .unwrap();
+
+    assert!(listed.stderr.is_empty(), "{:?}", listed.stderr);
+    let notes: Vec<&str> = gathered
+        .stderr
+        .iter()
+        .map(|line| line.text.as_str())
+        .filter(|line| line.contains("one source now"))
+        .collect();
+    assert_eq!(notes.len(), 2, "{:?}", gathered.stderr);
+}
+
+#[test]
 fn a_url_with_a_token_in_it_is_refused_and_nothing_kept_or_said_repeats_the_token() {
     let dir = TempDir::new().unwrap();
     weaver(dir.path(), &["init"]).unwrap();

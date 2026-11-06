@@ -775,8 +775,8 @@ fn a_version_6_ledger_keeps_every_row_but_those_of_a_spelling_made_one_with_anot
             [Value::Integer(3), Value::Integer(4), text(&private)],
         ]
     );
-    let merged: Vec<(&str, &str, i64)> = ledger
-        .merged()
+    let merged = ledger.merged().unwrap();
+    let merged: Vec<(&str, &str, i64)> = merged
         .iter()
         .map(|merged| {
             (
@@ -1053,31 +1053,93 @@ fn opening_a_version_6_ledger_to_write_leaves_no_credential_and_nothing_a_merge_
 }
 
 #[test]
-fn reading_a_version_6_ledger_clears_what_a_merge_left_and_leaves_the_credential_to_a_write() {
+fn reading_a_version_6_ledger_leaves_what_a_merge_left_for_the_first_command_that_writes_to_say() {
     let token = token();
     let dir = TempDir::new().unwrap();
     let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     written_at(&dir.path().join(".mindweaver"), &version_6(&token));
     folders_of_version_6(&workspace, &token);
 
-    let ledger = workspace.ledger_for_reading().unwrap();
+    // Read twice, as a `status` and a `list` after an upgrade would.
+    for _ in 0..2 {
+        let ledger = workspace.ledger_for_reading().unwrap();
+        assert_eq!(ledger.merged().unwrap().len(), 2);
+    }
+    // A read removes no folder and scrubs nothing.
+    for folder in [
+        workspace.cache_dir().join("github.com-acme-skills"),
+        workspace
+            .gathered_dir(Kind::Skill)
+            .join("github.com-acme-private-2"),
+    ] {
+        assert!(folder.exists(), "{folder:?}");
+    }
 
-    assert_eq!(ledger.merged().len(), 2);
+    // The next command that writes says each merge, clears its folders and
+    // scrubs the rest, whichever command took the step.
+    let (_ledger, scrub) = workspace.ledger_to_write().unwrap();
+    let merged: Vec<&str> = scrub
+        .merged
+        .iter()
+        .map(|merged| merged.directory.as_str())
+        .collect();
+    assert_eq!(
+        merged,
+        ["github.com-acme-private-2", "github.com-acme-skills"]
+    );
+    assert!(scrub.leftovers.is_empty(), "{:?}", scrub.leftovers);
+    assert_eq!(scrub.sources.len(), 1, "{:?}", scrub.sources);
+    for directory in ["github.com-acme-skills", "github.com-acme-private-2"] {
+        assert!(!workspace.cache_dir().join(directory).exists());
+        assert!(!workspace.gathered_dir(Kind::Skill).join(directory).exists());
+    }
+    assert!(!text_under(&workspace.cache_dir()).contains(&token));
+    assert!(workspace.ledger_to_write().unwrap().1.is_empty());
+}
+
+/// A folder of a merge that will not go is said by every command that
+/// writes, with its merge, and tried again, until it goes.
+#[cfg(unix)]
+#[test]
+fn a_folder_a_merge_left_that_will_not_go_is_tried_and_said_again_until_it_goes() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let token = token();
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
+    written_at(&dir.path().join(".mindweaver"), &version_6(&token));
+    folders_of_version_6(&workspace, &token);
+    let stuck = workspace
+        .cache_dir()
+        .join("github.com-acme-skills")
+        .join(".git");
+    let mode = |mode| std::fs::set_permissions(&stuck, std::fs::Permissions::from_mode(mode));
+    mode(0o555).unwrap();
+
+    let (_ledger, first) = workspace.ledger_to_write().unwrap();
+    let (_ledger, second) = workspace.ledger_to_write().unwrap();
+    mode(0o755).unwrap();
+    let (_ledger, third) = workspace.ledger_to_write().unwrap();
+
+    for scrub in [&first, &second] {
+        let said: Vec<&str> = scrub
+            .merged
+            .iter()
+            .map(|merged| merged.directory.as_str())
+            .collect();
+        assert!(said.contains(&"github.com-acme-skills"), "{said:?}");
+        assert_eq!(scrub.leftovers.len(), 1, "{:?}", scrub.leftovers);
+        assert!(scrub.leftovers[0].path.ends_with("github.com-acme-skills"));
+    }
+    // The other merge, whose folders went, is said once.
+    assert_eq!(second.merged.len(), 1, "{:?}", second.merged);
+    assert_eq!(third.merged.len(), 1, "{:?}", third.merged);
+    assert!(third.leftovers.is_empty(), "{:?}", third.leftovers);
     assert!(!workspace
         .cache_dir()
         .join("github.com-acme-skills")
         .exists());
-    assert!(!workspace
-        .gathered_dir(Kind::Skill)
-        .join("github.com-acme-private-2")
-        .exists());
-    drop(ledger);
-    // A read scrubs nothing, as before the step, and the next command that
-    // writes does, with nothing left of the merge to say.
-    let (_ledger, scrub) = workspace.ledger_to_write().unwrap();
-    assert!(scrub.merged.is_empty(), "{:?}", scrub.merged);
-    assert_eq!(scrub.sources.len(), 1, "{:?}", scrub.sources);
-    assert!(!text_under(&workspace.cache_dir()).contains(&token));
+    assert!(workspace.ledger_to_write().unwrap().1.is_empty());
 }
 
 #[test]

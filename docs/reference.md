@@ -955,9 +955,10 @@ the token and leaves the file as it is.
 A workspace gathered into by two spellings of one repository's URL before
 names came in (#98) held two sources of it. The first command to open it with
 this version makes them one, keeping the one gathered most recently and what
-it gathered, and moves every installation from the other to it; the clone
-and the shelf folder of the one that went are removed. The first command
-that writes says so, once:
+it gathered, and moves every installation from the other to it, a command
+that only reads too. The first command that writes removes the clone and the
+shelf folder of the one that went, and says so, once (again by each command
+that writes after it while a folder will not go):
 
 ```
 $ mindweaver install -p collapse ddd-reviewer
