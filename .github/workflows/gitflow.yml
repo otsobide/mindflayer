@@ -14,7 +14,7 @@ jobs:
   branch-name:
     name: gitflow branch name
     if: github.base_ref == 'dev'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
     steps:
       - name: Check the head branch follows gitflow
         env:
@@ -31,7 +31,7 @@ jobs:
   release-source:
     name: release source branch
     if: github.base_ref == 'main'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
     steps:
       - name: Check the release comes from dev
         env:
