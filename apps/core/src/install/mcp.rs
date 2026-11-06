@@ -211,9 +211,15 @@ struct Reach {
 /// keeps there and for an entry changed since it was written. Then each is
 /// written in report order, and the first that fails puts back the files
 /// written before it, as they were, with the folder made on the way, and
-/// leaves the record as it was. An agent left out keeps the entry an
-/// earlier install recorded in its file, recorded still: nothing here wrote
-/// it, and dropping its record would make it nobody's to take out.
+/// leaves the record as it was.
+///
+/// An agent its renderer now refuses loses the entry an earlier install
+/// recorded for it, taken out of its file as an uninstall takes it, and
+/// out of the record: left, the agent would go on running what the library
+/// no longer gives it, outdated for good, since no install can write it
+/// again. One whose file is not Mindweaver's to edit keeps it, recorded
+/// still, since nothing here may take it out, and dropping its record
+/// would make it nobody's to take out.
 pub(crate) fn install_held(
     workspace: &WeaverWorkspace,
     ledger: &Ledger,
@@ -236,13 +242,16 @@ pub(crate) fn install_held(
     };
 
     let mut unreached: Vec<Unreached> = Vec::new();
+    // Each agent whose renderer refuses the definition, of those unreached.
+    let mut refused: Vec<Agent> = Vec::new();
     let mut reached: Vec<Reach> = Vec::new();
     for agent in agents(project) {
-        if let Err(refused) = entry_for(agent, &definition) {
+        if let Err(refusal) = entry_for(agent, &definition) {
             unreached.push(Unreached {
                 agent,
-                why: Said::of(refused.code(), &refused),
+                why: Said::of(refusal.code(), &refusal),
             });
+            refused.push(agent);
             continue;
         }
         let route = agent
@@ -333,11 +342,12 @@ pub(crate) fn install_held(
         let done = match render(reach.agent, root, &definition, homes) {
             Ok(done) => done,
             // Refused the agent alone, its file neither read nor written.
-            Err(refused) if refuses_agent(&refused) => {
+            Err(refusal) if refuses_agent(&refusal) => {
                 unreached.push(Unreached {
                     agent: reach.agent,
-                    why: Said::of(refused.code(), &refused),
+                    why: Said::of(refusal.code(), &refusal),
                 });
+                refused.push(reach.agent);
                 continue;
             }
             Err(error) => {
@@ -385,14 +395,48 @@ pub(crate) fn install_held(
         return Err(unreached_by_all(&name, project, unreached));
     }
 
+    // What an earlier install wrote for an agent refused now, taken out as
+    // an uninstall takes it, while its file may be edited: each holds what
+    // was recorded, or the install is forced, since an edited one refused
+    // it above. A file Mindweaver made that goes with it, or went by hand,
+    // is forgotten as an uninstall forgets it.
+    let mut dropped: Vec<Agent> = Vec::new();
+    let mut unmade: Vec<&str> = Vec::new();
+    for left in before.iter().flat_map(|record| &record.entries) {
+        if !refused.contains(&left.agent)
+            || rules::withheld_from(project, Path::new(&left.file)).is_some()
+        {
+            continue;
+        }
+        let was = Before::of(root, &left.file);
+        let (created, taken) = match taken_out(ledger, &entry, root, left) {
+            Ok(taken) => taken,
+            Err(error) => {
+                put_back(&written);
+                unexclude(&[]);
+                return Err(error);
+            }
+        };
+        if taken != Written::Unchanged {
+            changes.push(copy::Change::Updated);
+        }
+        if created && fs::symlink_metadata(&was.path).is_err() {
+            unmade.push(&left.file);
+        }
+        dropped.push(left.agent);
+        written.push(was);
+    }
+
     // Each entry written, and each an earlier install recorded for an agent
-    // this one gave none, which stays what that install wrote.
+    // this one gave none and took none from, which stays what that install
+    // wrote.
     let mut entries = targets;
     entries.extend(
         before
             .iter()
             .flat_map(|record| &record.entries)
             .filter(|entry| !given.iter().any(|given| given.agent == entry.agent))
+            .filter(|entry| !dropped.contains(&entry.agent))
             .cloned(),
     );
     entries.sort_by_key(|entry| entry.agent);
@@ -412,7 +456,10 @@ pub(crate) fn install_held(
     };
     let recorded = ledger.installed(&entry, &record).and_then(|()| {
         made.iter()
-            .try_for_each(|route| ledger.set_created(&entry, route, true))
+            .try_for_each(|route| ledger.set_created(&entry, route, true))?;
+        unmade
+            .iter()
+            .try_for_each(|route| ledger.set_created(&entry, route, false))
     });
     // A record that cannot be written leaves the files with entries nobody
     // records, which no install or uninstall would touch again: they are
@@ -423,6 +470,9 @@ pub(crate) fn install_held(
         for route in &made {
             let _ = ledger.set_created(&entry, route, false);
         }
+        for route in &unmade {
+            let _ = ledger.set_created(&entry, route, true);
+        }
         let _ = match &before {
             Some(before) => ledger.installed(&entry, before),
             None => ledger.uninstalled(&entry, Kind::Mcp, &name).map(drop),
@@ -430,6 +480,11 @@ pub(crate) fn install_held(
         return Err(error.into());
     }
     unexclude(&made);
+    // After the files go, as an uninstall takes a line out.
+    let lines: Vec<exclude::Entry> = unmade.iter().map(exclude::Entry::file).collect();
+    if let Some(key) = key.filter(|_| !lines.is_empty()) {
+        let _ = exclude::remove(root, key, &lines);
+    }
     let detail = format!("{name} into {}", project.name());
     ledger.log(Action::Install, Some(&entry), Outcome::Ok, Some(&detail))?;
 
@@ -621,6 +676,29 @@ pub(crate) fn somebodys(project: &MindProject, name: &str) -> Option<PathBuf> {
             .any(|held| held.name == name)
             .then(|| root.join(route))
     })
+}
+
+/// Take `left`, an entry an earlier install recorded in the project the
+/// ledger names `project`, at `root`, out of its file as an uninstall takes
+/// it: only while the file holds a server of its name. Whether Mindweaver
+/// made the file, and what became of it.
+fn taken_out(
+    ledger: &Ledger,
+    project: &str,
+    root: &Path,
+    left: &EntryTarget,
+) -> Result<(bool, Written), InstallError> {
+    let created = ledger.created(project, &left.file)?;
+    let holds = entries::held(root, left.agent, &left.file)
+        .map_err(config)?
+        .iter()
+        .any(|held| held.name == left.name.as_str());
+    if !holds {
+        return Ok((created, Written::Unchanged));
+    }
+    let written =
+        remove(left.agent, root, &left.file, left.name.as_str(), created).map_err(config)?;
+    Ok((created, written))
 }
 
 /// Take the server `name` out of `agent`'s config file at `route` in the

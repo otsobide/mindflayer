@@ -750,6 +750,43 @@ fn an_outdated_entry_is_written_again_and_a_missing_one_put_back() {
 }
 
 #[test]
+fn an_update_takes_out_the_entry_of_an_agent_the_definition_no_longer_reaches() {
+    let fixture = fixture(Share::Shared, &Agent::ALL, McpMother::plain_program);
+    fixture.install();
+    // Passed a secret under a name other than its variable's now, which
+    // Codex cannot be given.
+    let name = fixture.name.clone();
+    fixture.define(&McpMother::stdio(&name));
+    let refusal = codex_mcp::entry(&fixture.definition()).unwrap_err();
+    assert_eq!(fixture.installation(), Some(Standing::Outdated));
+
+    let refreshed = fixture.update(Edits::Kept);
+
+    assert_eq!(refreshed.step, Step::Refresh);
+    let done = refreshed.done.unwrap().unwrap();
+    assert!(
+        matches!(done.installed, Installed::Updated { .. }),
+        "{:?}",
+        done.installed
+    );
+    assert_eq!(unreached(&done), [(Agent::Codex, refusal.code())]);
+    // The file the install made goes with it, as an uninstall takes it.
+    assert_eq!(fixture.read(".codex/config.toml"), None);
+    let agents: Vec<Agent> = fixture
+        .record()
+        .unwrap()
+        .entries
+        .iter()
+        .map(|entry| entry.agent)
+        .collect();
+    assert_eq!(agents, [Agent::Claude, Agent::OpenCode]);
+    assert!(!fixture.ledger.created("app", ".codex/config.toml").unwrap());
+    // So an update and what is said of the installation agree.
+    assert_eq!(fixture.installation(), Some(Standing::Current));
+    assert_eq!(fixture.update(Edits::Kept).step, Step::Keep);
+}
+
+#[test]
 fn a_server_nothing_offers_any_more_is_said_by_an_update_and_left() {
     let fixture = fixture(Share::Shared, &Agent::ALL, McpMother::plain_program);
     fixture.install();

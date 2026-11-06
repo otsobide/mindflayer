@@ -858,7 +858,9 @@ These are easy to break from a single file without noticing.
   it writes is `Standing::Foreign` and refuses the whole install
   (`Installed::Foreign`), and an edited entry refuses an install or an
   uninstall unless forced, forcing never reaching an entry nothing records.
-  An agent left out keeps the entry an earlier install recorded for it. An
+  An agent its renderer now refuses loses the entry an earlier install
+  recorded for it, taken out as an uninstall takes it, and one whose file
+  is withheld keeps it, recorded. An
   uninstall takes out only the entries its record names, from the file
   each names (`opencode_mcp::remove_from`), every other server kept, and a
   file Mindweaver made with its last server; one in a file git tracks in a

@@ -3706,11 +3706,19 @@ and is given none (`no_target`).
   a record that cannot be written does too. An install over current
   entries writes nothing, each renderer leaving a file that holds what it
   would write as it is (`Installed::Unchanged`).
-- **An agent left out keeps what an earlier install wrote.** Its entry, in
-  a file this install did not write, stays recorded as it was, reading as
-  outdated, since its offer gives that agent no entry now: dropping the
-  record would leave the entry nobody's to take out, and an uninstall
-  takes it out.
+- **An agent its renderer now refuses loses what an earlier install
+  wrote.** When the definition has changed so that an agent's renderer
+  refuses it, an install over the installation, an update's included,
+  takes that agent's entry out of its file as an uninstall would, and out
+  of the record, the agent said as not reached: left there, it would go on
+  running what the library no longer gives it, reading as outdated while
+  no update could write it again. An edited one refuses the install first,
+  unless forced, as anywhere else. An agent whose file is withheld, which
+  git tracks in a local project without `edit_tracked`, keeps its entry,
+  recorded as it was, since taking it out is an edit of that file too and
+  dropping the record would leave the entry nobody's: it reads as current
+  or outdated as its offer has it, and an update leaves it until the file
+  may be edited.
 - **Out of git, only what it made.** In a local project each config file
   the install makes is kept out of git, a line a file in the project's
   group of the exclude block, written before the file lands and taken back
