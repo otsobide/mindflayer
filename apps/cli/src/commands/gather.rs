@@ -259,10 +259,11 @@ fn gathered(url: &str, report: &Report) -> Outcome {
 
 /// Everything that can be installed from elsewhere, with where each thing
 /// comes from, spelled as `--from` takes it: a source by its name
-/// ([`Offer::listed_from`]), then the commit it is pinned to, in a column
-/// that earns its place only once a source shown is pinned, and what was
-/// gathered's licence as it says it, `unknown` when nothing does, in one
-/// that earns it once the shelf offers anything.
+/// ([`Offer::listed_from`]), then the commit it is pinned to, on a row
+/// taken at it ([`pinned_at`]), in a column that earns its place only once
+/// such a row is shown, and what was gathered's licence as it says it,
+/// `unknown` when nothing does, in one that earns it once the shelf offers
+/// anything.
 ///
 /// A loaded workspace's own has no licence cell: nothing gathered it, and
 /// a licence is what a gather records of where a skill came from, which an
@@ -292,12 +293,12 @@ fn shelf_listing(shelf: &[Offer], nothing_loaded: bool) -> String {
     kinds.dedup();
     let name_kind = kinds.len() > 1;
     // As the kind column: a licence only once the shelf offers something,
-    // a pin only once a source shown is pinned.
+    // a pin only once a row taken at one is shown.
     let name_license = shelf.iter().any(|entry| shelved(entry).is_some());
     let name_pin = shelf
         .iter()
         .filter_map(shelved)
-        .any(|gathered| gathered.source.pin.is_some());
+        .any(|gathered| pinned_at(gathered).is_some());
 
     let rows: Vec<Vec<String>> = shelf
         .iter()
@@ -310,7 +311,7 @@ fn shelf_listing(shelf: &[Offer], nothing_loaded: bool) -> String {
             row.push(printable(entry.name()));
             row.push(printable(&entry.listed_from()));
             if name_pin {
-                let pin = gathered.and_then(|gathered| gathered.source.pin.as_ref());
+                let pin = gathered.and_then(pinned_at);
                 row.push(pin.map_or_else(String::new, |pin| format!("pinned {}", short(pin))));
             }
             if name_license {
@@ -331,6 +332,20 @@ fn shelved(entry: &Offer) -> Option<&Gathered> {
         Offer::Shelf(gathered) => Some(gathered),
         Offer::Workspace { .. } | Offer::Loaded { .. } => None,
     }
+}
+
+/// The commit `gathered`'s source is pinned to, when `gathered` was taken
+/// at it.
+///
+/// A gather places what the commit it took holds and drops nothing, so a
+/// skill an earlier gather took at another commit stays on the shelf
+/// beside a pin whose commit lacks it, under its own `revision`; saying it
+/// is pinned would claim the pin holds it. Its cell is left empty rather
+/// than given its own commit, which `--json` holds: a column of pins and
+/// commits would read as pins.
+fn pinned_at(gathered: &Gathered) -> Option<&str> {
+    let pin = gathered.source.pin.as_ref()?;
+    (gathered.revision.as_ref() == Some(pin)).then_some(pin.as_str())
 }
 
 /// A revision as a person refers to it.

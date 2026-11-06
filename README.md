@@ -308,7 +308,8 @@ the source keeps it beside its branch until a gather at another pin, or
 none, moves it. Each gathered skill is recorded with its folder in the
 repository, the commit, the hash of what was put on the shelf and its
 licence as it says it, and `gather list` shows the licence, `unknown` when
-nothing says one, and the commit a source is pinned to.
+nothing says one, and the commit a source is pinned to on each skill taken
+at it.
 
 To try it with nothing gathered, this repository's `examples/` is a
 workspace of two skills and two rules: `mindweaver load <your clone>/examples`

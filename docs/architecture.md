@@ -3184,6 +3184,15 @@ is, since a second try would meet it again. A commit a remote hands over by
 itself is not held to the branch named, which only that branch's whole
 history could say (see the open questions).
 
+A pinned gather places what its commit holds and, as every gather, takes
+nothing off the shelf, so a skill an earlier gather took at another commit,
+which the pin's lacks, stays there under the `revision` it was taken at.
+`gather list` says the pin only on a row whose `revision` is the pin
+(`pinned_at`), and leaves the cell of such a skill empty, since saying it is
+pinned would claim the pin holds it; `--json` gives each row's `revision`
+beside its source's `pin`, for a reader to tell the same (see the open
+questions).
+
 ### What each artifact is recorded with
 
 Each artifact the shelf holds is recorded with where it came from, to the
@@ -13173,6 +13182,14 @@ it once as it closes.
   it looked for there. A pin off its branch is kept beside it all the same,
   and a later gather without one goes back to the branch. Checking every
   pin would cost every pinned gather the whole history; whether it should
+  is the owner's to say.
+- **A gather leaves what its source stopped offering.** A skill the
+  commit a gather took no longer holds, at a pin or at the branch's tip,
+  keeps its folder on the shelf and its row in the ledger, and is offered
+  as before, under the commit it was taken at; a pinned source's shelf is
+  then more than its pin holds. Taking such a skill off would change what a
+  gather does to every source, an installed copy's offer included, which
+  would read as orphaned; whether a gather should, or a command of its own,
   is the owner's to say.
 - **A pin is a SHA-1.** `--pin` takes 40 hexadecimal digits, a SHA-1 commit's
   id. A repository of SHA-256 objects names a commit by 64, which it

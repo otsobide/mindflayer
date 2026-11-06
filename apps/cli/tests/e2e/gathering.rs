@@ -184,6 +184,49 @@ fn gather_list_says_each_skills_licence_and_the_commit_its_source_is_pinned_to()
 }
 
 #[test]
+fn gather_list_says_a_pin_only_of_a_skill_taken_at_it() {
+    let scenario = Scenario::projects(&["collapse"]);
+    scenario.source(
+        SOURCE,
+        &[(
+            "skills/commit-style/SKILL.md",
+            &skill("commit-style", "How this repo writes commit messages"),
+        )],
+    );
+    let pinned = scenario.commit(SOURCE);
+    scenario.change(
+        SOURCE,
+        &[(
+            "skills/ddd-reviewer/SKILL.md",
+            &skill(
+                "ddd-reviewer",
+                "Review a change against the DDD layering rules",
+            ),
+        )],
+    );
+    // Gathered at the branch first, so the shelf holds a skill the pinned
+    // commit does not, which the pinned gather leaves where it is.
+    scenario
+        .given("~/Projects", "mindweaver gather git ../src/acme-skills")
+        .given(
+            "~/Projects",
+            &format!("mindweaver gather git ../src/acme-skills --pin {pinned}"),
+        );
+
+    let short = &pinned[..7];
+    scenario
+        .run("~/Projects", "mindweaver gather list")
+        .succeeds()
+        .prints(&format!(
+            "commit-style  src-acme-skills  pinned {short}  unknown  How this repo writes commit \
+             messages\n\
+             ddd-reviewer  src-acme-skills                  unknown  Review a change against the \
+             DDD layering rules\n"
+        ))
+        .quiet();
+}
+
+#[test]
 fn a_gathered_skill_installs_from_the_source_it_came_from() {
     let scenario = acme();
     scenario.given("~/Projects", "mindweaver gather git ../src/acme-skills");
