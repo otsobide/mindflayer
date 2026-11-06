@@ -292,6 +292,37 @@ fn gather_pin_takes_the_commit_it_names_and_refuses_what_is_no_commits_id() {
 }
 
 #[test]
+fn an_address_its_ref_or_path_contradicts_is_refused_before_anything_is_opened() {
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+    let tree = "https://github.com/acme/skills/tree/main/skills/pdf";
+
+    let at = weaver(
+        dir.path(),
+        &["gather", "git", "acme/skills@v2", "--ref", "v3"],
+    )
+    .unwrap_err();
+    let branch = weaver(dir.path(), &["gather", "git", tree, "--ref", "dev"]).unwrap_err();
+    let folder = weaver(dir.path(), &["gather", "git", tree, "--path", "skills"]).unwrap_err();
+
+    assert_eq!(at.error.code(), "gather_ref_contradicted");
+    assert_eq!(
+        at.error.to_string(),
+        "acme/skills@v2 names the branch or tag `v2`, and --ref names `v3`: give one"
+    );
+    assert_eq!(branch.error.code(), "gather_ref_contradicted");
+    assert_eq!(folder.error.code(), "gather_path_contradicted");
+    assert_eq!(
+        folder.error.to_string(),
+        format!("{tree} names the folder `skills/pdf`, and --path names `skills`: give one")
+    );
+    assert!(
+        !dir.path().join(".mindweaver/mindweaver.db").exists(),
+        "no ledger made, nothing fetched"
+    );
+}
+
+#[test]
 fn an_empty_shelf_says_how_to_fill_it() {
     let dir = TempDir::new().unwrap();
     weaver(dir.path(), &["init"]).unwrap();

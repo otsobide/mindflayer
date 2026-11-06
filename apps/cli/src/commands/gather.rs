@@ -34,21 +34,20 @@ pub(crate) fn run_gather(
             name,
             pin,
         } => {
-            let workspace = workspace_here(directory, lookup)?;
-            let (ledger, scrub) = workspace.ledger_to_write().map_err(CliError::from)?;
-            let said = scrubbed(&scrub);
-            let request = Request::git(url.clone());
-            let request = match path {
-                Some(path) => request.from_subdirectory(path.clone()),
-                None => request,
-            };
-            let request = request
-                .at(reference.clone())
+            // Read before the workspace is: an address its options
+            // contradict is refused with nothing opened, let alone made.
+            let request = Request::addressed(url, reference.clone(), path.clone())
+                .map_err(CliError::from)?
                 .named(name.clone())
                 .pinned(pin.clone())
                 .watched_by(watch.clone());
+            let workspace = workspace_here(directory, lookup)?;
+            let (ledger, scrub) = workspace.ledger_to_write().map_err(CliError::from)?;
+            let said = scrubbed(&scrub);
             match gather::gather(&workspace, &ledger, &request) {
-                Ok(report) => Ok(said.before(gathered(url, &report))),
+                // By the repository the address names, which is what was
+                // gathered: a tree URL's branch and folder are no part of it.
+                Ok(report) => Ok(said.before(gathered(request.source.url(), &report))),
                 Err(error) => Err(Failure {
                     error: Box::new(error.into()),
                     warnings: said.lines(),

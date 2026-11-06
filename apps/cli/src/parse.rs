@@ -1477,9 +1477,12 @@ pub struct ShareMode {
 /// to say so rather than overloading a URL.
 #[derive(Debug, Subcommand)]
 pub enum GatherCommand {
-    /// Take skills from a git repository.
+    /// Take skills from a git repository, wherever in it the common layouts
+    /// keep them.
     Git {
-        /// The repository to clone.
+        /// The repository to clone: a URL, a path, GitHub's `owner/repo`,
+        /// `owner/repo@ref`, or a GitHub or GitLab tree URL, which names a
+        /// branch and a folder too.
         url: String,
 
         /// The folder inside the repository to search for skills, instead
