@@ -637,6 +637,36 @@ fn a_server_of_an_installed_one_s_name_at_codex_s_and_opencode_s_user_scope_is_f
 }
 
 #[test]
+fn a_user_config_that_does_not_parse_is_said_once_however_many_servers_ask_of_it() {
+    let fixture = fixture(&[Agent::Codex, Agent::OpenCode]);
+    fixture.write(
+        &fixture.codex_config(),
+        &trusting(fixture.root(), "trusted"),
+    );
+    fixture.install_server("github", &server("github", "DOCTOR_TEST_TOKEN"));
+    fixture.install_server("tracker", &server("tracker", "DOCTOR_TEST_TOKEN"));
+    fixture.write(&fixture.codex_config(), "[projects\n");
+    let opencode = fixture
+        .homes()
+        .opencode_config_dir
+        .unwrap()
+        .join("opencode.json");
+    fixture.write(&opencode, "{\"mcp\": ");
+
+    let examined = fixture.examined_with(&["DOCTOR_TEST_TOKEN"]);
+
+    assert!(codes(&examined).is_empty(), "{:?}", codes(&examined));
+    let said: Vec<String> = examined
+        .failures
+        .iter()
+        .map(|failure| failure.message.to_string())
+        .collect();
+    assert_eq!(said.len(), 2, "{said:?}");
+    assert!(said[0].starts_with(&fixture.codex_config().display().to_string()));
+    assert!(said[1].starts_with(&opencode.display().to_string()));
+}
+
+#[test]
 fn a_stage_an_install_left_in_mind_tmp_is_found_and_left_there() {
     let fixture = fixture(&[Agent::Claude]);
     let tmp = fixture.root().join(".mind/tmp");

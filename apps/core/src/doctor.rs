@@ -610,6 +610,10 @@ struct Exam<'a> {
     /// Each copy's tree hash, read once however many checks compare it:
     /// none for one that cannot be read, which is said once.
     hashed: BTreeMap<PathBuf, Option<ContentHash>>,
+    /// The user's config in Codex's home, read once however many checks
+    /// and servers ask of it: none until one does, and an error once it
+    /// would not read, which is said once.
+    codex_user: Option<Result<Option<UserConfig>, ()>>,
 }
 
 impl<'a> Exam<'a> {
@@ -628,6 +632,35 @@ impl<'a> Exam<'a> {
             failures: Vec::new(),
             listed: BTreeMap::new(),
             hashed: BTreeMap::new(),
+            codex_user: None,
+        }
+    }
+
+    /// Collect `failure`, unless it is said already: a file every server
+    /// installed for an agent is looked for in fails each time alike, and
+    /// one line says it.
+    fn fail(&mut self, failure: DoctorFailure) {
+        let said = |other: &DoctorFailure| {
+            other.code() == failure.code() && other.to_string() == failure.to_string()
+        };
+        if !self.failures.iter().any(said) {
+            self.failures.push(failure);
+        }
+    }
+
+    /// The user's config in Codex's home, read as an install reads it
+    /// ([`UserConfig`]), once: none when there is none, and an error, said
+    /// as a failure the first time, when it does not read.
+    fn codex_user(&mut self) -> Result<Option<&UserConfig>, ()> {
+        if self.codex_user.is_none() {
+            let read = UserConfig::read(&self.machine.homes).map_err(|error| {
+                self.fail(DoctorFailure::CodexConfig(error));
+            });
+            self.codex_user = Some(read);
+        }
+        match &self.codex_user {
+            Some(Ok(user)) => Ok(user.as_ref()),
+            _ => Err(()),
         }
     }
 
@@ -722,24 +755,23 @@ impl<'a> Exam<'a> {
         if !self.names(Agent::Codex) {
             return;
         }
-        let user = match UserConfig::read(&self.machine.homes) {
-            Ok(user) => user,
+        let project = self.root().to_path_buf();
+        let Ok(user) = self.codex_user() else {
+            return;
+        };
+        let read = match user {
+            Some(user) => user
+                .trust(&project)
+                .map(|trust| (trust, Some(user.path.clone()))),
+            None => Ok((Trust::Unmarked, None)),
+        };
+        let (trust, user) = match read {
+            Ok(read) => read,
             Err(error) => {
-                self.failures.push(DoctorFailure::CodexConfig(error));
+                self.fail(DoctorFailure::CodexConfig(error));
                 return;
             }
         };
-        let trust = match &user {
-            Some(user) => match user.trust(self.root()) {
-                Ok(trust) => trust,
-                Err(error) => {
-                    self.failures.push(DoctorFailure::CodexConfig(error));
-                    return;
-                }
-            },
-            None => Trust::Unmarked,
-        };
-        let project = self.root().to_path_buf();
         let config = self
             .machine
             .homes
@@ -749,7 +781,7 @@ impl<'a> Exam<'a> {
         match (trust, user) {
             (Trust::Trusted, _) => {}
             (Trust::Untrusted, Some(user)) => self.symptoms.push(Symptom::CodexDistrusted {
-                config: user.path,
+                config: user,
                 project,
             }),
             // Only a config read marks a project untrusted.
@@ -800,7 +832,7 @@ impl<'a> Exam<'a> {
                     bytes,
                 },
                 unmeasured @ agents_md::Warning::Unmeasured { .. } => {
-                    self.failures.push(DoctorFailure::Unmeasured(unmeasured));
+                    self.fail(DoctorFailure::Unmeasured(unmeasured));
                     continue;
                 }
             };
@@ -826,7 +858,7 @@ impl<'a> Exam<'a> {
             Ok(Some(file)) => file,
             Ok(None) => return,
             Err(error) => {
-                self.failures.push(DoctorFailure::ClaudeMd(error));
+                self.fail(DoctorFailure::ClaudeMd(error));
                 return;
             }
         };
@@ -959,7 +991,7 @@ impl<'a> Exam<'a> {
         let (records, offers) = match read {
             Ok(read) => read,
             Err(error) => {
-                self.failures.push(DoctorFailure::Ledger(error));
+                self.fail(DoctorFailure::Ledger(error));
                 return;
             }
         };
@@ -987,24 +1019,26 @@ impl<'a> Exam<'a> {
             // its servers at user scope are.
             let held = match agent {
                 Agent::Claude => continue,
-                Agent::Codex => match UserConfig::read(&self.machine.homes) {
-                    Ok(Some(user)) => match user.get(&[codex_mcp::SERVERS, name]) {
-                        Ok(held) => held.map(|_| user.path),
+                Agent::Codex => {
+                    let held = match self.codex_user() {
+                        Ok(Some(user)) => user
+                            .get(&[codex_mcp::SERVERS, name])
+                            .map(|held| held.map(|_| user.path.clone())),
+                        Ok(None) => Ok(None),
+                        Err(()) => continue,
+                    };
+                    match held {
+                        Ok(held) => held,
                         Err(error) => {
-                            self.failures.push(DoctorFailure::CodexConfig(error));
+                            self.fail(DoctorFailure::CodexConfig(error));
                             continue;
                         }
-                    },
-                    Ok(None) => None,
-                    Err(error) => {
-                        self.failures.push(DoctorFailure::CodexConfig(error));
-                        continue;
                     }
-                },
+                }
                 Agent::OpenCode => match opencode_mcp::held_by_user(&self.machine.homes, name) {
                     Ok(held) => held,
                     Err(error) => {
-                        self.failures.push(DoctorFailure::OpenCodeConfig(error));
+                        self.fail(DoctorFailure::OpenCodeConfig(error));
                         continue;
                     }
                 },
