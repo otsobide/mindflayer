@@ -1383,7 +1383,7 @@ fn added_skill(name: &str, description: &str, template: Option<&str>) -> Value {
         "type": "validate", "holder": {"type": "workspace"},
         "draft": {
             "type": "add", "kind": "skill", "name": name, "description": description,
-            "template": template,
+            "template": template, "server": null,
         },
     })
 }
@@ -1494,6 +1494,7 @@ fn write_what_each_change_authoring_sends_is_answered_with() {
             json!({
                 "type": "add", "holder": {"type": "workspace"}, "kind": "skill",
                 "name": "deploy-docs", "description": "Publish the docs", "template": "full",
+                "server": null,
             }),
             false,
         ),

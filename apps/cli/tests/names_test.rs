@@ -354,6 +354,7 @@ fn no_name_an_artifact_may_not_be_written_under_is_added_and_nothing_is_written(
                     name: name.clone(),
                     description: String::from("Does it"),
                     template: None,
+                    server: None,
                 });
                 let Err(failure) = added else {
                     panic!("{level:?} added {} {name:?}, {why}", kind.slug());

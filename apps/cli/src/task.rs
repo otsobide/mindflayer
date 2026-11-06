@@ -28,6 +28,7 @@
 
 use clap::Parser as _;
 use mindweaver_core::install::Change;
+use mindweaver_core::mcp;
 use mindweaver_core::url::redacted;
 use mindweaver_core::{
     codes, hash, Agent, Kind, Names, Share, WeaverWorkspace, DEFAULT_SUBDIRECTORY, QUALIFIER,
@@ -150,13 +151,24 @@ pub enum Task {
     /// `mind unload <path>`: out of the workspace above the project the TUI
     /// is on, by its absolute path, which reads the same from anywhere.
     UnloadHere { path: String },
-    /// `… add [--template <template>] <kind> <name> <description>`.
+    /// `… add [--template <template>] <kind> <name> <description>`, or,
+    /// for an MCP server, `… add mcp <name> <description>` and the options
+    /// that say how an agent starts it or reaches it (`server`): what the
+    /// panel's form adding one sends, the form's fields as the options'
+    /// words, each secret the name of the variable it is read from.
     Add {
         holder: Holder,
         kind: Kind,
         name: String,
         description: String,
         template: Option<String>,
+        /// None but for a server added from its options, which a template
+        /// says otherwise: the grammar refuses both, and so the line does.
+        //
+        // Boxed, being most of what a task can hold, so every other task,
+        // and every screen's state holding one, is not as large.
+        #[serde(default)]
+        server: Option<Box<mcp::Given>>,
     },
     /// `… show <kind:name>`.
     Show { holder: Holder, reference: String },
@@ -187,6 +199,17 @@ pub enum Task {
         name: String,
         text: String,
         hash: String,
+    },
+    /// `… edit mcp:<name>` and the options that say how an agent starts
+    /// the server or reaches it: its transport and inputs written again
+    /// from them, everything else its definition holds kept
+    /// (`lifecycle::retransport`). What the panel's form changing one
+    /// sends, as the form adding one sends `add`'s.
+    EditServer {
+        holder: Holder,
+        name: String,
+        // Boxed, as an add's is.
+        server: Box<mcp::Given>,
     },
     /// `… rename <kind:name> <to>`.
     Rename {
@@ -594,6 +617,7 @@ impl Task {
                 name,
                 description,
                 template,
+                server,
             } => {
                 let mut command = vec!["add"];
                 let from = template
@@ -602,7 +626,19 @@ impl Task {
                 if let Some(from) = &from {
                     command.extend(from.iter().map(String::as_str));
                 }
+                let told = server.as_deref().map(server_options).unwrap_or_default();
+                command.extend(told.iter().map(String::as_str));
                 vec![at(holder, &command, &[kind.slug(), name, description])]
+            }
+            Task::EditServer {
+                holder,
+                name,
+                server,
+            } => {
+                let told = server_options(server);
+                let mut command = vec!["edit"];
+                command.extend(told.iter().map(String::as_str));
+                vec![at(holder, &command, &[&qualified(Kind::Mcp, name)])]
             }
             Task::Show { holder, reference } => vec![at(holder, &["show"], &[reference])],
             Task::Edit { holder, kind, name } => {
@@ -1402,6 +1438,50 @@ fn picking(head: &[&str], projects: &[String]) -> Vec<String> {
         line.push(directory(project));
     }
     line
+}
+
+/// The options `add mcp` and `edit` are told how a server is started or
+/// reached by, in the order the grammar lists them, each value after the
+/// option that takes it ([`option`]), so one led by a dash, an argument
+/// above all, is still its value: `--arg=-y`.
+fn server_options(given: &mcp::Given) -> Vec<String> {
+    let mut words = Vec::new();
+    match given {
+        mcp::Given::Program(program) => {
+            words.extend(option("--command", &program.command));
+            for arg in &program.args {
+                words.extend(option("--arg", arg));
+            }
+            for (key, value) in &program.env {
+                words.extend(option("--env", &format!("{key}={value}")));
+            }
+            for variable in &program.secret_env {
+                words.extend(option("--secret-env", variable));
+            }
+            for variable in &program.arg_env {
+                words.extend(option("--arg-env", variable));
+            }
+        }
+        mcp::Given::Address(address) => {
+            words.extend(option("--url", &address.url));
+            if address.events {
+                words.push(String::from("--sse"));
+            }
+            for (key, value) in &address.headers {
+                words.extend(option("--header", &format!("{key}={value}")));
+            }
+            for (header, variable) in &address.secret_headers {
+                words.extend(option("--secret-header", &format!("{header}={variable}")));
+            }
+            if let Some(variable) = &address.bearer {
+                words.extend(option("--bearer-env", variable));
+            }
+            for (name, variable) in &address.url_vars {
+                words.extend(option("--url-var", &format!("{name}={variable}")));
+            }
+        }
+    }
+    words
 }
 
 /// `skill:deploy`: a name that says which kind it names.

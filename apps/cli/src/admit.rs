@@ -107,6 +107,7 @@ impl Admission<'_> {
                 }
             }
             Task::Add { holder, .. }
+            | Task::EditServer { holder, .. }
             | Task::Show { holder, .. }
             | Task::Edit { holder, .. }
             | Task::Save { holder, .. }

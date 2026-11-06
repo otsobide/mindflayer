@@ -835,7 +835,7 @@
         "oneOf": [
           {
             "additionalProperties": false,
-            "description": "What `add` would write, by the fields an `add` task carries: a\ntemplate by its name, as `--template` takes it.",
+            "description": "What `add` would write, by the fields an `add` task carries: a\ntemplate by its name, as `--template` takes it, or for an MCP\nserver how it is started or reached, as `add mcp`'s options say it.",
             "properties": {
               "description": {
                 "type": "string"
@@ -845,6 +845,17 @@
               },
               "name": {
                 "type": "string"
+              },
+              "server": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/GivenSent"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
               },
               "template": {
                 "type": [
@@ -884,6 +895,28 @@
               "type",
               "reference",
               "text"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "What `edit` would write into the MCP server `name` told `server`,\nhow it is started or reached, by the fields an `edit_server` task\ncarries.",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "server": {
+                "$ref": "#/components/schemas/GivenSent"
+              },
+              "type": {
+                "const": "edit_server",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "name",
+              "server"
             ],
             "type": "object"
           }
@@ -1541,6 +1574,157 @@
               "headers",
               "secret_headers",
               "bearer",
+              "url_vars"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "GivenSent": {
+        "description": "How an agent starts an MCP server, or reaches one: a program or an\naddress, never both.\n\nIn JSON, what a front end sends a command line's options as, and what\nthe snapshot says a definition is told as: tagged by `type` inside the\nobject, `{\"type\": \"program\", \"command\": \"npx\", ...}`, as a task is, each\npair as an array of its two words. A field it does not have is refused,\nas a task's is: it is a write, and one misspelled would be dropped.\nEvery secret is the name of the variable it is read from, and no field\nholds a secret's value, there being none for it to hold.",
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "description": "A program an agent starts, `--command`.",
+            "properties": {
+              "arg_env": {
+                "description": "Each argument read from a variable, after those written as they are\n(`--arg-env VAR`). No secret: a program's arguments are what a\nprocess list shows, and Codex reads no secret into one.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "args": {
+                "description": "What it is started with, in order (`--arg`), before every argument\nread from a variable.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "command": {
+                "description": "The program, as the agent finds it (`--command`).",
+                "type": "string"
+              },
+              "env": {
+                "description": "What its environment is given, each value as written (`--env\nK=V`), before every secret.",
+                "items": {
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "prefixItems": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ],
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              "secret_env": {
+                "description": "Each variable passed on to its environment under its own name, a\nsecret (`--secret-env VAR`): the shape every agent can give one,\nCodex's `env_vars` among them.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "type": {
+                "const": "program",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "command",
+              "args",
+              "env",
+              "secret_env",
+              "arg_env"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "A server at an address, `--url`.",
+            "properties": {
+              "bearer": {
+                "description": "The variable `Authorization: Bearer` is followed by, a secret\n(`--bearer-env VAR`): what Codex reads one into\n(`bearer_token_env_var`).",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "events": {
+                "description": "Whether it is reached over server-sent events rather than streamable\nHTTP (`--sse`).",
+                "type": "boolean"
+              },
+              "headers": {
+                "description": "What every request carries, each value as written (`--header K=V`),\nbefore every secret.",
+                "items": {
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "prefixItems": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ],
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              "secret_headers": {
+                "description": "Each header whose whole value is read from a variable, a secret\n(`--secret-header H=VAR`): what Codex reads one into\n(`env_http_headers`).",
+                "items": {
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "prefixItems": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ],
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              "type": {
+                "const": "address",
+                "type": "string"
+              },
+              "url": {
+                "description": "Where the server is, as typed (`--url`): checked for a credential\nbefore anything is written, since the file would keep one, and\nnever kept or said whole once one is found.",
+                "type": "string"
+              },
+              "url_vars": {
+                "description": "Each part of the address read from a variable, by the name the\naddress writes between braces where it goes (`--url-var NAME=VAR`).\nNo secret: an address is what a log or a proxy shows, and Codex\nreads no secret into one.",
+                "items": {
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "prefixItems": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ],
+                  "type": "array"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "type",
+              "url",
+              "events",
+              "headers",
+              "secret_headers",
               "url_vars"
             ],
             "type": "object"
@@ -3643,7 +3827,7 @@
             "type": "object"
           },
           {
-            "description": "`… add [--template <template>] <kind> <name> <description>`.",
+            "description": "`… add [--template <template>] <kind> <name> <description>`, or,\nfor an MCP server, `… add mcp <name> <description>` and the options\nthat say how an agent starts it or reaches it (`server`): what the\npanel's form adding one sends, the form's fields as the options'\nwords, each secret the name of the variable it is read from.",
             "properties": {
               "description": {
                 "type": "string"
@@ -3656,6 +3840,18 @@
               },
               "name": {
                 "type": "string"
+              },
+              "server": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Given"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "None but for a server added from its options, which a template\nsays otherwise: the grammar refuses both, and so the line does."
               },
               "template": {
                 "type": [
@@ -3674,7 +3870,8 @@
               "kind",
               "name",
               "description",
-              "template"
+              "template",
+              "server"
             ],
             "type": "object"
           },
@@ -3754,6 +3951,31 @@
               "name",
               "text",
               "hash"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "`… edit mcp:<name>` and the options that say how an agent starts\nthe server or reaches it: its transport and inputs written again\nfrom them, everything else its definition holds kept\n(`lifecycle::retransport`). What the panel's form changing one\nsends, as the form adding one sends `add`'s.",
+            "properties": {
+              "holder": {
+                "$ref": "#/components/schemas/Holder"
+              },
+              "name": {
+                "type": "string"
+              },
+              "server": {
+                "$ref": "#/components/schemas/Given"
+              },
+              "type": {
+                "const": "edit_server",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "holder",
+              "name",
+              "server"
             ],
             "type": "object"
           },
@@ -4446,7 +4668,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "`… add [--template <template>] <kind> <name> <description>`.",
+            "description": "`… add [--template <template>] <kind> <name> <description>`, or,\nfor an MCP server, `… add mcp <name> <description>` and the options\nthat say how an agent starts it or reaches it (`server`): what the\npanel's form adding one sends, the form's fields as the options'\nwords, each secret the name of the variable it is read from.",
             "properties": {
               "description": {
                 "type": "string"
@@ -4459,6 +4681,18 @@
               },
               "name": {
                 "type": "string"
+              },
+              "server": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/GivenSent"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "None but for a server added from its options, which a template\nsays otherwise: the grammar refuses both, and so the line does."
               },
               "template": {
                 "type": [
@@ -4559,6 +4793,32 @@
               "name",
               "text",
               "hash"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "`… edit mcp:<name>` and the options that say how an agent starts\nthe server or reaches it: its transport and inputs written again\nfrom them, everything else its definition holds kept\n(`lifecycle::retransport`). What the panel's form changing one\nsends, as the form adding one sends `add`'s.",
+            "properties": {
+              "holder": {
+                "$ref": "#/components/schemas/HolderSent"
+              },
+              "name": {
+                "type": "string"
+              },
+              "server": {
+                "$ref": "#/components/schemas/GivenSent"
+              },
+              "type": {
+                "const": "edit_server",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "holder",
+              "name",
+              "server"
             ],
             "type": "object"
           },

@@ -61,6 +61,7 @@ fn add(holder: Holder) -> Task {
         name: String::from("deploy"),
         description: String::from("Ship it"),
         template: None,
+        server: None,
     }
 }
 
@@ -473,6 +474,7 @@ fn what_names_nothing_on_the_disk_is_left_as_it_was_sent() {
         name: String::from("--yes"),
         description: String::from("- the fast way"),
         template: Some(String::from("-rf")),
+        server: None,
     };
 
     assert_eq!(admitted(&workspace, &task).unwrap(), task);

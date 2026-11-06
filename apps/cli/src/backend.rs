@@ -78,6 +78,7 @@ use mindweaver_core::gather::Watch;
 use mindweaver_core::install::{self, Cell, Conflict, Locked};
 use mindweaver_core::known::{self, Launch};
 use mindweaver_core::lock::{self, Waited};
+use mindweaver_core::mcp;
 use mindweaver_core::policy::PolicyError;
 use mindweaver_core::resolve::{resolve, Intent, Reason, Resolved};
 use mindweaver_core::scan::{self, Order, DEFAULT_DEPTH};
@@ -232,17 +233,24 @@ pub enum Query {
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Draft {
     /// What `add` would write, by the fields an `add` task carries: a
-    /// template by its name, as `--template` takes it.
+    /// template by its name, as `--template` takes it, or for an MCP
+    /// server how it is started or reached, as `add mcp`'s options say it.
     Add {
         kind: Kind,
         name: String,
         description: String,
         template: Option<String>,
+        #[serde(default)]
+        server: Option<mcp::Given>,
     },
     /// What `edit --contents` would write into the artifact `reference`
     /// names, `kind:name`, given `text` whole: its `SKILL.md`, or a rule's
     /// file.
     Edit { reference: String, text: String },
+    /// What `edit` would write into the MCP server `name` told `server`,
+    /// how it is started or reached, by the fields an `edit_server` task
+    /// carries.
+    EditServer { name: String, server: mcp::Given },
 }
 
 /// What a scan the panel asked for found ([`Query::Scan`]): what `mindweaver
@@ -812,13 +820,20 @@ impl Backend for PanelBackend {
                         name,
                         description,
                         template,
+                        server,
                     } => draft::added(
                         Some(&workspace),
                         &holder,
                         kind,
                         (&name, &description),
                         template.as_deref(),
-                        None,
+                        server.as_ref(),
+                    ),
+                    Draft::EditServer { name, server } => draft::retransported(
+                        Some(&workspace),
+                        &holder,
+                        &Reference::parse(&crate::task::qualified(Kind::Mcp, &name)),
+                        &server,
                     ),
                     Draft::Edit { reference, text } => draft::edited(
                         Some(&workspace),

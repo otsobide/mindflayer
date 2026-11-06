@@ -2595,6 +2595,72 @@ fn a_draft_is_judged_as_the_command_writing_it_would_judge_it_and_nothing_is_wri
     assert_eq!(unfit["refused"]["message"], said.error.to_string());
 }
 
+/// How a server is started, as the panel's form sends it: a program read
+/// with a secret from `variable`.
+fn program(variable: &str) -> Value {
+    json!({
+        "type": "program", "command": "npx", "args": ["-y", "@acme/server"],
+        "env": [], "secret_env": [variable], "arg_env": [],
+    })
+}
+
+/// A server's add and its edit, as the panel's form sends each, are judged
+/// as the line would judge it and run as the lines `add mcp` and `edit`
+/// take, the form's fields their options: a value shaped like a token is
+/// refused by core, in its words, before anything is written.
+#[test]
+fn a_servers_add_and_edit_are_judged_and_run_as_add_mcp_and_edit_told_its_options() {
+    let dir = workspace_with_two();
+    let root = dir.path();
+    let backend = backend(root);
+    let own = json!({"type": "workspace"});
+    let adding = json!({
+        "type": "add", "kind": "mcp", "name": "github", "description": "GitHub",
+        "template": null, "server": program("GITHUB_TOKEN"),
+    });
+    let (_, token) = mindweaver_core::mother::McpMother::tokens().remove(0);
+    let leaky = json!({
+        "type": "program", "command": "npx", "args": [], "env": [["API_KEY", token]],
+        "secret_env": [], "arg_env": [],
+    });
+
+    let fit = backend.query(judge(own.clone(), adding.clone())).unwrap();
+    let mut sent = adding.clone();
+    sent["holder"] = own.clone();
+    let lines = backend.preview(&task(sent.clone())).unwrap();
+    let ran = backend.run(task(sent)).unwrap();
+    let unfit = backend
+        .query(judge(
+            own.clone(),
+            json!({"type": "edit_server", "name": "github", "server": leaky}),
+        ))
+        .unwrap();
+    let edited = backend
+        .run(task(json!({
+            "type": "edit_server", "holder": own, "name": "github",
+            "server": program("GH_TOKEN"),
+        })))
+        .unwrap();
+
+    assert_eq!(fit, json!({"issues": [], "refused": null}));
+    assert_eq!(
+        lines.lines,
+        [format!(
+            "mindweaver -W {} add --command npx --arg=-y --arg @acme/server \
+             --secret-env GITHUB_TOKEN mcp github GitHub",
+            root.display()
+        )]
+    );
+    assert!(ran.ok, "{ran:?}");
+    assert_eq!(unfit["refused"]["code"], "edit_contents_unfit", "{unfit}");
+    assert!(!unfit.to_string().contains(&token[4..]), "{unfit}");
+    assert!(edited.ok, "{edited:?}");
+    let file = own_directory_for(root, Kind::Mcp).join("github.toml");
+    let written = fs::read_to_string(file).unwrap();
+    assert!(written.contains("env_var = \"GH_TOKEN\""), "{written}");
+    assert!(written.contains("description = \"GitHub\""), "{written}");
+}
+
 /// What `validate` would say of contents an edit would write is what it says
 /// once they are written, word for word, a warning said as one.
 #[test]

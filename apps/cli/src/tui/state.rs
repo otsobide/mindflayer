@@ -1422,6 +1422,9 @@ impl App {
             name: form.name.text().trim().to_owned(),
             description: form.description.text().trim().to_owned(),
             template,
+            // The TUI's form adds the kinds a name and a description make,
+            // which a server, needing how it is started, is not.
+            server: None,
         })
     }
 

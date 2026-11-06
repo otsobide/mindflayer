@@ -12,7 +12,7 @@ use crate::{Cli, WeaverCli};
 /// Every task's name in JSON, as a front end sends it: a contract, pinned
 /// here word for word, so renaming a variant fails a test rather than every
 /// front end that sends the old name.
-const TAGS: [&str; 35] = [
+const TAGS: [&str; 36] = [
     "init_workspace",
     "init_project",
     "link",
@@ -28,6 +28,7 @@ const TAGS: [&str; 35] = [
     "show",
     "edit",
     "save",
+    "edit_server",
     "rename",
     "remove",
     "validate",
@@ -208,6 +209,22 @@ fn every(value: &str) -> Vec<Task> {
                 name: owned(),
                 description: owned(),
                 template: (at % 2 == 0).then(owned),
+                server: None,
+            },
+            // A server's options, which a template refuses beside them: a
+            // program's, or an address's, every field the value.
+            Task::Add {
+                holder: holder.clone(),
+                kind: Kind::Mcp,
+                name: owned(),
+                description: owned(),
+                template: None,
+                server: Some(Box::new(server(value, at % 2 == 0))),
+            },
+            Task::EditServer {
+                holder: holder.clone(),
+                name: owned(),
+                server: Box::new(server(value, at % 2 == 1)),
             },
             Task::Show {
                 holder: holder.clone(),
@@ -300,6 +317,30 @@ fn every(value: &str) -> Vec<Task> {
         ]);
     }
     tasks
+}
+
+/// How a server is started, `value` in every field, as a program, or as an
+/// address reached over server-sent events.
+fn server(value: &str, program: bool) -> mcp::Given {
+    let owned = || value.to_owned();
+    if program {
+        mcp::Given::Program(mcp::Program {
+            command: owned(),
+            args: vec![owned(), String::from("plain")],
+            env: vec![(owned(), owned())],
+            secret_env: vec![value.into()],
+            arg_env: vec![value.into()],
+        })
+    } else {
+        mcp::Given::Address(mcp::Address {
+            url: owned(),
+            events: true,
+            headers: vec![(owned(), owned())],
+            secret_headers: vec![(owned(), value.into())],
+            bearer: Some(value.into()),
+            url_vars: vec![(value.into(), value.into())],
+        })
+    }
 }
 
 /// The name a task goes by in JSON.
@@ -754,6 +795,7 @@ fn a_task_is_one_flat_record_tagged_by_its_name() {
             name: String::from("git/commits"),
             description: String::from("One step at a time"),
             template: None,
+            server: None,
         })
         .unwrap(),
         serde_json::json!({
@@ -763,8 +805,42 @@ fn a_task_is_one_flat_record_tagged_by_its_name() {
             "name": "git/commits",
             "description": "One step at a time",
             "template": null,
+            "server": null,
         })
     );
+    assert_eq!(
+        serde_json::to_value(Task::EditServer {
+            holder: Holder::Workspace,
+            name: String::from("github"),
+            server: Box::new(mcp::Given::Program(mcp::Program {
+                command: String::from("npx"),
+                secret_env: vec!["GITHUB_TOKEN".into()],
+                ..mcp::Program::default()
+            })),
+        })
+        .unwrap(),
+        serde_json::json!({
+            "type": "edit_server",
+            "holder": {"type": "workspace"},
+            "name": "github",
+            "server": {
+                "type": "program",
+                "command": "npx",
+                "args": [],
+                "env": [],
+                "secret_env": ["GITHUB_TOKEN"],
+                "arg_env": [],
+            },
+        })
+    );
+    // An add sent as it was before a server could be told, with no
+    // `server`, is the same add.
+    let sent: Task = serde_json::from_value(serde_json::json!({
+        "type": "add", "holder": {"type": "workspace"}, "kind": "skill",
+        "name": "deploy", "description": "Ship it", "template": null,
+    }))
+    .unwrap();
+    assert!(matches!(sent, Task::Add { server: None, .. }), "{sent:?}");
     assert_eq!(
         serde_json::to_value(MindsChange::InitAndLink).unwrap(),
         "init_and_link"
@@ -1796,4 +1872,82 @@ fn a_change_confirmed_says_yes_only_of_an_install_that_waits_for_one() {
     assert!(!yes(Task::confirmed(install(Kind::Mcp, "workspace"))));
     assert!(!yes(Task::confirmed(install(Kind::Skill, "load:../team"))));
     assert!(!yes(Task::from(install(Kind::Mcp, "load:../team"))));
+}
+
+#[test]
+fn a_servers_add_and_edit_are_its_options_words_each_secret_a_variables_name() {
+    let program = mcp::Given::Program(mcp::Program {
+        command: String::from("npx"),
+        args: vec![String::from("-y"), String::from("@acme/server")],
+        env: vec![(String::from("LOG_LEVEL"), String::from("info"))],
+        secret_env: vec!["GITHUB_TOKEN".into()],
+        arg_env: vec!["WORKSPACE".into()],
+    });
+    let address = mcp::Given::Address(mcp::Address {
+        url: String::from("https://{tenant}.example.com/mcp"),
+        events: true,
+        headers: vec![(String::from("X-Client"), String::from("me"))],
+        secret_headers: vec![(String::from("X-Api-Key"), "API_KEY".into())],
+        bearer: Some("TOKEN".into()),
+        url_vars: vec![("tenant".into(), "TENANT".into())],
+    });
+
+    let added = Task::Add {
+        holder: Holder::Workspace,
+        kind: Kind::Mcp,
+        name: String::from("github"),
+        description: String::from("GitHub"),
+        template: None,
+        server: Some(Box::new(program)),
+    };
+    let edited = Task::EditServer {
+        holder: Holder::Project(String::from("api")),
+        name: String::from("github"),
+        server: Box::new(address),
+    };
+
+    assert_eq!(
+        added.commands(),
+        [owned(&[
+            "mindweaver",
+            "add",
+            "--command",
+            "npx",
+            "--arg=-y",
+            "--arg",
+            "@acme/server",
+            "--env",
+            "LOG_LEVEL=info",
+            "--secret-env",
+            "GITHUB_TOKEN",
+            "--arg-env",
+            "WORKSPACE",
+            "mcp",
+            "github",
+            "GitHub",
+        ])]
+    );
+    assert_eq!(
+        edited.commands(),
+        [owned(&[
+            "mind",
+            "-C",
+            "api",
+            "edit",
+            "--url",
+            "https://{tenant}.example.com/mcp",
+            "--sse",
+            "--header",
+            "X-Client=me",
+            "--secret-header",
+            "X-Api-Key=API_KEY",
+            "--bearer-env",
+            "TOKEN",
+            "--url-var",
+            "tenant=TENANT",
+            "mcp:github",
+        ])]
+    );
+    assert_eq!(added.refusal(), None);
+    assert_eq!(edited.refusal(), None);
 }
