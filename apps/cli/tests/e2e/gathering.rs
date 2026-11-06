@@ -41,7 +41,7 @@ fn gathering_a_repository_puts_its_skills_on_the_shelf_and_says_each() {
         .run("~/Projects", "mindweaver gather git ../src/acme-skills")
         .succeeds()
         .prints(&format!(
-            "../src/acme-skills at {}\n\
+            "src-acme-skills: ../src/acme-skills at {}\n\
              \x20 added  commit-style  How this repo writes commit messages\n\
              \x20 added  ddd-reviewer  Review a change against the DDD layering rules\n\
              \n\
@@ -76,7 +76,7 @@ fn gathering_again_says_what_moved() {
         .run("~/Projects", "mindweaver gather git ../src/acme-skills")
         .succeeds()
         .prints(&format!(
-            "../src/acme-skills at {}\n\
+            "src-acme-skills: ../src/acme-skills at {}\n\
              \x20 updated    commit-style  How this repo writes commit messages\n\
              \x20 unchanged  ddd-reviewer  Review a change against the DDD layering rules\n\
              \n\
@@ -101,7 +101,7 @@ fn a_skill_breaking_the_format_is_gathered_with_a_warning() {
         .run("~/Projects", "mindweaver gather git ../src/other-rules")
         .exits(1)
         .prints(&format!(
-            "../src/other-rules at {}\n\
+            "src-other-rules: ../src/other-rules at {}\n\
              \x20 added  pdf--forms  Fill in PDF forms\n\
              \n\
              1 skill: 1 added, 0 updated, 0 unchanged\n",

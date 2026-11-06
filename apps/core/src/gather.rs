@@ -34,7 +34,7 @@ use crate::lock::LockError;
 use crate::paths;
 use crate::port::{GitError, Remote};
 use crate::url::{carries_credentials, fetched, redacted};
-use crate::value::{ArtifactName, Redacted, Revision};
+use crate::value::{ArtifactName, Origin, Redacted, Revision, SourceName};
 use crate::workspace::WeaverWorkspace;
 
 pub use watch::{Progress, Watch};
@@ -115,6 +115,10 @@ pub struct Request {
     /// What fetches the source: [`Gix`] unless another [`Remote`] is handed
     /// over ([`through`](Self::through)), as a test hands a fake.
     pub remote: Arc<dyn Remote>,
+    /// What to call the source, as somebody typed it: `owner-repo` when
+    /// none is given ([`SourceName::derived`]), and a source gathered
+    /// before called this from now on when one is.
+    pub name: Option<String>,
 }
 
 impl Request {
@@ -129,6 +133,7 @@ impl Request {
             kind: Kind::Skill,
             watch: Watch::new(),
             remote: Arc::new(Gix),
+            name: None,
         }
     }
 
@@ -144,6 +149,13 @@ impl Request {
         match &mut self.source {
             Source::Git { reference: at, .. } => *at = reference,
         }
+        self
+    }
+
+    /// Call the source `name`, when one is given, rather than what its URL
+    /// names it.
+    pub fn named(mut self, name: Option<impl Into<String>>) -> Self {
+        self.name = name.map(Into::into);
         self
     }
 
@@ -182,7 +194,7 @@ pub struct Harvested {
 ///
 /// What it serializes to is a contract, as a status report's is: each field
 /// by its name.
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Serialize)]
 pub struct Report {
     /// The revision that was gathered from, when there was one.
     pub revision: Option<Revision>,
@@ -201,6 +213,9 @@ pub struct Report {
     /// What is wrong with artifacts that were taken anyway.
     #[serde(skip)]
     pub warnings: Vec<Warning>,
+    /// What the source is called, which `--from` takes for what it
+    /// supplied: added after the rest (#98).
+    pub name: SourceName,
 }
 
 impl Report {
@@ -457,13 +472,14 @@ fn harvest(
     // report names the URL. A git credential helper, or the front end once
     // #110 lands, keeps it off the command line altogether.
     //
-    // So is a URL typed where the branch or the folder goes, which the
-    // ledger keeps as that branch or folder, word for word, and an error
-    // repeats: it is somebody's credential all the same.
+    // So is a URL typed where the branch, the folder or the name goes,
+    // which the ledger keeps as that branch or folder, word for word, and an
+    // error repeats: it is somebody's credential all the same.
     let typed = [
         Some(request.source.url()),
         request.source.reference(),
         Some(request.subdirectory.as_str()),
+        request.name.as_deref(),
     ];
     if let Some(carrying) = typed
         .into_iter()
@@ -474,6 +490,14 @@ fn harvest(
             url: redacted(carrying).into_owned(),
         });
     }
+    let name = match &request.name {
+        Some(typed) => Some(
+            SourceName::parse(typed).ok_or_else(|| GatherError::NameInvalid {
+                name: typed.clone(),
+            })?,
+        ),
+        None => None,
+    };
 
     // Only directory-shaped kinds are gatherable today. Matching on the kind
     // rather than on its layout keeps the compiler asking: a third kind has to
@@ -496,22 +520,42 @@ fn harvest(
     // so a second spelling gathers into the source the first registered,
     // and registered as fetched.
     let url = fetched(request.source.url());
-    let new = ledger
-        .source(
-            request.source.kind(),
-            &url,
-            request.source.reference(),
-            &request.subdirectory,
-        )?
-        .is_none();
-    let source = ledger.source_for(
+    let found = ledger.source(
         request.source.kind(),
         &url,
         request.source.reference(),
         &request.subdirectory,
     )?;
+    // Refused before anything is registered: one name is one source, and
+    // which of two a `--from` named is not something to guess.
+    if let Some(name) = &name {
+        if let Some(holder) = ledger.source_named(name)? {
+            if found.as_ref().is_none_or(|found| found.id != holder.id) {
+                return Err(GatherError::NameTaken {
+                    name: name.clone(),
+                    origin: holder.origin(),
+                });
+            }
+        }
+    }
+    let new = found.is_none();
+    let mut source = ledger.source_for(
+        request.source.kind(),
+        &url,
+        request.source.reference(),
+        &request.subdirectory,
+    )?;
+    let was = source.name.clone();
+    if let Some(name) = name.filter(|name| *name != source.name) {
+        ledger.rename_source(source.id, &name)?;
+        source.name = name;
+    }
 
     let outcome = take(workspace, ledger, request, &url, &source, manifest);
+    if !new && source.name != was && matches!(outcome, Err(GatherError::Cancelled)) {
+        // Called what it was again, as a cancel leaves the ledger.
+        ledger.rename_source(source.id, &was)?;
+    }
     if new && matches!(outcome, Err(GatherError::Cancelled)) {
         // Undone rather than never done: the clone needs the folder name that
         // registering gives it before anything is fetched. Holding the
@@ -568,7 +612,12 @@ fn take(
     let mut report = Report {
         revision: clone.revision.clone(),
         directory: source.directory.clone(),
-        ..Report::default()
+        added: Vec::new(),
+        updated: Vec::new(),
+        unchanged: Vec::new(),
+        failures: Vec::new(),
+        warnings: Vec::new(),
+        name: source.name.clone(),
     };
 
     // Everything is read before anything is placed, rather than each
@@ -802,6 +851,18 @@ pub enum GatherError {
     CredentialsInUrl { url: String },
     #[error("{url}: has no `{subdirectory}` folder to gather from")]
     NoSuchFolder { subdirectory: String, url: String },
+    /// `--name` named what no source can be called ([`SourceName::parse`]).
+    #[error(
+        "`{name}` cannot name a source: it has to be letters, digits, `.`, `_` and `-`, not \
+         starting with `-`, and neither `.`, `..` nor `workspace`"
+    )]
+    NameInvalid { name: String },
+    /// Another source is called that already, at `origin`.
+    #[error(
+        "`{name}` is the name of the source at {origin} already: gather this one under another \
+         `--name`"
+    )]
+    NameTaken { name: SourceName, origin: Origin },
     #[error("{} cannot be gathered yet", .kind.plural())]
     NotGatherable { kind: Kind },
     #[error("{path}: cannot be read: {source}")]
@@ -816,6 +877,8 @@ codes!(GatherError {
     Self::Cancelled => "gather_cancelled",
     Self::CredentialsInUrl { .. } => "credentials_in_url",
     Self::NoSuchFolder { .. } => "gather_no_such_folder",
+    Self::NameInvalid { .. } => "source_name_invalid",
+    Self::NameTaken { .. } => "source_name_taken",
     Self::NotGatherable { .. } => "kind_not_gatherable",
     Self::Read { .. } => "gather_read_failed",
 } carried {

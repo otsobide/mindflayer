@@ -210,6 +210,55 @@ fn gather_list_names_where_each_skill_came_from() {
 }
 
 #[test]
+fn gather_says_the_name_of_its_source_and_name_calls_it_what_it_is_given() {
+    let source = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it"))]);
+    let other = repository(&[("skills/review/SKILL.md", &skill_file("review", "Look"))]);
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+    let url = source.path().to_string_lossy().into_owned();
+
+    let named = weaver(dir.path(), &["gather", "git", &url, "--name", "team"]).unwrap();
+    let renamed = weaver(dir.path(), &["gather", "git", &url, "--name", "team.v2"]).unwrap();
+    let taken = weaver(
+        dir.path(),
+        &[
+            "gather",
+            "git",
+            &other.path().to_string_lossy(),
+            "--name",
+            "team.v2",
+        ],
+    )
+    .unwrap_err();
+    let unusable = weaver(dir.path(), &["gather", "git", &url, "--name", "team/v3"]).unwrap_err();
+
+    assert!(
+        named.stdout.starts_with(&format!("team: {url} at ")),
+        "{}",
+        named.stdout
+    );
+    assert!(
+        renamed.stdout.starts_with(&format!("team.v2: {url} at ")),
+        "{}",
+        renamed.stdout
+    );
+    assert_eq!(taken.error.code(), "source_name_taken");
+    assert_eq!(
+        taken.error.to_string(),
+        format!(
+            "`team.v2` is the name of the source at {url} already: gather this one under \
+             another `--name`"
+        )
+    );
+    assert_eq!(unusable.error.code(), "source_name_invalid");
+    assert_eq!(
+        unusable.error.to_string(),
+        "`team/v3` cannot name a source: it has to be letters, digits, `.`, `_` and `-`, not \
+         starting with `-`, and neither `.`, `..` nor `workspace`"
+    );
+}
+
+#[test]
 fn an_empty_shelf_says_how_to_fill_it() {
     let dir = TempDir::new().unwrap();
     weaver(dir.path(), &["init"]).unwrap();

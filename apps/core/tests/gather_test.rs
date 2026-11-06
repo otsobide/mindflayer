@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex};
 use common::{commit, repository, skill, url, workspace, write_files};
 use mindweaver_core::gather::{self, GatherError, Progress, Request, Warning, Watch};
 use mindweaver_core::ledger::{Action, Ledger, SourceKind};
+use mindweaver_core::value::SourceName;
 use mindweaver_core::{Kind, MindProject, ValidationIssue, WeaverWorkspace};
 use tempfile::TempDir;
 
@@ -927,6 +928,115 @@ fn two_gathers_of_a_folder_by_its_path_and_its_file_url_update_one_source() {
     assert!(again.added.is_empty() && again.updated.is_empty());
 }
 
+#[test]
+fn a_gather_names_its_source_as_asked_and_a_later_one_renames_it() {
+    let source = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let first = gather::gather(
+        &workspace,
+        &ledger,
+        &Request::git(url(&source)).named(Some("team-skills")),
+    )
+    .unwrap();
+    let again = gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap();
+    let renamed = gather::gather(
+        &workspace,
+        &ledger,
+        &Request::git(url(&source)).named(Some("Team.Skills_2")),
+    )
+    .unwrap();
+
+    assert_eq!(first.name, "team-skills");
+    // A gather that names none keeps the name the source has.
+    assert_eq!(again.name, "team-skills");
+    assert_eq!(renamed.name, "Team.Skills_2");
+    let sources = ledger.sources().unwrap();
+    assert_eq!(sources.len(), 1, "{sources:?}");
+    assert_eq!(sources[0].name, "Team.Skills_2");
+    assert_eq!(renamed.directory, first.directory, "its folder stays");
+}
+
+#[test]
+fn a_name_another_source_has_is_refused_before_anything_is_registered_or_fetched() {
+    let one = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
+    let other = repository(&[("skills/review/SKILL.md", &skill("review", "Look"))]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    let named = |source: &TempDir| Request::git(url(source)).named(Some("skills"));
+    gather::gather(&workspace, &ledger, &named(&one)).unwrap();
+
+    let refused = gather::gather(&workspace, &ledger, &named(&other)).unwrap_err();
+    // Nor may a source gathered before take it.
+    gather::gather(&workspace, &ledger, &Request::git(url(&other))).unwrap();
+    let renaming = gather::gather(&workspace, &ledger, &named(&other)).unwrap_err();
+
+    for refused in [&refused, &renaming] {
+        assert_eq!(refused.code(), "source_name_taken", "{refused}");
+        assert_eq!(
+            refused.to_string(),
+            format!(
+                "`skills` is the name of the source at {} already: gather this one under \
+                 another `--name`",
+                url(&one)
+            )
+        );
+    }
+    let names: Vec<(String, String)> = ledger
+        .sources()
+        .unwrap()
+        .into_iter()
+        .map(|source| (source.url.to_string(), source.name.to_string()))
+        .collect();
+    assert!(
+        names.contains(&(url(&one), String::from("skills"))),
+        "{names:?}"
+    );
+    assert_eq!(names.len(), 2, "{names:?}");
+}
+
+#[test]
+fn a_name_no_source_can_take_is_refused_and_nothing_registered() {
+    let source = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    for name in ["acme/skills", "workspace", "-skills", "", "..", "load:team"] {
+        let refused = gather::gather(
+            &workspace,
+            &ledger,
+            &Request::git(url(&source)).named(Some(name)),
+        )
+        .unwrap_err();
+
+        assert_eq!(refused.code(), "source_name_invalid", "{name}");
+    }
+    assert!(ledger.sources().unwrap().is_empty());
+    assert!(!workspace.cache_dir().exists());
+}
+
+#[test]
+fn a_cancelled_gather_leaves_its_source_called_what_it_was() {
+    let source = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    let first = gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap();
+    let watch = cancelled_at(|progress| matches!(progress, Progress::Connecting));
+
+    let error = gather::gather(
+        &workspace,
+        &ledger,
+        &Request::git(url(&source))
+            .named(Some("renamed"))
+            .watched_by(watch),
+    )
+    .unwrap_err();
+
+    assert!(matches!(error, GatherError::Cancelled), "{error}");
+    assert_eq!(ledger.sources().unwrap()[0].name, first.name);
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -994,6 +1104,7 @@ fn a_gather_report_serializes_what_changed_and_leaves_its_failures_to_the_warnin
             path: std::path::PathBuf::from("/work/SKILL.md"),
             issue: ValidationIssue::MetadataNotAMap,
         }],
+        name: SourceName::parse("acme-skills").unwrap(),
     };
 
     let serialized = serde_json::to_string(&report).unwrap();
@@ -1006,7 +1117,8 @@ fn a_gather_report_serializes_what_changed_and_leaves_its_failures_to_the_warnin
             r#""path":"/work/.mindweaver/skills/github.com-acme-skills/deploy"}],"#,
             r#""updated":[],"#,
             r#""unchanged":[{"name":"review","directory":"review","summary":"About review","#,
-            r#""path":"/work/.mindweaver/skills/github.com-acme-skills/review"}]}"#,
+            r#""path":"/work/.mindweaver/skills/github.com-acme-skills/review"}],"#,
+            r#""name":"acme-skills"}"#,
         )
     );
 }

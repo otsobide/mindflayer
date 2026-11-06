@@ -29,6 +29,7 @@ pub(crate) fn run_gather(
             url,
             path,
             reference,
+            name,
         } => {
             let workspace = workspace_here(directory, lookup)?;
             let (ledger, scrub) = workspace.ledger_to_write().map_err(CliError::from)?;
@@ -36,6 +37,7 @@ pub(crate) fn run_gather(
             let request = Request::git(url.clone())
                 .from_subdirectory(path.clone())
                 .at(reference.clone())
+                .named(name.clone())
                 .watched_by(watch.clone());
             match gather::gather(&workspace, &ledger, &request) {
                 Ok(report) => Ok(said.before(gathered(url, &report))),
@@ -186,8 +188,9 @@ pub(crate) fn scrubbed(scrub: &Scrub) -> Scrubbed {
     }
 }
 
-/// What one gather did, in the order it is worth reading: the source, then
-/// every artifact and what happened to it, then the count.
+/// What one gather did, in the order it is worth reading: the source, by
+/// the name `--from` takes and the URL it was gathered from, then every
+/// artifact and what happened to it, then the count.
 ///
 /// The source is named without credentials, as everywhere a URL is shown.
 /// A gather that got this far was given none, since core refuses them, so
@@ -200,7 +203,7 @@ fn gathered(url: &str, report: &Report) -> Outcome {
         .as_deref()
         .map(short)
         .map_or_else(String::new, |revision| format!(" at {revision}"));
-    let _ = writeln!(stdout, "{url}{at}");
+    let _ = writeln!(stdout, "{}: {url}{at}", printable(&report.name));
 
     // Added first, then updated, then unchanged: a second gather is run to
     // find out what moved, and what moved should not be at the bottom.

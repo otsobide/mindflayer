@@ -203,15 +203,15 @@ fn a_gather_from_any_credentialed_url_is_refused_before_the_remote_is_asked() {
 /// branch or folder, word for word, so it is refused as one typed where the
 /// URL goes is, before anything is registered.
 #[test]
-fn a_credentialed_url_typed_as_the_branch_or_the_folder_is_refused_alike() {
+fn a_credentialed_url_typed_as_the_branch_the_folder_or_the_name_is_refused_alike() {
     let (_dir, workspace) = WorkspaceMother::empty();
     let ledger = Ledger::in_memory().unwrap();
     for typed in UrlMother::every_credentialed() {
         let remote = Arc::new(Unreached::default());
-        let request = if random::chance() {
-            Request::git(UrlMother::https()).at(Some(typed.typed.as_str()))
-        } else {
-            Request::git(UrlMother::https()).from_subdirectory(typed.typed.clone())
+        let request = match random::between(0, 2) {
+            0 => Request::git(UrlMother::https()).at(Some(typed.typed.as_str())),
+            1 => Request::git(UrlMother::https()).from_subdirectory(typed.typed.clone()),
+            _ => Request::git(UrlMother::https()).named(Some(typed.typed.as_str())),
         }
         .through(remote.clone());
 
@@ -264,13 +264,16 @@ fn a_report_counts_everything_now_on_the_shelf_because_of_it() {
             random::between(0, 4),
         );
         let report = Report {
+            name: SourceMother::random().name,
+            revision: None,
+            directory: random::word(),
             added: (0..added).map(|_| harvested()).collect(),
             updated: (0..updated).map(|_| harvested()).collect(),
             unchanged: (0..unchanged).map(|_| harvested()).collect(),
             failures: vec![Failure::UnusableName {
                 path: PathBuf::from("/w/x"),
             }],
-            ..Report::default()
+            warnings: Vec::new(),
         };
 
         assert_eq!(report.total(), added + updated + unchanged);
@@ -574,6 +577,19 @@ fn each_gather_error_of_its_own_gives_its_own_code() {
                 url: UrlMother::https(),
             },
             "gather_no_such_folder",
+        ),
+        (
+            GatherError::NameInvalid {
+                name: String::from("acme/skills"),
+            },
+            "source_name_invalid",
+        ),
+        (
+            GatherError::NameTaken {
+                name: SourceMother::random().name,
+                origin: SourceMother::random().origin(),
+            },
+            "source_name_taken",
         ),
         (
             GatherError::NotGatherable { kind: Kind::Rule },

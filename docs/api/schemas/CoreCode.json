@@ -188,6 +188,8 @@
     "gather_cancelled",
     "credentials_in_url",
     "gather_no_such_folder",
+    "source_name_invalid",
+    "source_name_taken",
     "kind_not_gatherable",
     "gather_read_failed",
     "source_leftover",
