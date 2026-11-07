@@ -274,7 +274,7 @@ impl fmt::Debug for Answer {
 #[derive(Debug)]
 pub struct Fetched {
     /// The URL the answer came from: the one asked of, or the one the last
-    /// redirect led to. [`fetchable`] let it through, so it carries no
+    /// redirect led to. `fetchable` let it through, so it carries no
     /// credential.
     pub url: String,
     pub status: u16,
@@ -357,7 +357,7 @@ impl<'a> Client<'a> {
 
     /// Fetch `request` and read its answer whole, following its redirects.
     ///
-    /// Refused before anything is sent: a URL [`fetchable`] refuses. A
+    /// Refused before anything is sent: a URL `fetchable` refuses. A
     /// failure: an answer that takes longer than the limit, every redirect
     /// included, one that is larger, a redirect `followed` refuses or one
     /// past [`Limits::max_redirects`], and an answer whose status is not a
@@ -605,7 +605,11 @@ impl<'a> Client<'a> {
 /// ([`Request::credential`]), which is never shown. The parsed URL is asked
 /// too, so a form [`carries_credentials`] reads differently from the parser
 /// cannot slip one through.
-pub fn fetchable(url: &str) -> Result<Url, HttpError> {
+///
+/// Parsed by the `Url` reqwest sends by, so what is checked is what would
+/// be sent, and kept inside core: in its public API, the type would tie
+/// core's to reqwest's version, which the port keeps it from.
+pub(crate) fn fetchable(url: &str) -> Result<Url, HttpError> {
     let refused = || HttpError::CredentialsInUrl {
         url: Redacted::new(url),
     };
@@ -686,7 +690,7 @@ pub enum HttpError {
     /// Not a URL at all.
     #[error("{url}: not a URL that can be fetched: {detail}")]
     Url { url: Redacted, detail: String },
-    /// A URL [`fetchable`] refuses for its scheme or its host.
+    /// A URL `fetchable` refuses for its scheme or its host.
     #[error("{url}: only an https URL is fetched, or an http one on this machine")]
     Insecure { url: Redacted },
     /// A header that cannot be sent as it is, by its name alone, since its
