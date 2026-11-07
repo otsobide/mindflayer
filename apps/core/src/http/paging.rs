@@ -5,6 +5,8 @@
 //! or which parameter says where the next page is, where a listing ends, and
 //! how many pages one is let run to. A cursor that never runs out, or a
 //! listing that links a page to itself, ends at the bound rather than never.
+//! A page says where the next one is in a header (`Link`), by the number in
+//! its URL, or by a cursor in its body, each a [`Paging`].
 
 use serde::de::DeserializeOwned;
 
@@ -21,12 +23,23 @@ pub enum Paging {
     /// the first URL's own number, or 1 when it names none. A page with
     /// nothing in it is past the last, and not kept.
     Number { param: String },
+    /// By a cursor each page carries in its body ([`Page::cursor`]), asked
+    /// for again as the query parameter `param` of the first URL, as the MCP
+    /// Registry pages: the last page carries none, or an empty one.
+    Cursor { param: String },
 }
 
 /// One page of a listing, read as JSON, which says whether it holds
 /// anything: what tells a listing paged by number that it has run out.
 pub trait Page: DeserializeOwned {
     fn is_empty(&self) -> bool;
+
+    /// Where the listing goes on from, for one paged by a cursor its pages
+    /// carry ([`Paging::Cursor`]): none on its last page, and none for a
+    /// page of a listing paged otherwise.
+    fn cursor(&self) -> Option<&str> {
+        None
+    }
 }
 
 /// A page that is the list itself.
@@ -105,6 +118,12 @@ impl Client<'_> {
                 Paging::NextLink => next_link(&fetched)?,
                 Paging::Number { .. } if page.is_empty() => break,
                 Paging::Number { param } => Some(numbered(request.url(), param)?),
+                Paging::Cursor { param } => match page.cursor() {
+                    Some(cursor) if !cursor.is_empty() => {
+                        Some(at_cursor(first.url(), param, cursor)?)
+                    }
+                    _ => None,
+                },
             };
             pages.push(page);
             next = after.map(|url| first.to(&url, url.origin() == origin));
@@ -192,6 +211,28 @@ fn numbered(url: &str, param: &str) -> Result<reqwest::Url, HttpError> {
         None => pairs.push((param.to_owned(), next)),
     }
     parsed.query_pairs_mut().clear().extend_pairs(pairs);
+    Ok(parsed)
+}
+
+/// `url` with its query parameter `param` set to `cursor`, in place of any
+/// it had: the next page of a listing paged by a cursor.
+///
+/// From the first page's URL rather than the last page's, so the query a
+/// listing was asked with goes with every page of it. The cursor is what a
+/// page said, somebody else's text, so it is put in the query as a value
+/// is, escaped, and can add no parameter of its own.
+fn at_cursor(url: &str, param: &str, cursor: &str) -> Result<reqwest::Url, HttpError> {
+    let mut parsed = fetchable(url)?;
+    let pairs: Vec<(String, String)> = parsed
+        .query_pairs()
+        .filter(|(name, _)| name != param)
+        .map(|(name, value)| (name.into_owned(), value.into_owned()))
+        .collect();
+    parsed
+        .query_pairs_mut()
+        .clear()
+        .extend_pairs(pairs)
+        .append_pair(param, cursor);
     Ok(parsed)
 }
 

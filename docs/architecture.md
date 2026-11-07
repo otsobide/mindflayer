@@ -4297,8 +4297,13 @@ raised](#failures-are-collected-not-raised)).
 An answer is read as the JSON its caller declares (`Fetched::json`), strict
 JSON rather than the JSONC agents' config files are read as, and a listing
 a page at a time (`Client::pages`): by the `Link` header's `rel="next"`, as
-GitHub's API pages, or by a number in a query parameter, one more each
-page, until a page with nothing in it. Each next page is asked with the
+GitHub's API pages, by a number in a query parameter, one more each page,
+until a page with nothing in it, or by a cursor each page carries in its
+body (`Page::cursor`), as the MCP Registry pages, until a page carries none
+or an empty one. A cursor is set as its parameter of the first page's URL,
+in place of any the URL had, so the query the listing was asked with goes
+with every page, and as a value, escaped: it is what a page said, and adds
+no parameter of its own. Each next page is asked with the
 first one's headers, its credentials only on the origin the first named,
 as a redirect leaves them. A listing is read no further than the bound its
 caller sets, so a cursor that never runs out ends: what was read is kept,

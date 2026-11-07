@@ -251,8 +251,9 @@ under `apps/` with its own `Makefile`:
   injectable `Http` client a catalog is read through (`http`: an
   `http::Client` handed its transport by its caller, never a global, which
   holds every answer to a total time and a size, follows redirects to https
-  alone, or http on this machine, reads JSON, pages by link or by number as
-  far as a bound (`http/paging.rs`) and keeps answers in
+  alone, or http on this machine, reads JSON, pages by link, by number or
+  by a cursor its pages carry, as far as a bound (`http/paging.rs`), and
+  keeps answers in
   `.mindweaver/cache/http`, which no source's clone is given
   (`http/cache.rs`)). Each, as the ledger's store and the clock, goes
   through a port (`port`: a `Remote` a gather fetches through, an `Http` a

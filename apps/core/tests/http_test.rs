@@ -942,6 +942,128 @@ fn a_listing_by_number_is_bounded_too() {
     assert_eq!(paged.cut.unwrap().code(), "http_too_many_pages");
 }
 
+/// A page as the MCP Registry answers it: the list, and where the listing
+/// goes on from in the body.
+#[derive(Debug, Deserialize)]
+struct Cursored {
+    servers: Vec<Server>,
+    metadata: Metadata,
+}
+
+#[derive(Debug, Deserialize)]
+struct Metadata {
+    #[serde(rename = "nextCursor")]
+    next_cursor: Option<String>,
+}
+
+impl Page for Cursored {
+    fn is_empty(&self) -> bool {
+        self.servers.is_empty()
+    }
+
+    fn cursor(&self) -> Option<&str> {
+        self.metadata.next_cursor.as_deref()
+    }
+}
+
+fn cursored(names: &[&str], next: Option<&str>) -> String {
+    let servers: Vec<String> = names
+        .iter()
+        .map(|name| format!(r#"{{"name":"{name}"}}"#))
+        .collect();
+    let next = next.map_or_else(|| String::from("null"), |next| format!("\"{next}\""));
+    format!(
+        r#"{{"servers":[{}],"metadata":{{"nextCursor":{next},"count":{}}}}}"#,
+        servers.join(","),
+        names.len()
+    )
+}
+
+const REGISTRY: &str = "https://registry.example/v0.1/servers?search=git&limit=2";
+
+fn cursor() -> Paging {
+    Paging::Cursor {
+        param: String::from("cursor"),
+    }
+}
+
+#[test]
+fn a_listing_is_followed_from_cursor_to_cursor_until_a_page_carries_none() {
+    let second = format!("{REGISTRY}&cursor=io.github.acme%2Fb%3A1.0.0");
+    let third = format!("{REGISTRY}&cursor=io.github.acme%2Fd%3A2.0.0");
+    let fake = Fake::new()
+        .answering(
+            REGISTRY,
+            Reply::ok(&cursored(&["a", "b"], Some("io.github.acme/b:1.0.0"))),
+        )
+        .answering(
+            &second,
+            Reply::ok(&cursored(&["c", "d"], Some("io.github.acme/d:2.0.0"))),
+        )
+        .answering(&third, Reply::ok(&cursored(&["e"], None)));
+
+    let paged = Client::new(&fake)
+        .pages::<Cursored>(&Request::get(REGISTRY), &cursor(), 10)
+        .unwrap();
+
+    let read: Vec<&str> = paged
+        .pages
+        .iter()
+        .flat_map(|page| &page.servers)
+        .map(|server| server.name.as_str())
+        .collect();
+    assert_eq!(read, ["a", "b", "c", "d", "e"]);
+    assert!(paged.cut.is_none());
+    let sent: Vec<String> = fake.sent().into_iter().map(|sent| sent.url).collect();
+    assert_eq!(sent, [REGISTRY, second.as_str(), third.as_str()]);
+}
+
+/// An empty cursor is the end as surely as none, rather than the first page
+/// asked for again.
+#[test]
+fn an_empty_cursor_ends_the_listing() {
+    let fake = Fake::new().answering(REGISTRY, Reply::ok(&cursored(&["a"], Some(""))));
+
+    let paged = Client::new(&fake)
+        .pages::<Cursored>(&Request::get(REGISTRY), &cursor(), 10)
+        .unwrap();
+
+    assert_eq!(paged.pages.len(), 1);
+    assert_eq!(fake.sent().len(), 1);
+}
+
+/// A cursor that never runs out, as one naming its own page does, ends at
+/// the bound.
+#[test]
+fn a_listing_by_cursor_is_bounded_too() {
+    let again = format!("{REGISTRY}&cursor=again");
+    let fake = Fake::new()
+        .answering(REGISTRY, Reply::ok(&cursored(&["a"], Some("again"))))
+        .answering(&again, Reply::ok(&cursored(&["a"], Some("again"))));
+
+    let paged = Client::new(&fake)
+        .pages::<Cursored>(&Request::get(REGISTRY), &cursor(), 3)
+        .unwrap();
+
+    assert_eq!(paged.pages.len(), 3);
+    assert_eq!(paged.cut.unwrap().code(), "http_too_many_pages");
+    assert_eq!(fake.sent().len(), 3, "no page past the bound is asked for");
+}
+
+/// A page of a listing paged otherwise says no cursor, so one paged by a
+/// cursor of a type that carries none ends at its first page.
+#[test]
+fn a_page_that_carries_no_cursor_is_the_last() {
+    let fake = Fake::new().answering(SEARCH, Reply::ok(&search(&["a"])));
+
+    let paged = Client::new(&fake)
+        .pages::<Search>(&Request::get(SEARCH), &cursor(), 10)
+        .unwrap();
+
+    assert_eq!(names(&paged.pages), ["a"]);
+    assert_eq!(fake.sent().len(), 1);
+}
+
 /// A next page elsewhere is fetched as a redirect there would be: the
 /// credential stays with the server it was given for.
 #[test]

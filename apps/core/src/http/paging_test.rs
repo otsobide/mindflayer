@@ -67,3 +67,40 @@ fn a_page_number_that_is_no_number_is_said_so() {
          is not a page number"
     );
 }
+
+#[test]
+fn a_cursor_is_asked_for_on_the_first_pages_url_in_place_of_any_it_had() {
+    let next = at_cursor(
+        "https://registry.example/v0.1/servers?search=git&cursor=old&limit=100",
+        "cursor",
+        "io.github.acme/b:1.0.0",
+    )
+    .unwrap();
+
+    assert_eq!(
+        next.as_str(),
+        "https://registry.example/v0.1/servers?search=git&limit=100&cursor=io.github.acme%2Fb%3A1.0.0"
+    );
+}
+
+/// What a page says is somebody else's text: put in as a value, it adds no
+/// parameter of its own.
+#[test]
+fn a_cursor_is_escaped_as_the_value_it_is() {
+    let next = at_cursor(
+        "https://registry.example/v0.1/servers?search=git",
+        "cursor",
+        "x&search=other#top",
+    )
+    .unwrap();
+
+    let pairs: Vec<(String, String)> = next.query_pairs().into_owned().collect();
+    assert_eq!(
+        pairs,
+        [
+            (String::from("search"), String::from("git")),
+            (String::from("cursor"), String::from("x&search=other#top")),
+        ]
+    );
+    assert_eq!(next.fragment(), None);
+}
