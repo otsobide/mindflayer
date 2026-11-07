@@ -217,6 +217,35 @@ pub struct Endpoint {
     pub tokens: Vec<&'static str>,
 }
 
+impl Endpoint {
+    /// The address `url`, as written, with `headers`, among a definition
+    /// declaring `inputs`: what is kept of it, and what is read off the text
+    /// as written before it is redacted, here, where both are at hand,
+    /// since once redacted which inputs and which tokens its userinfo held
+    /// is not known. How a definition read from its file holds an address,
+    /// and how one core makes does.
+    pub(crate) fn read(url: &str, headers: BTreeMap<String, String>, inputs: &[Input]) -> Self {
+        let placeholders: Vec<String> = inputs.iter().map(|input| written(&input.name)).collect();
+        let kept = Redacted::new(url);
+        let tokens = token::found(url, &placeholders);
+        let withheld = inputs
+            .iter()
+            .map(|input| &input.name)
+            .filter(|name| {
+                let written = written(name);
+                url.contains(&written) && !kept.contains(&written)
+            })
+            .cloned()
+            .collect();
+        Endpoint {
+            url: kept,
+            headers,
+            withheld,
+            tokens,
+        }
+    }
+}
+
 /// One value somebody supplies when an agent starts the server.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Input {
@@ -856,29 +885,7 @@ impl From<Raw> for McpDefinition {
                 env_var: input.env_var.map(VariableName::from),
             })
             .collect();
-        // Read off the address as written and what is kept of it, here,
-        // where both are at hand: once redacted, which inputs its userinfo
-        // held is not known.
-        let placeholders: Vec<String> = inputs.iter().map(|input| written(&input.name)).collect();
-        let endpoint = |url: String, headers| {
-            let kept = Redacted::new(&url);
-            let tokens = token::found(&url, &placeholders);
-            let withheld = inputs
-                .iter()
-                .map(|input| &input.name)
-                .filter(|name| {
-                    let written = written(name);
-                    url.contains(&written) && !kept.contains(&written)
-                })
-                .cloned()
-                .collect();
-            Endpoint {
-                url: kept,
-                headers,
-                withheld,
-                tokens,
-            }
-        };
+        let endpoint = |url: String, headers| Endpoint::read(&url, headers, &inputs);
         let transport = match raw.transport {
             RawTransport::Stdio {
                 command,
