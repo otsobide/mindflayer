@@ -4315,7 +4315,12 @@ again unasked while it is fresh, for as long as its caller says
 whether it changed, by the `ETag` or `Last-Modified` it came with: a `304`
 is served from the cache and kept again from then. A request carrying a
 credential goes past the cache both ways, since what a credential unlocked
-is not left on disk for a request without one to read.
+is not left on disk for a request without one to read. An answer a
+redirect brought from another URL is not kept either: an entry says
+nothing of where its answer came from, and a relative `Link` in it is read
+against that place, so a listing read again from the cache would follow it
+from the URL asked, to pages the network never named. What the cache
+serves came from the URL asked (`Fetched::url`).
 
 An entry is a file named for its URL's SHA-256: a URL with a query holds
 `?`, `&`, `/` and `..` in any order and at any length, none of which may

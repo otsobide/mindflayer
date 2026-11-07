@@ -1262,3 +1262,37 @@ fn a_listing_read_again_is_followed_from_the_cache() {
     assert!(again.warnings.is_empty());
     assert_eq!(fake.sent().len(), 2);
 }
+
+/// A page a redirect brought from elsewhere is read again from there: kept
+/// under the URL asked, its relative `Link` would be followed from that URL,
+/// to a page the network never named.
+#[test]
+fn an_answer_a_redirect_brought_from_elsewhere_is_not_kept() {
+    let folder = TempDir::new().unwrap();
+    let clock = Set::at(NOW);
+    let asked = "https://old.example/v0/list";
+    let moved = "https://new.example/api/list";
+    let second = "https://new.example/api/list?page=2";
+    let fake = Fake::new()
+        .answering(asked, redirect(301, moved))
+        .answering(
+            moved,
+            Reply::ok(&search(&["a"])).with("Link", r#"<list?page=2>; rel="next""#),
+        )
+        .answering(second, Reply::ok(&search(&["b"])));
+    let client = Client::new(&fake).with_cache(cache(&folder, &clock));
+
+    let first = client
+        .pages::<Search>(&Request::get(asked), &Paging::NextLink, 10)
+        .unwrap();
+    let again = client
+        .pages::<Search>(&Request::get(asked), &Paging::NextLink, 10)
+        .unwrap();
+
+    assert_eq!(names(&first.pages), ["a", "b"]);
+    assert_eq!(names(&again.pages), ["a", "b"]);
+    assert!(cache(&folder, &clock).read(asked).unwrap().is_none());
+    let sent: Vec<String> = fake.sent().into_iter().map(|sent| sent.url).collect();
+    // The second page was asked of directly, so it is kept, and served.
+    assert_eq!(sent, [asked, moved, second, asked, moved]);
+}

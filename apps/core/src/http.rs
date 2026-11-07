@@ -274,8 +274,9 @@ impl fmt::Debug for Answer {
 #[derive(Debug)]
 pub struct Fetched {
     /// The URL the answer came from: the one asked of, or the one the last
-    /// redirect led to. `fetchable` let it through, so it carries no
-    /// credential.
+    /// redirect led to. One served from the cache came from the one asked
+    /// of, since no answer a redirect brought from elsewhere is kept.
+    /// `fetchable` let it through, so it carries no credential.
     pub url: String,
     pub status: u16,
     pub headers: Headers,
@@ -375,7 +376,11 @@ impl<'a> Client<'a> {
     /// or once the server says it has not changed when it said how to ask
     /// (`ETag`, `Last-Modified`). A request that carries a credential goes
     /// past the cache both ways: what a credential unlocked is not left on
-    /// disk for a request without one to read.
+    /// disk for a request without one to read. Nor is a `200` a redirect
+    /// brought from another URL: an entry does not say where its answer came
+    /// from, and a relative `Link` in it is read against that URL, so a
+    /// listing read again from the cache would follow it from the URL asked,
+    /// to pages the network never named.
     pub fn get(&self, request: &Request) -> Result<Fetched, HttpError> {
         let url = request.url();
         // Before the cache is looked in, which a refused URL never reaches.
@@ -423,7 +428,7 @@ impl<'a> Client<'a> {
                 Ok(served(entry, Served::Revalidated, warnings))
             }
             _ => {
-                if fetched.status == 200 {
+                if fetched.status == 200 && fetched.url == url {
                     if let Err(warning) = cache.write(url, &Entry::of(&fetched, cache.now())) {
                         warnings.push(warning);
                     }
