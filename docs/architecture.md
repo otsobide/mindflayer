@@ -1669,10 +1669,11 @@ refused by `mindweaver init` before anything is made
 (`WorkspaceError::OverlapsGathered`). Gathering replaces and deletes folders
 there by names of its own, so an artifact somebody wrote among them could go
 with the next gather; and a rules folder holding the cache would read every
-markdown file in every clone as one of the workspace's rules. The rules shelf
-is reserved too, though nothing gathers rules yet, rather than matched on the
-kind as `gather` is: scrubbing a source already deletes its folder from every
-kind's shelf, and a kind made gatherable later has to find its shelf free. The
+markdown file in every clone as one of the workspace's rules. Every kind's
+shelf is reserved, the rules' where `gather git --kind rule` files rules
+(#111) as the skills', rather than matched on the kind a gather takes:
+scrubbing a source already deletes its folder from every kind's shelf, and a
+kind made gatherable later has to find its shelf free. The
 comparison ignores ASCII case, since on macOS and Windows `.Mindweaver/Skills`
 is the shelf.
 
@@ -6288,7 +6289,8 @@ as a skill's, since nothing in a project holds a rule's bytes alone to
 compare, and a skill's copy may be behind both places or edited since. A
 project offered nothing of the kind
 shown says what core says it cannot take (`install::receives`), or where that
-kind comes from: a rule from the workspace's own or a load, never the shelf.
+kind comes from: a rule from the workspace's own, a load or the shelf
+(`gather git --kind rule`).
 A row whose box cannot move says why: somebody's, which nothing of
 Mindweaver's touches, and an install edited since, which the screen never
 forces ([an edited copy is left alone](#an-edited-copy-is-left-alone)); every
@@ -11123,11 +11125,11 @@ files](#claudes-rule-files)).
 
 A rule is installed, and taken out, through the same `install::install`
 and `install::uninstall` a skill is (`install::rules`), offered from the
-workspace's own rules and from a load's, by the route it is filed under:
-held to the rules every name is, as the block holds it (`name_issues`),
-rather than to one folder name, and two places offering one route are
-refused as for a skill (`OfferedTwice`), `--from` saying which. A rule is
-never gathered (#111), so the shelf offers none. The command line, the
+workspace's own rules, from a load's and from the shelf ([gathering
+rules](#gathering-rules)), by the route it is filed under: held to the
+rules every name is, as the block holds it (`name_issues`), rather than to
+one folder name, and two places offering one route are refused as for a
+skill (`OfferedTwice`), `--from` saying which. The command line, the
 install screen and what a load is said to offer take rules as they take
 skills ([which kind a name is](#which-kind-a-name-is)).
 
