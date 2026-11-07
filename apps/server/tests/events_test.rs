@@ -204,6 +204,61 @@ async fn a_runs_progress_is_told_between_its_start_and_its_finish() {
     );
 }
 
+/// One at a time on the writer thread: a run or a switch sent while a run
+/// is under way waits behind it, and the panel is told so as each is sent,
+/// with what runs and how many wait, and again as the next run starts with
+/// some still behind it.
+#[tokio::test(flavor = "multi_thread")]
+async fn what_is_sent_while_a_run_is_under_way_is_told_busy_behind_it() {
+    let fake = Fake::default();
+    let hold = Arc::clone(&fake.hold);
+    let server = Arc::new(Server::new(fake).bind().unwrap());
+    let token = server.token().to_owned();
+    let mut stream = opened(&server, Auth::Bearer(&token)).await;
+    let release = Release(Arc::clone(&hold));
+    let send = |path: &'static str, body: Value| {
+        let server = Arc::clone(&server);
+        tokio::spawn(async move { post(&server, path, Auth::Bearer(server.token()), body).await })
+    };
+
+    let first = send("/api/v1/tasks", json!({ "name": "gather", "hold": true }));
+    let reached = Arc::clone(&hold);
+    tokio::task::spawn_blocking(move || reached.reached())
+        .await
+        .unwrap();
+    let gather = json!(["fake run gather"]);
+    assert_eq!(
+        stream.next().await,
+        json!({"type": "command_started", "lines": gather})
+    );
+    let second = send("/api/v1/tasks", json!({ "name": "link beta" }));
+    assert_eq!(
+        stream.next().await,
+        json!({"type": "busy", "lines": gather, "waiting": 1})
+    );
+    let third = send("/api/v1/switch", json!({ "to": "beta" }));
+    assert_eq!(
+        stream.next().await,
+        json!({"type": "busy", "lines": gather, "waiting": 2})
+    );
+    drop(release);
+
+    let link = json!(["fake run link beta"]);
+    assert_eq!(
+        stream.until("switched").await,
+        [
+            json!({"type": "command_finished", "lines": gather}),
+            json!({"type": "command_started", "lines": link}),
+            json!({"type": "busy", "lines": link, "waiting": 1}),
+            json!({"type": "command_finished", "lines": link}),
+            json!({"type": "switched", "switches": 1}),
+        ]
+    );
+    for reply in [first, second, third] {
+        assert_eq!(reply.await.unwrap().status, StatusCode::OK);
+    }
+}
+
 /// Nothing of it ran, so nothing started.
 #[tokio::test]
 async fn a_task_whose_lines_are_refused_is_told_to_nobody() {

@@ -78,6 +78,7 @@ fn every_event() -> Vec<Event> {
             | Event::CommandStarted { .. }
             | Event::CommandFinished { .. }
             | Event::Progress { .. }
+            | Event::Busy { .. }
             | Event::Switched { .. }
             | Event::Resync { .. }
             | Event::Watching
@@ -104,6 +105,10 @@ fn every_event() -> Vec<Event> {
                 total: Some(40),
                 cancellable: true,
             },
+        },
+        Event::Busy {
+            lines: lines.clone(),
+            waiting: 2,
         },
         Event::Progress {
             lines,
@@ -161,6 +166,10 @@ fn an_event_serde_never_writes_is_refused() {
     refused_by("Event", &json!({"type": "switched", "switches": -1}));
     refused_by("Event", &json!({"scopes": []}));
     refused_by("Event", &json!({"type": "progress", "lines": []}));
+    refused_by(
+        "Event",
+        &json!({"type": "busy", "lines": [], "waiting": -1}),
+    );
     refused_by(
         "Event",
         &json!({"type": "progress", "lines": [], "progress": {"step": "x", "done": -1}}),

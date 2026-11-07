@@ -761,6 +761,10 @@ Each is tagged by its `type`:
   `message` for a person, how many of it are `done` of a `total`, `null`
   until it is known, and whether a cancel still stops it
   (`cancellable`).
+- `busy`, with a run's `lines` and how many runs and switches are
+  `waiting` behind it: runs go one at a time, so one sent while another is
+  under way waits its turn, and this says so as it is sent, and again as
+  the next run starts with some still waiting.
 - `switched`, with `switches`, once the server acts on another workspace:
   everything is to be read again.
 

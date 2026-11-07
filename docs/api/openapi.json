@@ -1228,6 +1228,32 @@
             "type": "object"
           },
           {
+            "description": "A run of these lines is under way, and `waiting` jobs, runs and\nswitches, wait their turn behind it on the writer thread: told as\neach is sent while it runs, and as a run starts with some still\nbehind it, so a panel says why what it sent has not started.",
+            "properties": {
+              "lines": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "type": {
+                "const": "busy",
+                "type": "string"
+              },
+              "waiting": {
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "type",
+              "lines",
+              "waiting"
+            ],
+            "type": "object"
+          },
+          {
             "description": "The backend acts on something else since ([`Backend::switch`]),\nand what it names is watched: everything is to be asked for again,\nand nothing shown before kept, since it was of what it acted on\nbefore. Told on the writer thread, once the switch is taken, to\nevery subscriber, the tab that asked for it among them\n([`Events::switched`]), with how many switches were taken since the\nbus was made, this one counted.\n\n[`Backend::switch`]: crate::Backend::switch",
             "properties": {
               "switches": {

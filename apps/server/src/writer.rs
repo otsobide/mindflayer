@@ -63,14 +63,25 @@ enum Job<B: Backend> {
 /// on being answered while it runs.
 pub(crate) struct Writer<B: Backend> {
     queue: mpsc::Sender<Job<B>>,
-    /// The run the thread is on, which a cancel reaches beside the queue.
+    /// The run the thread is on, which a cancel reaches beside the queue,
+    /// and how many jobs wait their turn behind it.
     underway: Underway,
+    /// Where a job sent while a run is under way is told to wait.
+    events: Events,
 }
 
-/// The run under way on the writer thread, if one is: what a cancel
-/// reaches it through, while the thread is the run's.
+/// The run under way on the writer thread, if one is, and how many jobs
+/// wait their turn: what a cancel reaches the run through, while the
+/// thread is the run's, and what a `busy` event says.
 #[derive(Clone, Default)]
-struct Underway(Arc<Mutex<Option<Current>>>);
+struct Underway(Arc<Mutex<Turns>>);
+
+#[derive(Default)]
+struct Turns {
+    current: Option<Current>,
+    /// Jobs queued and not yet taken by the thread.
+    waiting: usize,
+}
 
 /// A run under way: its lines, and what its backend was handed of it.
 #[derive(Clone)]
@@ -80,27 +91,62 @@ struct Current {
 }
 
 impl Underway {
+    /// A job joins the queue: counted, and, when a run is under way, told
+    /// to every subscriber as waiting behind it ([`Event::Busy`]).
+    ///
+    /// Told under the lock the count is kept under, so two jobs sent at
+    /// once are told as one and then two, never two twice.
+    fn queued(&self, events: &Events) {
+        let mut turns = self.lock();
+        turns.waiting += 1;
+        if let Some(current) = &turns.current {
+            events.publish(Event::Busy {
+                lines: current.lines.clone(),
+                waiting: turns.waiting,
+            });
+        }
+    }
+
+    /// A job counted never reached the queue, the thread having stopped.
+    fn unqueued(&self) {
+        let mut turns = self.lock();
+        turns.waiting = turns.waiting.saturating_sub(1);
+    }
+
+    /// The thread takes the next job from the queue.
+    fn taken(&self) {
+        self.unqueued();
+    }
+
     /// The run of `lines` is under way, from its start, once its lines
-    /// passed, to its end.
-    fn started(&self, lines: &[String], running: &Running) {
-        *self.lock() = Some(Current {
+    /// passed, to its end; told as busy when jobs still wait behind it, so
+    /// the panel knows what they wait for now.
+    fn started(&self, lines: &[String], running: &Running, events: &Events) {
+        let mut turns = self.lock();
+        turns.current = Some(Current {
             lines: lines.to_vec(),
             running: running.clone(),
         });
+        if turns.waiting > 0 {
+            events.publish(Event::Busy {
+                lines: lines.to_vec(),
+                waiting: turns.waiting,
+            });
+        }
     }
 
     /// None is, whatever came of the one that was.
     fn finished(&self) {
-        *self.lock() = None;
+        self.lock().current = None;
     }
 
     /// The run under way, if one is: taken out of the lock, so what a
     /// cancel calls runs outside it.
     fn current(&self) -> Option<Current> {
-        self.lock().clone()
+        self.lock().current.clone()
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, Option<Current>> {
+    fn lock(&self) -> std::sync::MutexGuard<'_, Turns> {
         self.0.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
@@ -122,6 +168,7 @@ impl<B: Backend> Writer<B> {
         let (queue, jobs) = mpsc::channel::<Job<B>>();
         let underway = Underway::default();
         let on_it = underway.clone();
+        let told = events.clone();
         thread::Builder::new()
             .name(String::from("mindweaver-writes"))
             .spawn(move || {
@@ -129,6 +176,7 @@ impl<B: Backend> Writer<B> {
                 // does not take its task back, which has already run.
                 let log = log.as_deref();
                 for job in jobs {
+                    on_it.taken();
                     match job {
                         Job::Run { task, sent, reply } => {
                             let took = Took { sent, log };
@@ -146,7 +194,11 @@ impl<B: Backend> Writer<B> {
                     }
                 }
             })?;
-        Ok(Self { queue, underway })
+        Ok(Self {
+            queue,
+            underway,
+            events: told,
+        })
     }
 
     /// Queue a task behind every one that arrived before it, and wait for it
@@ -154,9 +206,7 @@ impl<B: Backend> Writer<B> {
     pub(crate) async fn run(&self, task: B::Task) -> Done {
         let (reply, done) = oneshot::channel();
         let sent = Instant::now();
-        self.queue
-            .send(Job::Run { task, sent, reply })
-            .map_err(|_| stopped())?;
+        self.enqueue(Job::Run { task, sent, reply })?;
         done.await.map_err(|_| stopped())?
     }
 
@@ -165,10 +215,20 @@ impl<B: Backend> Writer<B> {
     pub(crate) async fn switch(&self, to: B::Switch) -> Switched {
         let (reply, done) = oneshot::channel();
         let sent = Instant::now();
-        self.queue
-            .send(Job::Switch { to, sent, reply })
-            .map_err(|_| stopped())?;
+        self.enqueue(Job::Switch { to, sent, reply })?;
         done.await.map_err(|_| stopped())?
+    }
+
+    /// Put `job` behind every one sent before it, counted, and told as
+    /// waiting when a run is under way: one at a time is the thread's rule,
+    /// so a gather that takes a minute holds every write sent meanwhile,
+    /// and the panel is told why nothing it sent has started.
+    fn enqueue(&self, job: Job<B>) -> Result<(), Failed> {
+        self.underway.queued(&self.events);
+        self.queue.send(job).map_err(|_| {
+            self.underway.unqueued();
+            stopped()
+        })
     }
 
     /// Ask the run under way to stop ([`Running::cancel`]), and say which
@@ -295,7 +355,7 @@ fn perform<B: Backend>(backend: &B, task: B::Task, around: Around<'_>, took: Too
             });
         }
     });
-    underway.started(&lines, &running);
+    underway.started(&lines, &running, events);
     let started = Instant::now();
     let ran = panic::catch_unwind(AssertUnwindSafe(|| backend.run(task, &running)));
     underway.finished();

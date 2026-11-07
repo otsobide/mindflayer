@@ -48,6 +48,11 @@ pub enum Event {
         lines: Vec<String>,
         progress: Progress,
     },
+    /// A run of these lines is under way, and `waiting` jobs, runs and
+    /// switches, wait their turn behind it on the writer thread: told as
+    /// each is sent while it runs, and as a run starts with some still
+    /// behind it, so a panel says why what it sent has not started.
+    Busy { lines: Vec<String>, waiting: usize },
     /// The backend acts on something else since ([`Backend::switch`]),
     /// and what it names is watched: everything is to be asked for again,
     /// and nothing shown before kept, since it was of what it acted on
