@@ -78,6 +78,7 @@ use crate::opencode_mcp::{self, OpenCodeMcpError};
 use crate::policy::PolicyError;
 use crate::port::GitError;
 use crate::reapply::{ReapplyError, ReapplyFailure};
+use crate::registry::Unreadable;
 use crate::relink::{Duplicate, RelinkError};
 use crate::resolve::ResolveError;
 use crate::scan::ScanFailure;
@@ -259,6 +260,7 @@ pub const ALL: &[(&str, &[&str])] = &[
     ("policy::PolicyError", PolicyError::CODES),
     ("reapply::ReapplyError", ReapplyError::CODES),
     ("reapply::ReapplyFailure", ReapplyFailure::CODES),
+    ("registry::Unreadable", Unreadable::CODES),
     ("relink::Duplicate", Duplicate::CODES),
     ("relink::RelinkError", RelinkError::CODES),
     ("resolve::ResolveError", ResolveError::CODES),

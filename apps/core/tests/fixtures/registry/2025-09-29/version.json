@@ -1,0 +1,99 @@
+{
+  "server": {
+    "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+    "name": "io.github.acme/weather",
+    "title": "Weather",
+    "description": "Forecasts and alerts for any city",
+    "version": "1.0.2",
+    "websiteUrl": "https://acme.example/weather",
+    "repository": {
+      "url": "https://git.acme.example/acme/weather",
+      "source": "github",
+      "subfolder": "servers/weather"
+    },
+    "packages": [
+      {
+        "registryType": "npm",
+        "registryBaseUrl": "https://registry.npmjs.org",
+        "identifier": "@acme/weather-mcp",
+        "version": "1.0.2",
+        "runtimeHint": "npx",
+        "transport": {
+          "type": "stdio"
+        },
+        "packageArguments": [
+          {
+            "type": "named",
+            "name": "--units",
+            "description": "The units forecasts are given in",
+            "value": "metric",
+            "format": "string",
+            "choices": [
+              "metric",
+              "imperial"
+            ]
+          },
+          {
+            "type": "positional",
+            "valueHint": "city",
+            "description": "The city forecasts are for",
+            "isRequired": true
+          },
+          {
+            "type": "named",
+            "name": "--verbose",
+            "description": "Says more of what it does",
+            "format": "boolean",
+            "isRepeated": false
+          }
+        ],
+        "environmentVariables": [
+          {
+            "name": "WEATHER_API_KEY",
+            "description": "The key the forecasts are fetched with",
+            "isRequired": true,
+            "isSecret": true,
+            "default": "change-me-in-production",
+            "placeholder": "your-weather-key-here"
+          },
+          {
+            "name": "WEATHER_LOG_LEVEL",
+            "description": "How much it logs",
+            "default": "info",
+            "choices": [
+              "debug",
+              "info",
+              "warn"
+            ]
+          },
+          {
+            "name": "WEATHER_ENDPOINT",
+            "description": "Where the forecasts come from",
+            "value": "https://{region}.api.acme.example",
+            "variables": {
+              "region": {
+                "description": "The region closest to you",
+                "isRequired": true,
+                "default": "eu"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "_meta": {
+      "io.modelcontextprotocol.registry/publisher-provided": {
+        "tool": "publisher-cli",
+        "version": "1.2.3"
+      }
+    }
+  },
+  "_meta": {
+    "io.modelcontextprotocol.registry/official": {
+      "status": "active",
+      "publishedAt": "2025-10-01T12:00:00Z",
+      "updatedAt": "2025-10-01T12:00:00Z",
+      "isLatest": true
+    }
+  }
+}

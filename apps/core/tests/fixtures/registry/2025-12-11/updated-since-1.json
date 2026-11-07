@@ -1,0 +1,33 @@
+{
+  "servers": [
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "io.github.acme/notes",
+        "title": "Notes",
+        "description": "Your notes, searched and written",
+        "version": "1.4.0",
+        "packages": [
+          {
+            "registryType": "npm",
+            "identifier": "@acme/notes-mcp",
+            "version": "1.4.0",
+            "transport": { "type": "stdio" }
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "deprecated",
+          "publishedAt": "2025-11-20T10:00:00Z",
+          "updatedAt": "2026-01-05T12:00:00Z",
+          "isLatest": false
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "nextCursor": "io.github.acme/notes:1.4.0",
+    "count": 1
+  }
+}

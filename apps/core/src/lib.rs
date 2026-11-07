@@ -60,6 +60,7 @@ pub mod policy;
 pub mod port;
 pub mod reading;
 pub mod reapply;
+pub mod registry;
 pub mod relink;
 pub mod resolve;
 pub mod rule;

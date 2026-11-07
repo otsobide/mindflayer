@@ -461,6 +461,7 @@
         "reapply_remove_failed",
         "reapply_still_excluded",
         "reapply_ignore_unremoved",
+        "registry_server_unreadable",
         "duplicate_id",
         "relink_no_id",
         "relink_already_linked",

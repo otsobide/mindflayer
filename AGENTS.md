@@ -255,7 +255,10 @@ under `apps/` with its own `Makefile`:
   by a cursor its pages carry, as far as a bound (`http/paging.rs`), and
   keeps answers in
   `.mindweaver/cache/http`, which no source's clone is given
-  (`http/cache.rs`)). Each, as the ledger's store and the clock, goes
+  (`http/cache.rs`); the official MCP Registry is read through it, its
+  `/v0.1` API searched, a server's version fetched and what changed since
+  a time listed, a server at a time, at the address its caller names
+  (`registry`, its JSON's shapes in `registry/server.rs`)). Each, as the ledger's store and the clock, goes
   through a port (`port`: a `Remote` a gather fetches through, an `Http` a
   client sends through, a `LedgerStore` the ledger keeps its records in, a
   `Clock` it stamps them by), each
@@ -1778,7 +1781,10 @@ These are easy to break from a single file without noticing.
   `AgentHomes` (`codex_mcp_test.rs`'s `codex_home`).
 - Git sources are built in-process with `gix` (`common::repository`): no
   network and no `git` binary. HTTP is a fake `Http` kept in memory
-  (`apps/core/tests/http_test.rs`), and the default transport's own tests
+  (`apps/core/tests/http_test.rs`; the MCP Registry's suite,
+  `registry_test.rs`, answers with fixtures written by hand to the
+  registry's schemas, by date, in `tests/fixtures/registry/`, never
+  recorded from it), and the default transport's own tests
   reach only a server each starts on 127.0.0.1, port 0, with std's
   `TcpListener` (`adapter/reqwest_test.rs`): no test names another host, and
   a redirect to one is refused before it could be sent. A CLI fixture's project is a repository given

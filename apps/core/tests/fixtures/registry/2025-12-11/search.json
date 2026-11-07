@@ -1,0 +1,255 @@
+{
+  "servers": [
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "io.github.acme/notes",
+        "title": "Notes",
+        "description": "Your notes, searched and written",
+        "version": "2.0.0",
+        "websiteUrl": "https://acme.example/notes",
+        "icons": [
+          { "src": "https://acme.example/notes.png", "mimeType": "image/png", "sizes": ["48x48"] }
+        ],
+        "packages": [
+          {
+            "registryType": "npm",
+            "identifier": "@acme/notes-mcp",
+            "transport": { "type": "stdio" }
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "publishedAt": "2025-12-15T09:00:00Z",
+          "updatedAt": "2025-12-15T09:00:00Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "io.github.acme/pynotes",
+        "description": "Your notes, in Python",
+        "version": "2.0.0",
+        "packages": [
+          {
+            "registryType": "pypi",
+            "identifier": "acme-notes",
+            "transport": { "type": "stdio" }
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "publishedAt": "2025-12-15T09:05:00Z",
+          "updatedAt": "2025-12-15T09:05:00Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "io.github.acme/notes-image",
+        "description": "Your notes, in a container",
+        "version": "2.0.0",
+        "packages": [
+          {
+            "registryType": "oci",
+            "identifier": "ghcr.io/acme/notes-mcp:2.0.0",
+            "transport": { "type": "stdio" },
+            "runtimeArguments": [
+              {
+                "type": "named",
+                "name": "--mount",
+                "description": "Where your notes are",
+                "value": "type=bind,src={notes_dir},dst=/notes",
+                "variables": {
+                  "notes_dir": {
+                    "description": "The folder your notes are in",
+                    "isRequired": true,
+                    "format": "filepath"
+                  }
+                }
+              }
+            ],
+            "environmentVariables": [
+              {
+                "name": "NOTES_TOKEN",
+                "description": "The token your notes are read with",
+                "isRequired": true,
+                "isSecret": true
+              }
+            ]
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "publishedAt": "2025-12-15T09:10:00Z",
+          "updatedAt": "2025-12-15T09:10:00Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "io.github.acme/notes-dotnet",
+        "description": "Your notes, in .NET",
+        "version": "2.0.0",
+        "packages": [
+          {
+            "registryType": "nuget",
+            "identifier": "Acme.Notes.Mcp",
+            "transport": { "type": "stdio" }
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "publishedAt": "2025-12-15T09:15:00Z",
+          "updatedAt": "2025-12-15T09:15:00Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "io.github.acme/notes-cloud",
+        "description": "Your notes, hosted by Acme",
+        "version": "2.0.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.notes.acme.example/mcp/{edition}",
+            "variables": {
+              "tenant": {
+                "description": "Your workspace at Acme",
+                "isRequired": true
+              },
+              "edition": {
+                "description": "Which edition you have",
+                "value": "v2"
+              }
+            },
+            "headers": [
+              {
+                "name": "X-Notes-Key",
+                "description": "Your notes key",
+                "isRequired": true,
+                "isSecret": true,
+                "default": "notes-key-that-ships-with-the-docs"
+              }
+            ]
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "publishedAt": "2025-12-15T09:20:00Z",
+          "updatedAt": "2025-12-15T09:20:00Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "io.github.acme/notes-bundle",
+        "description": "Your notes, as an MCP bundle",
+        "version": "2.0.0",
+        "packages": [
+          {
+            "registryType": "mcpb",
+            "identifier": "https://downloads.acme.example/notes-2.0.0.mcpb",
+            "fileSha256": "fe333e598595000ae021bd27117db32ec69af6987f507ba7a63c90638ff633ce",
+            "transport": { "type": "stdio" }
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "publishedAt": "2025-12-15T09:25:00Z",
+          "updatedAt": "2025-12-15T09:25:00Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "io.github.acme/notes-crate",
+        "description": "Your notes, in Rust",
+        "version": "2.0.0",
+        "packages": [
+          {
+            "registryType": "cargo",
+            "identifier": "acme-notes-mcp",
+            "version": "2.0.0",
+            "transport": { "type": "stdio" }
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "publishedAt": "2025-12-15T09:30:00Z",
+          "updatedAt": "2025-12-15T09:30:00Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "io.github.acme/notes-brew",
+        "description": "Your notes, from a tap",
+        "version": "2.0.0",
+        "packages": [
+          {
+            "registryType": "brew",
+            "identifier": "acme/tap/notes-mcp",
+            "transport": { "type": "stdio" }
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "publishedAt": "2025-12-15T09:35:00Z",
+          "updatedAt": "2025-12-15T09:35:00Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "io.github.acme/notes\r\nio.github.acme/trusted",
+        "description": "A name that would rewrite the line above it",
+        "version": "2.0.0"
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "publishedAt": "2025-12-15T09:40:00Z",
+          "updatedAt": "2025-12-15T09:40:00Z",
+          "isLatest": true
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "count": 9
+  }
+}

@@ -4383,6 +4383,66 @@ refused to overlap ([the workspace's own
 artifacts](#the-workspaces-own-artifacts)), and a folder beside the marker
 would be one more for that refusal to learn.
 
+### The MCP Registry
+
+The official MCP Registry, `registry.modelcontextprotocol.io`, is the
+first catalog read through the client (#106), by its `/v0.1` API, the one
+the registry keeps stable while the rest of it is in preview
+(`registry::Registry`, in `apps/core/src/registry.rs`). It is handed the
+`Client` its caller made, so whether answers are kept is the caller's
+(`Cache::of` the workspace's) and every page and every version fetched
+goes through the client's limits and its cache; and where the registry is
+is a parameter, the official one unless the caller names another
+(`Registry::at`), so a test's fake, or a registry of somebody's own that
+speaks the same API, is read the same way. Three reads, none of which
+writes anything:
+
+- **A search** (`Registry::search`): `servers?search=Q&version=latest`,
+  the latest version of every server the registry matches, a hundred a
+  page (`PAGE_SIZE`, the most it gives one) and paged by the cursor each
+  page carries in its body ([a listing a page at a
+  time](#a-listing-a-page-at-a-time)), to ten pages unless the caller says
+  otherwise (`MAX_PAGES`), the cut said beside what was read.
+- **One version** (`Registry::version`): `servers/NAME/versions/V`, `V`
+  `latest` or a version as the registry names it, the server's name one
+  segment of the path though it holds a `/`.
+- **What changed since a time** (`Registry::updated_since`):
+  `servers?updated_since=T`, every version and not only the latest, the
+  deleted among them, each said `deleted`, so that what keeps a server
+  the registry took away learns it rather than keeping it as it was. A
+  refresh asks for this, rather than the whole registry again.
+
+What it answers is JSON somebody else wrote, read leniently, as a
+marketplace's catalog is ([a marketplace and its
+plugins](#a-marketplace-and-its-plugins)): a page is read a server at a
+time, so one that does not read, with no name, no version, or a key this
+build reads given another shape, is said on its own
+(`registry_server_unreadable`, by where it was listed) and the rest are
+listed all the same; a key it does not know is passed over, so a later
+schema reads as this one; and a name or a version that a list would show
+as other than it is, a control character in it or a space at either end,
+is no server's, since a front end would show a name the registry is then
+asked for in vain. Every other string a front end is handed of it, a
+title, a description, a time, a status word this build does not know, is
+made printable first (`text::printable`, the function every row of the
+CLI is made printable by, moved into core for it), and the registry's
+address is kept as a `Redacted`. One version asked for by name that does
+not read is the answer failing (`http_json_invalid`), since there is no
+rest to list beside it.
+
+What the registry says of a server of its own accord, under
+`_meta["io.modelcontextprotocol.registry/official"]`, is read beside it:
+its status (`registry::Status`: `active`, `deprecated`, `deleted`, or a
+word this build does not know, kept as said), when it was published and
+last changed, and whether it is the latest. A schema before 2025-09-29 put
+the status in the server's own document, which is read when the metadata
+says none. Each server read is stamped with when it was read
+(`ServerVersion::fetched_at`, by a `Clock`), which what is imported says
+it was fetched at. A listing serializes as the read type it is
+(`ServerVersion`, `Listing`, each name pinned by a test), what it could
+not read and what went wrong as `code::Said`; the `server.json` it was
+read from is kept beside it, for the mapping, and serialized nowhere.
+
 ## Installing
 
 Gathering fills the shelf; installing is the other half, and the only thing in

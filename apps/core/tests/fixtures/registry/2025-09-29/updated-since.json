@@ -1,0 +1,58 @@
+{
+  "servers": [
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+        "name": "io.github.acme/weather",
+        "title": "Weather",
+        "description": "Forecasts and alerts for any city",
+        "version": "1.0.1",
+        "packages": [
+          {
+            "registryType": "npm",
+            "registryBaseUrl": "https://registry.npmjs.org",
+            "identifier": "@acme/weather-mcp",
+            "version": "1.0.1",
+            "transport": { "type": "stdio" }
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "deprecated",
+          "publishedAt": "2025-09-30T12:00:00Z",
+          "updatedAt": "2025-11-02T08:00:00Z",
+          "isLatest": false
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+        "name": "io.github.acme/forecast-old",
+        "description": "Forecasts, before Weather replaced it",
+        "version": "0.3.0",
+        "packages": [
+          {
+            "registryType": "npm",
+            "registryBaseUrl": "https://registry.npmjs.org",
+            "identifier": "@acme/forecast-mcp",
+            "version": "0.3.0",
+            "transport": { "type": "stdio" }
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "deleted",
+          "publishedAt": "2025-09-29T18:00:00Z",
+          "updatedAt": "2025-11-03T14:30:00Z",
+          "isLatest": true
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "count": 2
+  }
+}
