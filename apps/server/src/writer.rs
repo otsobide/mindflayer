@@ -12,6 +12,7 @@ use tokio::sync::oneshot;
 use crate::code::Condition;
 use crate::events::{Event, Events};
 use crate::log::{Log, Planned};
+use crate::running::Running;
 use crate::transcript::{Ran, Transcript};
 use crate::watcher::Watcher;
 use crate::{Backend, Refusal};
@@ -162,9 +163,11 @@ fn panicked(message: &'static str) -> Failed {
 ///
 /// One that runs is told to every subscriber as it starts and as it
 /// finishes, however it finishes, a refusal or a panic included, so a panel
-/// showing it running never waits for an end that is not coming. Finished
-/// is told once the run is in the transcript, as the reply is sent, so
-/// whoever asks for the transcript on hearing it finds the run there.
+/// showing it running never waits for an end that is not coming, and in
+/// between each step the backend says of how far it got ([`Running`]).
+/// Finished is told once the run is in the transcript, as the reply is
+/// sent, so whoever asks for the transcript on hearing it finds the run
+/// there.
 ///
 /// Said in the log, when there is one, once its lines are worked out, with
 /// how long it waited its turn and how long they took to work out, and
@@ -206,10 +209,21 @@ fn perform<B: Backend>(
     events.publish(Event::CommandStarted {
         lines: lines.clone(),
     });
-    let running = Instant::now();
-    let ran = panic::catch_unwind(AssertUnwindSafe(move || backend.run(task)));
+    // Each step it says told with its lines, as its start and its finish
+    // are, so a subscriber that heard neither knows which run it is of.
+    let running = Running::new({
+        let (events, lines) = (events.clone(), lines.clone());
+        move |progress| {
+            events.publish(Event::Progress {
+                lines: lines.clone(),
+                progress: progress.clone(),
+            });
+        }
+    });
+    let started = Instant::now();
+    let ran = panic::catch_unwind(AssertUnwindSafe(move || backend.run(task, &running)));
     if let Some(log) = took.log {
-        log.ran(running.elapsed(), lines.len());
+        log.ran(started.elapsed(), lines.len());
     }
     let done = match ran {
         Ok(Ok(outcome)) => {

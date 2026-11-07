@@ -736,6 +736,11 @@ Each is tagged by its `type`:
   what changed: read it again.
 - `command_started` and `command_finished`, with a run's `lines`, around
   each run, whoever sent it.
+- `progress`, with a run's `lines` and how far it has got, between the
+  two, for a run that says so: its `step` as one word, the same as a
+  `message` for a person, how many of it are `done` of a `total`, `null`
+  until it is known, and whether a cancel still stops it
+  (`cancellable`).
 - `switched`, with `switches`, once the server acts on another workspace:
   everything is to be read again.
 

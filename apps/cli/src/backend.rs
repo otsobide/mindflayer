@@ -91,7 +91,7 @@ use mindweaver_core::{
     AgentHomes, Found, Kind, LifecycleError, MindProject, Reference, Scan, WeaverWorkspace,
     WorkspaceError,
 };
-use mindweaver_server::{Backend, Grounds, Preview, Refusal, Route, Watched};
+use mindweaver_server::{Backend, Grounds, Preview, Refusal, Route, Running, Watched};
 use serde::{Deserialize, Serialize};
 
 use crate::admit::Admission;
@@ -1002,7 +1002,7 @@ impl Backend for PanelBackend {
     /// A save's text is put where its line reads it before the line runs,
     /// and taken away once the lines have run, whatever came of them
     /// ([`Scratch`]): the browser sends the text, never a path.
-    fn run(&self, task: Task) -> Result<Outcome, Refusal> {
+    fn run(&self, task: Task, _running: &Running) -> Result<Outcome, Refusal> {
         let pin = self.pin();
         let plan = self.plan(&task, &pin)?;
         let _scratch = match &task {

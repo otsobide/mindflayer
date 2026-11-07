@@ -16,7 +16,7 @@ use common::*;
 use mindweaver_cli::backend::{Outcome, PanelBackend, Query, Switch};
 use mindweaver_cli::task::{naming, shell, Caution};
 use mindweaver_core::watch;
-use mindweaver_server::{Backend, Grounds, Own, Preview, Ran, Refusal, API};
+use mindweaver_server::{Backend, Grounds, Own, Preview, Ran, Refusal, Running, API};
 use serde_json::{json, Value};
 
 /// The backend over the workspace at `root`, launched there with nothing
@@ -87,7 +87,7 @@ impl Checked {
     /// Answered, as the server answers a run, with the lines that ran
     /// beside what they produced.
     fn run(&self, task: Task) -> Result<Outcome, Refusal> {
-        let answer = Backend::run(&self.0, task);
+        let answer = Backend::run(&self.0, task, &Running::default());
         let ran = answer.as_ref().map(|outcome| Ran {
             lines: outcome.runs.iter().map(|run| run.command.clone()).collect(),
             outcome: serde_json::to_value(outcome).unwrap(),

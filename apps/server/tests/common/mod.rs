@@ -11,8 +11,8 @@ pub mod mother;
 pub use axum::body::{Body, Bytes};
 pub use axum::http::{header, HeaderMap, Method, Request, StatusCode};
 pub use mindweaver_server::{
-    Arguments, Backend, Condition, Grounds, Listening, Own, Parameter, Preview, Refusal, Route,
-    Server, Shape, Watched, API,
+    Arguments, Backend, Condition, Grounds, Listening, Own, Parameter, Preview, Progress, Refusal,
+    Route, Running, Server, Shape, Watched, API,
 };
 pub use serde_json::{json, Value};
 pub use std::sync::{Arc, Condvar, Mutex};
@@ -128,8 +128,10 @@ fn echoed(sent: Arguments) -> Result<FakeQuery, String> {
 /// before finishing, whether to finish with an outcome JSON cannot carry,
 /// whether to refuse it, when its lines are asked for (`refuse`) or only
 /// once it is handed over to run (`refuse_run`), whether its run panics, as
-/// a backend with a bug would, and what its preview says to confirm first,
-/// in words of the fake's own (`confirm`).
+/// a backend with a bug would, what its preview says to confirm first, in
+/// words of the fake's own (`confirm`), and the steps its run says it
+/// reached, in order, before it waits at the hold (`steps`, each counted
+/// by its place among them, of how many there are).
 ///
 /// A run takes no notice of `refuse`: one whose lines were refused and is
 /// handed over all the same runs, and the runs it leaves say so.
@@ -148,6 +150,17 @@ pub struct FakeTask {
     pub panic: bool,
     #[serde(default)]
     pub confirm: Vec<String>,
+    #[serde(default)]
+    pub steps: Vec<FakeStep>,
+}
+
+/// A step a fake run says it reached: a word of the fake's own, and
+/// whether a cancel still stops it there.
+#[derive(Deserialize)]
+pub struct FakeStep {
+    pub step: String,
+    #[serde(default)]
+    pub cancellable: bool,
 }
 
 /// The fake's switch: what to act on from now on, by a name of the fake's
@@ -263,7 +276,7 @@ impl Backend for Fake {
         })
     }
 
-    fn run(&self, task: FakeTask) -> Result<FakeOutcome, Refusal> {
+    fn run(&self, task: FakeTask, running: &Running) -> Result<FakeOutcome, Refusal> {
         if task.refuse_run {
             return Err(refusal(&task.name));
         }
@@ -274,6 +287,16 @@ impl Backend for Fake {
             .lock()
             .unwrap()
             .push(format!("start {}", task.name));
+        let total = task.steps.len() as u64;
+        for (done, step) in (1..).zip(&task.steps) {
+            running.report(Progress {
+                step: step.step.clone(),
+                message: format!("{} {done}/{total}", step.step),
+                done,
+                total: Some(total),
+                cancellable: step.cancellable,
+            });
+        }
         if task.hold {
             self.hold.wait();
         }

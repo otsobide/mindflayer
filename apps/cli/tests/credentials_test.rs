@@ -332,7 +332,7 @@ mod panel {
 
     use super::*;
     use mindweaver_cli::backend::{PanelBackend, Query};
-    use mindweaver_server::Backend;
+    use mindweaver_server::{Backend, Running};
     use serde_json::{json, Value};
 
     fn backend(root: &Path) -> PanelBackend {
@@ -371,7 +371,7 @@ mod panel {
                 url.typed,
                 refused.message
             );
-            let refused = Backend::run(&backend, gather).unwrap_err();
+            let refused = Backend::run(&backend, gather, &Running::default()).unwrap_err();
             holds_no_secret(&refused.message, &url, "the refusal of a gather's run");
 
             let install = task(json!({
@@ -385,7 +385,7 @@ mod panel {
             let shown = serde_json::to_string(&preview).unwrap();
             holds_no_secret(&shown, &url, "the preview of an install");
             assert!(shown.contains(&url.clean), "{shown}");
-            let ran = Backend::run(&backend, install).unwrap();
+            let ran = Backend::run(&backend, install, &Running::default()).unwrap();
             assert!(!ran.ok, "{:?}", url.typed);
             holds_no_secret(
                 &serde_json::to_string(&ran).unwrap(),

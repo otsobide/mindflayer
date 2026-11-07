@@ -156,6 +156,54 @@ async fn a_run_is_told_as_it_starts_and_once_it_is_in_the_transcript() {
     assert_eq!(transcript[0]["lines"], lines);
 }
 
+/// Each step the backend says of a run reaches the stream between its
+/// start and its finish, in the server's shape, with the run's lines, so a
+/// tab that opened the stream once the run had started still knows which
+/// run it is of.
+#[tokio::test]
+async fn a_runs_progress_is_told_between_its_start_and_its_finish() {
+    let (server, _) = launch();
+    let token = Auth::Bearer(server.token());
+    let mut stream = opened(&server, token).await;
+
+    post(
+        &server,
+        "/api/v1/tasks",
+        token,
+        json!({
+            "name": "gather acme",
+            "steps": [
+                {"step": "receiving", "cancellable": true},
+                {"step": "placing"},
+            ],
+        }),
+    )
+    .await;
+
+    let lines = json!(["fake run gather acme"]);
+    assert_eq!(
+        stream.until("command_finished").await,
+        [
+            json!({"type": "command_started", "lines": lines}),
+            json!({"type": "progress", "lines": lines, "progress": {
+                "step": "receiving",
+                "message": "receiving 1/2",
+                "done": 1,
+                "total": 2,
+                "cancellable": true,
+            }}),
+            json!({"type": "progress", "lines": lines, "progress": {
+                "step": "placing",
+                "message": "placing 2/2",
+                "done": 2,
+                "total": 2,
+                "cancellable": false,
+            }}),
+            json!({"type": "command_finished", "lines": lines}),
+        ]
+    );
+}
+
 /// Nothing of it ran, so nothing started.
 #[tokio::test]
 async fn a_task_whose_lines_are_refused_is_told_to_nobody() {

@@ -7,6 +7,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 use crate::route::Route;
+use crate::running::Running;
 
 /// The front end on the other side of the server: whatever knows what a
 /// query, a task and an outcome are.
@@ -84,13 +85,21 @@ pub trait Backend: Send + Sync + 'static {
     /// and carried out.
     fn preview(&self, task: &Self::Task) -> Result<Preview, Refusal>;
 
-    /// Carry out a task, or refuse it with nothing of it run.
+    /// Carry out a task, or refuse it with nothing of it run, saying how
+    /// far it has got to `running` as it goes, when it says that at all.
     ///
     /// The server asks for the task's preview first, on the same thread,
     /// and runs nothing whose preview was refused. A backend holds the task
     /// to its rules again all the same: the disk a run meets is the one it
     /// meets, and nothing promises a caller of this trait asked first.
-    fn run(&self, task: Self::Task) -> Result<Self::Outcome, Refusal>;
+    ///
+    /// `running` is the server's own type, made for this run as it starts:
+    /// each step said to it is told to the panel as `progress`, in the
+    /// server's own shape ([`Progress`](crate::Progress)), so a front end
+    /// hands over how far a run of its got without the server learning
+    /// what it counts. A run that says nothing, as one over before anybody
+    /// could read a count does, leaves it alone.
+    fn run(&self, task: Self::Task, running: &Running) -> Result<Self::Outcome, Refusal>;
 
     /// Act on what `to` names from now on, and answer with what it acts on
     /// then, as JSON of the backend's own; or refuse, with nothing changed.

@@ -12,12 +12,15 @@ use std::sync::{Arc, Mutex, PoisonError};
 use serde::Serialize;
 use tokio::sync::broadcast::{self, error::RecvError};
 
+use crate::running::Progress;
+
 /// How many events wait for a subscriber that has not read them yet before
 /// it is told it fell behind ([`Event::Resync`]).
 ///
 /// Enough for the bursts there are, a command's start and end and a change
-/// or two, many times over; a subscriber further behind than this has
-/// stopped reading, and what it needs then is one word to ask for
+/// or two, many times over, and for a long run's progress, which the CLI's
+/// backend says ten times a second at most; a subscriber further behind than
+/// this has stopped reading, and what it needs then is one word to ask for
 /// everything again, not the backlog.
 pub const CAPACITY: usize = 64;
 
@@ -37,6 +40,14 @@ pub enum Event {
     CommandStarted { lines: Vec<String> },
     /// They stopped, however that went: the reply to the run says how.
     CommandFinished { lines: Vec<String> },
+    /// How far the run of these lines has got, as its backend says it
+    /// ([`Running::report`](crate::Running::report)): told between its
+    /// start and its finish, each time the backend says something new, and
+    /// never for a run whose backend says nothing, which is most of them.
+    Progress {
+        lines: Vec<String>,
+        progress: Progress,
+    },
     /// The backend acts on something else since ([`Backend::switch`]),
     /// and what it names is watched: everything is to be asked for again,
     /// and nothing shown before kept, since it was of what it acted on

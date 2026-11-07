@@ -62,6 +62,30 @@
       ]
     },
     {
+      "description": "How far the run of these lines has got, as its backend says it\n([`Running::report`](crate::Running::report)): told between its\nstart and its finish, each time the backend says something new, and\nnever for a run whose backend says nothing, which is most of them.",
+      "type": "object",
+      "properties": {
+        "lines": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "progress": {
+          "$ref": "#/$defs/Progress"
+        },
+        "type": {
+          "type": "string",
+          "const": "progress"
+        }
+      },
+      "required": [
+        "type",
+        "lines",
+        "progress"
+      ]
+    },
+    {
       "description": "The backend acts on something else since ([`Backend::switch`]),\nand what it names is watched: everything is to be asked for again,\nand nothing shown before kept, since it was of what it acted on\nbefore. Told on the writer thread, once the switch is taken, to\nevery subscriber, the tab that asked for it among them\n([`Events::switched`]), with how many switches were taken since the\nbus was made, this one counted.\n\n[`Backend::switch`]: crate::Backend::switch",
       "type": "object",
       "properties": {
@@ -129,5 +153,47 @@
         "reason"
       ]
     }
-  ]
+  ],
+  "$defs": {
+    "Progress": {
+      "description": "How far a run under way has got, as its backend says it\n([`Running::report`]): what a `progress` event carries\n([`Event::Progress`](crate::Event::Progress)).\n\nThe server's own shape, with the backend's words in it: a step, how many\nof it are done and of how many, and whether a cancel still stops the\nrun. What the steps are, and from which one a cancel comes too late,\nare the front end's rules, a gather's, so the backend says both, and\nthe server carries them unread, as it carries a scope. JSON of the\nbackend's own in its place was the other way, and is rejected: a panel\ndraws a count the same whatever counts it, and the description of the\nAPI then says what an event holds, for a script to read by it.",
+      "type": "object",
+      "properties": {
+        "cancellable": {
+          "description": "Whether a cancel sent now still stops the run.",
+          "type": "boolean"
+        },
+        "done": {
+          "description": "How many of the step are done.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "message": {
+          "description": "The same, for a person, with its counts: `receiving objects 12/40`.",
+          "type": "string"
+        },
+        "step": {
+          "description": "What the run is doing, as one word of the backend's own, in\nsnake_case: `receiving`.",
+          "type": "string"
+        },
+        "total": {
+          "description": "Of how many, once that is known.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "step",
+        "message",
+        "done",
+        "total",
+        "cancellable"
+      ]
+    }
+  }
 }

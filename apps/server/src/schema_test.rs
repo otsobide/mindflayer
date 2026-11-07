@@ -7,7 +7,7 @@ use serde::Serialize;
 use serde_json::{json, Value};
 
 use super::*;
-use crate::Condition;
+use crate::{Condition, Progress};
 
 /// Each root's schema as a file of it would hold it, by its name.
 #[derive(Default)]
@@ -77,6 +77,7 @@ fn every_event() -> Vec<Event> {
             Event::Changed { .. }
             | Event::CommandStarted { .. }
             | Event::CommandFinished { .. }
+            | Event::Progress { .. }
             | Event::Switched { .. }
             | Event::Resync { .. }
             | Event::Watching
@@ -91,7 +92,29 @@ fn every_event() -> Vec<Event> {
         Event::CommandStarted {
             lines: lines.clone(),
         },
-        Event::CommandFinished { lines },
+        Event::CommandFinished {
+            lines: lines.clone(),
+        },
+        Event::Progress {
+            lines: lines.clone(),
+            progress: Progress {
+                step: "receiving".to_owned(),
+                message: "receiving objects 12/40".to_owned(),
+                done: 12,
+                total: Some(40),
+                cancellable: true,
+            },
+        },
+        Event::Progress {
+            lines,
+            progress: Progress {
+                step: "connecting".to_owned(),
+                message: "connecting".to_owned(),
+                done: 0,
+                total: None,
+                cancellable: true,
+            },
+        },
         Event::Switched { switches: 2 },
         Event::Resync { switches: 0 },
         Event::Watching,
@@ -125,6 +148,11 @@ fn an_event_serde_never_writes_is_refused() {
     refused_by("Event", &json!({"type": "changed"}));
     refused_by("Event", &json!({"type": "switched", "switches": -1}));
     refused_by("Event", &json!({"scopes": []}));
+    refused_by("Event", &json!({"type": "progress", "lines": []}));
+    refused_by(
+        "Event",
+        &json!({"type": "progress", "lines": [], "progress": {"step": "x", "done": -1}}),
+    );
 }
 
 /// The backend's JSON, which the server carries unread, is any JSON in
