@@ -85,6 +85,41 @@ impl Remote for Linking {
     }
 }
 
+/// A remote that fetches by writing a folder of rules, `rules`, holding a
+/// rule of its own, one linking to another of its own and one linking to
+/// `to`, as a repository can.
+#[cfg(unix)]
+#[derive(Debug)]
+struct LinkingRules {
+    to: PathBuf,
+}
+
+#[cfg(unix)]
+impl Remote for LinkingRules {
+    fn fetch(
+        &self,
+        _url: &str,
+        _reference: Option<&str>,
+        _pin: Option<&Revision>,
+        into: &Path,
+        _watch: &Watch,
+    ) -> Result<crate::port::Cloned, GitError> {
+        let _ = fs::remove_dir_all(into);
+        write(&into.join("rules/style.md"), "Write plainly.\n");
+        write(&into.join("shared/review.md"), "Read it twice.\n");
+        std::os::unix::fs::symlink("../shared/review.md", into.join("rules/review.md")).unwrap();
+        std::os::unix::fs::symlink(&self.to, into.join("rules/keys.md")).unwrap();
+        Ok(crate::port::Cloned {
+            root: into.to_path_buf(),
+            revision: Some(Revision::from("0123abc")),
+        })
+    }
+
+    fn scrub(&self, _clone: &Path) -> Result<bool, GitError> {
+        Ok(false)
+    }
+}
+
 fn scrub_failure(url: &str) -> ScrubFailure {
     ScrubFailure {
         url: Redacted::new(url),
@@ -570,20 +605,21 @@ fn a_credentialed_url_typed_as_the_branch_the_folder_the_name_or_the_pin_is_refu
 }
 
 #[test]
-fn a_gather_of_rules_is_refused_and_fetches_nothing() {
+fn a_gather_of_mcp_servers_is_refused_and_fetches_nothing() {
     let (_dir, workspace) = WorkspaceMother::empty();
     let ledger = Ledger::in_memory().unwrap();
     let remote = Arc::new(Unreached::default());
-    let mut request = Request::git(UrlMother::https()).through(remote.clone());
-    request.kind = Kind::Rule;
+    let request = Request::git(UrlMother::https())
+        .through(remote.clone())
+        .gathering(Kind::Mcp);
 
     let refused = gather(&workspace, &ledger, &request).unwrap_err();
 
     assert!(
-        matches!(refused, GatherError::NotGatherable { kind: Kind::Rule }),
+        matches!(refused, GatherError::NotGatherable { kind: Kind::Mcp }),
         "{refused:?}"
     );
-    assert_eq!(refused.to_string(), "rules cannot be gathered yet");
+    assert_eq!(refused.to_string(), "MCP servers cannot be gathered yet");
     assert_eq!(*remote.asked.lock().unwrap(), 0);
     assert!(ledger.sources().unwrap().is_empty());
 }
@@ -618,6 +654,7 @@ fn a_report_counts_everything_now_on_the_shelf_because_of_it() {
             removed: (0..removed).map(|_| harvested()).collect(),
             holds: Vec::new(),
             mcp_files: Vec::new(),
+            kind: random::pick(&[Kind::Skill, Kind::Rule]),
         };
 
         assert_eq!(report.total(), added + updated + unchanged);
@@ -1455,6 +1492,26 @@ fn each_gather_failure_names_its_path_and_gives_its_code() {
         "/w/.mindweaver/cache/s/.claude-plugin/plugin.json: names `../../etc` as a folder of its \
          plugin's skills, which is no folder of the repository, so nothing there is gathered"
     );
+    let route_invalid = Failure::RouteInvalid {
+        path: PathBuf::from("/w/.mindweaver/cache/s/rules/Style.md"),
+        route: String::from("Style"),
+        problem: String::from("`Style` is not usable as a name"),
+    };
+    assert_eq!(
+        route_invalid.path(),
+        Path::new("/w/.mindweaver/cache/s/rules/Style.md")
+    );
+    assert_eq!(
+        route_invalid.to_string(),
+        "/w/.mindweaver/cache/s/rules/Style.md: the rule `Style` cannot be named by its route \
+         (`Style` is not usable as a name), so it is not gathered"
+    );
+    assert_eq!(
+        route_invalid
+            .in_repository(Path::new("/w/.mindweaver/cache/s"))
+            .path(),
+        Path::new("rules/Style.md")
+    );
     assert_eq!(
         Failure::CODES,
         [
@@ -1468,7 +1525,8 @@ fn each_gather_failure_names_its_path_and_gives_its_code() {
             "gathered_listed_outside",
             "gathered_listed_missing",
             "gathered_manifest_unreadable",
-            "gathered_manifest_outside"
+            "gathered_manifest_outside",
+            "gathered_route_invalid"
         ]
     );
 }
@@ -1532,7 +1590,7 @@ fn each_gather_error_of_its_own_gives_its_own_code() {
             "gather_pin_invalid",
         ),
         (
-            GatherError::NotGatherable { kind: Kind::Rule },
+            GatherError::NotGatherable { kind: Kind::Mcp },
             "kind_not_gatherable",
         ),
         (
@@ -1782,4 +1840,127 @@ fn a_rule_taken_off_the_shelf_takes_the_folders_its_route_made_and_no_more() {
 
     assert!(!shelf.join("git").exists());
     assert!(shelf.is_dir(), "the source's own folder stays");
+}
+
+/// A rule that is a link is taken as what it leads to inside the clone, and
+/// one leading out of it is refused before anything of it is read, by a
+/// gather and its dry run alike, while the rest are taken.
+#[cfg(unix)]
+#[test]
+fn a_rule_linking_out_of_the_repository_is_refused_and_the_rest_are_taken() {
+    let outside = TempDir::new().unwrap();
+    write(&outside.path().join("keys.md"), "a secret\n");
+    let (_dir, workspace) = WorkspaceMother::empty();
+    let ledger = workspace.ledger().unwrap();
+    let request = Request::git(UrlMother::https())
+        .from_subdirectory("rules")
+        .gathering(Kind::Rule)
+        .through(Arc::new(LinkingRules {
+            to: outside.path().join("keys.md"),
+        }));
+
+    let previewed = preview(&workspace, &ledger, &request).unwrap();
+    let gathered = gather(&workspace, &ledger, &request).unwrap();
+
+    let found: Vec<&str> = previewed.found.iter().map(|it| it.name.as_str()).collect();
+    assert_eq!(found, ["review", "style"]);
+    let added: Vec<&str> = gathered.added.iter().map(|it| it.name.as_str()).collect();
+    assert_eq!(added, found);
+    assert!(
+        matches!(
+            &previewed.failures[..],
+            [Failure::LinkOutside { path, .. }] if path == Path::new("rules/keys.md")
+        ),
+        "{:?}",
+        previewed.failures
+    );
+    assert!(
+        matches!(
+            &gathered.failures[..],
+            [Failure::LinkOutside { to, .. }]
+                if *to == fs::canonicalize(outside.path().join("keys.md")).unwrap()
+        ),
+        "{:?}",
+        gathered.failures
+    );
+    assert_eq!(gathered.failures[0].code(), "gathered_link_outside");
+    let shelf = workspace.gathered_dir(Kind::Rule).join(&gathered.directory);
+    assert!(!shelf.join("keys.md").exists());
+    // What a link inside the clone leads to, as a file of its own.
+    let review = shelf.join("review.md");
+    assert!(!fs::symlink_metadata(&review).unwrap().is_symlink());
+    assert_eq!(fs::read_to_string(review).unwrap(), "Read it twice.\n");
+}
+
+#[test]
+fn a_collection_s_readme_and_licence_are_its_own_and_no_rule() {
+    for name in [
+        "README.md",
+        "readme.md",
+        "Readme.MD",
+        "README.markdown",
+        "LICENSE.md",
+        "licence.MD",
+        "LICENSE",
+    ] {
+        assert!(about_the_rules(std::ffi::OsStr::new(name)), "{name}");
+    }
+    for name in [
+        "style.md",
+        "readme-first.md",
+        "license-notes.md",
+        "README.en.md",
+    ] {
+        assert!(!about_the_rules(std::ffi::OsStr::new(name)), "{name}");
+    }
+}
+
+#[test]
+fn a_rule_is_found_as_deep_as_a_skill_s_folder_and_no_deeper() {
+    let dir = TempDir::new().unwrap();
+    for route in [
+        "one.md",
+        "a/two.md",
+        "a/b/three.md",
+        "a/b/c/four.md",
+        "a/b/c/d/five.md",
+    ] {
+        write(&dir.path().join(route), "x");
+    }
+    let mut found = Vec::new();
+
+    files(dir.path(), 1, "md", &mut found).unwrap();
+    found.sort();
+
+    let routes: Vec<String> = found
+        .iter()
+        .map(|path| crate::catalog::route(dir.path(), path).unwrap())
+        .collect();
+    assert_eq!(routes, ["a/b/c/four", "a/b/three", "a/two", "one"]);
+}
+
+#[test]
+fn a_rule_s_licence_is_the_nearest_its_folders_name_as_far_as_the_one_searched() {
+    let dir = TempDir::new().unwrap();
+    let searched = dir.path().join("rules");
+    write(&dir.path().join("LICENSE"), "GPL\n");
+    write(&searched.join("LICENSE"), "MIT License\n");
+    write(&searched.join("vendor/LICENSE.md"), "Apache License\n");
+    write(&searched.join("vendor/x/style.md"), "x");
+    write(&searched.join("git/commits.md"), "x");
+
+    assert_eq!(
+        license_above(&searched.join("vendor/x/style.md"), &searched).as_deref(),
+        Some("Apache License")
+    );
+    assert_eq!(
+        license_above(&searched.join("git/commits.md"), &searched).as_deref(),
+        Some("MIT License")
+    );
+    fs::remove_file(searched.join("LICENSE")).unwrap();
+    assert_eq!(
+        license_above(&searched.join("git/commits.md"), &searched),
+        None,
+        "the repository's own, above the folder searched, is not the rule's"
+    );
 }

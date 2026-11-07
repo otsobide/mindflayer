@@ -203,6 +203,7 @@ export type CoreCode =
   | "gathered_listed_missing"
   | "gathered_manifest_unreadable"
   | "gathered_manifest_outside"
+  | "gathered_route_invalid"
   | "gather_cancelled"
   | "credentials_in_url"
   | "gather_no_such_folder"

@@ -962,14 +962,14 @@ pub(crate) fn route(root: &Path, file: &Path) -> Option<String> {
 ///
 /// A case-insensitive filesystem will happily hand back `NOTES.MD`, and a rule
 /// invisible because of how its name was capitalised is a bad half hour.
-fn has_extension(path: &Path, extension: &str) -> bool {
+pub(crate) fn has_extension(path: &Path, extension: &str) -> bool {
     path.extension()
         .and_then(|found| found.to_str())
         .is_some_and(|found| found.eq_ignore_ascii_case(extension))
 }
 
 /// Whether a path's own name starts with a dot.
-fn is_hidden(path: &Path) -> bool {
+pub(crate) fn is_hidden(path: &Path) -> bool {
     path.file_name()
         .and_then(|name| name.to_str())
         .is_some_and(|name| name.starts_with('.'))

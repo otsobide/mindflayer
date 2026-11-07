@@ -435,3 +435,41 @@ fn nothing_there_is_no_answer_but_an_error() {
 
     assert_eq!(error.kind(), io::ErrorKind::NotFound);
 }
+
+#[test]
+fn a_file_replaced_says_whether_it_was_added_updated_or_left_as_it_was() {
+    let dir = TempDir::new().unwrap();
+    let from = dir.path().join("clone").join("style.md");
+    fs::create_dir_all(from.parent().unwrap()).unwrap();
+    fs::write(&from, "Write plainly.\n").unwrap();
+    let to = dir.path().join("shelf").join("acme").join("style.md");
+
+    assert_eq!(replace_file(&from, &to).unwrap(), Change::Added);
+    assert_eq!(fs::read_to_string(&to).unwrap(), "Write plainly.\n");
+    let written = fs::metadata(&to).unwrap().modified().unwrap();
+    assert_eq!(replace_file(&from, &to).unwrap(), Change::Unchanged);
+    assert_eq!(fs::metadata(&to).unwrap().modified().unwrap(), written);
+
+    fs::write(&from, "Write plainly, always.\n").unwrap();
+    assert_eq!(replace_file(&from, &to).unwrap(), Change::Updated);
+    assert_eq!(fs::read_to_string(&to).unwrap(), "Write plainly, always.\n");
+    // Nothing left beside it of the write.
+    assert_eq!(names(to.parent().unwrap()), ["style.md"]);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_file_replaced_from_a_link_is_written_as_what_the_link_leads_to() {
+    let dir = TempDir::new().unwrap();
+    let real = dir.path().join("clone").join("shared.md");
+    fs::create_dir_all(real.parent().unwrap()).unwrap();
+    fs::write(&real, "Read it twice.\n").unwrap();
+    let from = dir.path().join("clone").join("review.md");
+    std::os::unix::fs::symlink("shared.md", &from).unwrap();
+    let to = dir.path().join("shelf").join("review.md");
+
+    replace_file(&from, &to).unwrap();
+
+    assert!(!fs::symlink_metadata(&to).unwrap().is_symlink());
+    assert_eq!(fs::read_to_string(&to).unwrap(), "Read it twice.\n");
+}

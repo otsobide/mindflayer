@@ -10,7 +10,9 @@ use mindweaver_core::gather::{self, GatherError, Progress, Request, Search, Warn
 use mindweaver_core::ledger::{Action, Ledger, SourceKind};
 use mindweaver_core::marketplace::{Dialect, Holding};
 use mindweaver_core::value::SourceName;
-use mindweaver_core::{Kind, MindProject, ValidationIssue, WeaverWorkspace, DEFAULT_SUBDIRECTORY};
+use mindweaver_core::{
+    hash, Kind, MindProject, ValidationIssue, WeaverWorkspace, DEFAULT_SUBDIRECTORY,
+};
 use tempfile::TempDir;
 
 // ---------------------------------------------------------------------------
@@ -1746,19 +1748,19 @@ fn a_gather_that_finds_no_folder_leaves_the_revision_its_shelf_came_from() {
 }
 
 #[test]
-fn rules_cannot_be_gathered_yet_and_say_so() {
+fn mcp_servers_cannot_be_gathered_from_a_repository_and_say_so() {
     let source = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
     let (_dir, workspace) = workspace();
     let ledger = workspace.ledger().unwrap();
 
-    let mut request = Request::git(url(&source));
-    request.kind = Kind::Rule;
+    let request = Request::git(url(&source)).gathering(Kind::Mcp);
     let error = gather::gather(&workspace, &ledger, &request).unwrap_err();
 
     assert!(
         matches!(error, GatherError::NotGatherable { .. }),
         "{error}"
     );
+    assert!(ledger.sources().unwrap().is_empty());
 }
 
 #[test]
@@ -2572,6 +2574,7 @@ fn a_gather_report_serializes_what_changed_and_leaves_its_failures_to_the_warnin
         removed: vec![harvested("ship")],
         holds: vec![Holding::McpServers],
         mcp_files: vec!["mcp.json"],
+        kind: Kind::Skill,
     };
 
     let serialized = serde_json::to_string(&report).unwrap();
@@ -2587,9 +2590,373 @@ fn a_gather_report_serializes_what_changed_and_leaves_its_failures_to_the_warnin
             r#""path":"/work/.mindweaver/skills/github.com-acme-skills/review"}],"#,
             r#""name":"acme-skills","#,
             r#""removed":[{"name":"ship","directory":"ship","summary":"About ship","#,
-            r#""path":"/work/.mindweaver/skills/github.com-acme-skills/ship"}]}"#,
+            r#""path":"/work/.mindweaver/skills/github.com-acme-skills/ship"}],"kind":"skill"}"#,
         )
     );
+}
+
+// ---------------------------------------------------------------------------
+// Rules
+// ---------------------------------------------------------------------------
+
+/// A gather of the rules in `folder` of the repository at `source`.
+fn rules_in(source: &TempDir, folder: &str) -> Request {
+    Request::git(url(source))
+        .from_subdirectory(folder)
+        .gathering(Kind::Rule)
+}
+
+/// A collection of rules as a repository keeps one: nested, with its README
+/// and its licence at the root of its folder, and what no gather enters.
+fn collection() -> TempDir {
+    repository(&[
+        ("rules/style.md", "# Write plainly\n\nShort sentences.\n"),
+        (
+            "rules/git/commits.md",
+            "---\ndescription: How to commit\n---\n\nImperative subjects.\n",
+        ),
+        ("rules/a/b/c/deep.md", "As deep as a skill's folder.\n"),
+        ("rules/a/b/c/d/too-deep.md", "Deeper than a gather looks.\n"),
+        ("rules/README.md", "# The collection\n"),
+        ("rules/LICENSE.md", "MIT License\n\nCopyright.\n"),
+        ("rules/node_modules/pkg/notes.md", "A package's.\n"),
+        ("rules/.drafts/wip.md", "Hidden.\n"),
+        ("rules/notes.txt", "Not markdown.\n"),
+        ("skills/deploy/SKILL.md", &skill("deploy", "Ship it")),
+    ])
+}
+
+#[test]
+fn a_folder_of_rules_is_gathered_each_named_by_its_route_from_that_folder() {
+    let source = collection();
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let report = gather::gather(&workspace, &ledger, &rules_in(&source, "rules")).unwrap();
+
+    assert!(report.failures.is_empty(), "{:?}", report.failures);
+    assert!(report.warnings.is_empty(), "{:?}", report.warnings);
+    assert_eq!(report.kind, Kind::Rule);
+    let added: Vec<(&str, &str)> = report
+        .added
+        .iter()
+        .map(|it| (it.name.as_str(), it.directory.as_str()))
+        .collect();
+    assert_eq!(
+        added,
+        [
+            ("a/b/c/deep", "a/b/c/deep.md"),
+            ("git/commits", "git/commits.md"),
+            ("style", "style.md"),
+        ]
+    );
+    let shelf = workspace.gathered_dir(Kind::Rule).join(&report.directory);
+    assert_eq!(
+        fs::read_to_string(shelf.join("git/commits.md")).unwrap(),
+        "---\ndescription: How to commit\n---\n\nImperative subjects.\n",
+        "a rule is kept as it is written, front matter and all"
+    );
+    for left in ["README.md", "LICENSE.md", "notes.txt", "a/b/c/d"] {
+        assert!(!shelf.join(left).exists(), "{left}");
+    }
+    assert!(
+        !workspace.gathered_dir(Kind::Skill).exists(),
+        "no skill taken"
+    );
+
+    let gathered = ledger.gathered().unwrap();
+    let recorded: Vec<(Kind, &str, &str, &str)> = gathered
+        .iter()
+        .map(|it| {
+            (
+                it.kind,
+                it.name.as_str(),
+                it.path.as_str(),
+                it.upstream_path.as_str(),
+            )
+        })
+        .collect();
+    let at = |route: &str| format!(".mindweaver/rules/{}/{route}", report.directory);
+    assert_eq!(
+        recorded,
+        [
+            (
+                Kind::Rule,
+                "a/b/c/deep",
+                at("a/b/c/deep.md").as_str(),
+                "rules/a/b/c/deep.md"
+            ),
+            (
+                Kind::Rule,
+                "git/commits",
+                at("git/commits.md").as_str(),
+                "rules/git/commits.md"
+            ),
+            (
+                Kind::Rule,
+                "style",
+                at("style.md").as_str(),
+                "rules/style.md"
+            ),
+        ]
+    );
+    for it in &gathered {
+        let bytes = fs::read(workspace.root().join(&it.path)).unwrap();
+        assert_eq!(it.content_hash, Some(hash::bytes(&bytes)), "{it:?}");
+        // The collection's licence, at the root of its folder, is each
+        // rule's.
+        assert_eq!(it.license.as_deref(), Some("MIT License"), "{it:?}");
+        assert_eq!(it.source.gathers, Kind::Rule);
+    }
+    assert_eq!(gathered[2].summary.as_deref(), Some("Write plainly"));
+}
+
+#[test]
+fn a_gather_of_rules_with_no_folder_named_searches_the_repository_from_its_root() {
+    let source = repository(&[
+        ("commits.md", "Imperative subjects.\n"),
+        ("review/tone.md", "Kind words.\n"),
+        ("readme.MD", "# About these rules\n"),
+        ("LICENCE.md", "Apache License\n"),
+        ("docs/README.md", "Not at the root, and no rule's name.\n"),
+    ]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let report = gather::gather(
+        &workspace,
+        &ledger,
+        &Request::git(url(&source)).gathering(Kind::Rule),
+    )
+    .unwrap();
+
+    let added: Vec<&str> = report.added.iter().map(|it| it.name.as_str()).collect();
+    assert_eq!(added, ["commits", "review/tone"]);
+    // A README below the root is a file like any other, and its route no
+    // rule's name.
+    let codes: Vec<&str> = report.failures.iter().map(|it| it.code()).collect();
+    assert_eq!(codes, ["gathered_route_invalid"], "{:?}", report.failures);
+    let sources = ledger.sources().unwrap();
+    assert_eq!(sources.len(), 1);
+    assert_eq!(sources[0].subdirectory, DEFAULT_SUBDIRECTORY);
+    assert_eq!(sources[0].gathers, Kind::Rule);
+}
+
+#[test]
+fn a_rule_whose_route_is_no_rule_s_name_is_said_and_the_rest_are_taken() {
+    let source = repository(&[
+        ("rules/Bad_Name.md", "Shouting.\n"),
+        ("rules/Team/style.md", "A folder no name can hold.\n"),
+        ("rules/good.md", "Fine.\n"),
+        ("rules/empty.md", ""),
+        (
+            "rules/odd.md",
+            "---\npaths: 3\n---\n\nA rule all the same.\n",
+        ),
+    ]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let report = gather::gather(&workspace, &ledger, &rules_in(&source, "rules")).unwrap();
+
+    let added: Vec<&str> = report.added.iter().map(|it| it.name.as_str()).collect();
+    assert_eq!(added, ["empty", "good", "odd"]);
+    let invalid: Vec<(&str, String)> = report
+        .failures
+        .iter()
+        .map(|failure| (failure.code(), failure.to_string()))
+        .collect();
+    assert_eq!(invalid.len(), 2, "{invalid:?}");
+    assert!(invalid
+        .iter()
+        .all(|(code, _)| *code == "gathered_route_invalid"));
+    assert!(
+        invalid[0]
+            .1
+            .contains("the rule `Bad_Name` cannot be named by its route ("),
+        "{invalid:?}"
+    );
+    assert!(
+        invalid[0].1.ends_with("), so it is not gathered"),
+        "{invalid:?}"
+    );
+    assert!(invalid[1].1.contains("`Team/style`"), "{invalid:?}");
+    // Read leniently, as a project's rules are: what is wrong with one
+    // taken is a warning beside it.
+    let warned: Vec<(String, &str)> = report
+        .warnings
+        .iter()
+        .map(|warning| {
+            (
+                warning
+                    .path
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned(),
+                warning.issue.code(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        warned,
+        [
+            (String::from("empty.md"), "content_empty"),
+            (String::from("odd.md"), "paths_not_strings"),
+        ]
+    );
+    assert_eq!(ledger.gathered().unwrap().len(), 3);
+}
+
+#[test]
+fn a_rule_its_source_no_longer_holds_is_taken_off_the_shelf_when_its_source_is_gathered_again() {
+    let source = collection();
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    let first = gather::gather(&workspace, &ledger, &rules_in(&source, "rules")).unwrap();
+    let shelf = workspace.gathered_dir(Kind::Rule).join(&first.directory);
+    assert!(shelf.join("a/b/c/deep.md").is_file());
+
+    fs::remove_dir_all(source.path().join("rules/a")).unwrap();
+    fs::write(
+        source.path().join("rules/style.md"),
+        "# Write plainly, always\n",
+    )
+    .unwrap();
+    commit(source.path());
+    let updated = mindweaver_core::sources::update(
+        &workspace,
+        &ledger,
+        mindweaver_core::sources::Which::Every,
+        &Watch::new(),
+    )
+    .unwrap();
+
+    assert_eq!(updated.len(), 1);
+    let mindweaver_core::sources::Again::Gathered(Ok(again)) = &updated[0].outcome else {
+        panic!("{:?}", updated[0].outcome);
+    };
+    assert_eq!(again.kind, Kind::Rule, "gathered again for what it gathers");
+    let removed: Vec<(&str, &str)> = again
+        .removed
+        .iter()
+        .map(|it| (it.name.as_str(), it.directory.as_str()))
+        .collect();
+    assert_eq!(removed, [("a/b/c/deep", "a/b/c/deep.md")]);
+    let updated: Vec<&str> = again.updated.iter().map(|it| it.name.as_str()).collect();
+    assert_eq!(updated, ["style"]);
+    assert_eq!(again.unchanged.len(), 1, "{again:?}");
+    assert!(
+        !shelf.join("a").exists(),
+        "its file and the folders its route made"
+    );
+    let names: Vec<String> = ledger
+        .gathered()
+        .unwrap()
+        .into_iter()
+        .map(|gathered| gathered.name.to_string())
+        .collect();
+    assert_eq!(names, ["git/commits", "style"]);
+}
+
+#[test]
+fn a_folder_gathered_for_skills_and_for_rules_is_two_sources_each_gathered_for_its_own() {
+    let source = repository(&[
+        ("skills/deploy/SKILL.md", &skill("deploy", "Ship it")),
+        ("style.md", "Write plainly.\n"),
+    ]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let skills = gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap();
+    let rules = gather::gather(
+        &workspace,
+        &ledger,
+        &Request::git(url(&source)).gathering(Kind::Rule),
+    )
+    .unwrap();
+
+    assert_ne!(skills.name, rules.name);
+    assert_ne!(skills.directory, rules.directory);
+    let names: Vec<(Kind, String)> = ledger
+        .gathered()
+        .unwrap()
+        .into_iter()
+        .map(|it| (it.kind, it.name.to_string()))
+        .collect();
+    // The skill's `SKILL.md` is no rule's name.
+    assert_eq!(
+        names,
+        [
+            (Kind::Rule, String::from("style")),
+            (Kind::Skill, String::from("deploy")),
+        ]
+    );
+    let sources: Vec<Kind> = ledger
+        .sources()
+        .unwrap()
+        .iter()
+        .map(|it| it.gathers)
+        .collect();
+    assert_eq!(sources.len(), 2);
+    assert!(sources.contains(&Kind::Skill) && sources.contains(&Kind::Rule));
+}
+
+#[test]
+fn a_dry_run_of_a_folder_of_rules_lists_each_by_its_route_and_writes_nothing() {
+    let source = collection();
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let preview = gather::preview(&workspace, &ledger, &rules_in(&source, "rules")).unwrap();
+
+    assert_eq!(preview.kind, Kind::Rule);
+    let found: Vec<(&str, &str, &str)> = preview
+        .found
+        .iter()
+        .map(|it| {
+            (
+                it.name.as_str(),
+                it.directory.as_str(),
+                it.upstream_path.as_str(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        found,
+        [
+            ("a/b/c/deep", "a/b/c/deep.md", "rules/a/b/c/deep.md"),
+            ("git/commits", "git/commits.md", "rules/git/commits.md"),
+            ("style", "style.md", "rules/style.md"),
+        ]
+    );
+    assert!(preview.failures.is_empty(), "{:?}", preview.failures);
+    assert_eq!(ledger.sources().unwrap(), []);
+    assert!(ledger.gathered().unwrap().is_empty());
+    assert!(ledger.history(10).unwrap().is_empty());
+    assert!(!workspace.gathered_dir(Kind::Rule).exists());
+    assert!(!workspace.cache_dir().exists(), "the clone is taken away");
+}
+
+#[test]
+fn a_dry_run_says_a_rule_s_warnings_by_where_its_file_is_in_the_repository() {
+    let source = repository(&[
+        ("rules/Bad.md", "x\n"),
+        ("rules/odd.md", "---\npaths: 3\n---\n\nStill a rule.\n"),
+    ]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let preview = gather::preview(&workspace, &ledger, &rules_in(&source, "rules")).unwrap();
+
+    let paths: Vec<&std::path::Path> = preview
+        .warnings
+        .iter()
+        .map(|it| it.path.as_path())
+        .collect();
+    assert_eq!(paths, [std::path::Path::new("rules/odd.md")]);
+    let failed: Vec<&std::path::Path> = preview.failures.iter().map(|it| it.path()).collect();
+    assert_eq!(failed, [std::path::Path::new("rules/Bad.md")]);
 }
 
 // ---------------------------------------------------------------------------
@@ -2795,6 +3162,7 @@ fn a_dry_run_serializes_what_it_found_and_leaves_its_failures_to_the_warnings() 
             path: std::path::PathBuf::from("skills/team/deploy/SKILL.md"),
             issue: ValidationIssue::MetadataNotAMap,
         }],
+        kind: Kind::Rule,
     };
 
     let serialized = serde_json::to_string(&preview).unwrap();
@@ -2803,7 +3171,7 @@ fn a_dry_run_serializes_what_it_found_and_leaves_its_failures_to_the_warnings() 
         serialized,
         concat!(
             r#"{"revision":"4f9c2a7","found":[{"name":"deploy","directory":"deploy","#,
-            r#""upstream_path":"skills/team/deploy","summary":"Ship it"}]}"#,
+            r#""upstream_path":"skills/team/deploy","summary":"Ship it"}],"kind":"rule"}"#,
         )
     );
 }

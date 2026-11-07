@@ -147,6 +147,43 @@ pub fn replace_leaving(
     Ok(change)
 }
 
+/// Replace the file `to` with what the file `from` holds, saying whether
+/// anything changed: what a gather puts on the shelf of a kind kept a file
+/// an artifact, a rule, as [`replace`] puts a skill's folder there.
+///
+/// Read through a link `from` may be, which the caller holds inside its
+/// bounds first ([`followed`]), and written as a file of its own, so the
+/// shelf keeps no link. One that holds those bytes already is left alone,
+/// down to its modification time, which is what lets a second gather say
+/// what moved. Written beside `to` and renamed into place, so a write cut
+/// short leaves `to` as it was, and the folders it is in made on the way.
+pub fn replace_file(from: &Path, to: &Path) -> Result<Change, io::Error> {
+    let bytes = fs::read(from)?;
+    let existed = match fs::symlink_metadata(to) {
+        Ok(metadata) => {
+            if metadata.is_file() && fs::read(to)? == bytes {
+                return Ok(Change::Unchanged);
+            }
+            true
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => false,
+        Err(error) => return Err(error),
+    };
+    if let Some(parent) = to.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let new = beside(to, "new");
+    if let Err(error) = fs::write(&new, &bytes).and_then(|()| moved(&new, to)) {
+        let _ = fs::remove_file(&new);
+        return Err(error);
+    }
+    Ok(if existed {
+        Change::Updated
+    } else {
+        Change::Added
+    })
+}
+
 /// Build `from`, but for what is named `leave_out` directly inside it, at
 /// `new` and put it at `to`, moving what `to` held to `old` first, which is
 /// left for the caller to clear: what a leftover there costs depends on
