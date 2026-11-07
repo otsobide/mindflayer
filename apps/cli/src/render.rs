@@ -9,6 +9,7 @@ use std::io;
 use std::path::Path;
 use std::process::ExitCode;
 
+use mindweaver_core::text::Utc;
 use mindweaver_core::{paths, ArtifactError, Kind, ResolveError, ValidationIssue, WorkspaceError};
 use serde::Serialize;
 
@@ -418,31 +419,13 @@ pub(crate) fn plural(count: usize, noun: &str) -> String {
 /// `seconds` since the Unix epoch, as the ledger keeps a time, said as a
 /// date and a minute in UTC: `2026-11-06 14:02 UTC`.
 ///
-/// In UTC, said so, rather than in the local zone: telling the local one
-/// needs the system's database of zones, which a dependency would read,
-/// for a time nobody reads to the minute. The day is counted from the
-/// epoch's by the rule the Gregorian calendar keeps (Howard Hinnant's
-/// `civil_from_days`), so nothing is asked of the system but the number.
+/// In UTC, said so, rather than in the local zone, for the reason core counts
+/// the day in UTC ([`Utc`]), for a time nobody reads to the minute.
 pub(crate) fn utc(seconds: i64) -> String {
-    let (days, of_day) = (seconds.div_euclid(86_400), seconds.rem_euclid(86_400));
-    // Days since 0000-03-01, in eras of 400 years, which repeat exactly.
-    let shifted = days + 719_468;
-    let era = shifted.div_euclid(146_097);
-    let of_era = shifted.rem_euclid(146_097);
-    let year_of_era = (of_era - of_era / 1460 + of_era / 36_524 - of_era / 146_096) / 365;
-    let of_year = of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
-    let month_from_march = (5 * of_year + 2) / 153;
-    let day = of_year - (153 * month_from_march + 2) / 5 + 1;
-    let month = if month_from_march < 10 {
-        month_from_march + 3
-    } else {
-        month_from_march - 9
-    };
-    let year = year_of_era + era * 400 + i64::from(month <= 2);
+    let at = Utc::of(seconds);
     format!(
-        "{year:04}-{month:02}-{day:02} {:02}:{:02} UTC",
-        of_day / 3600,
-        of_day % 3600 / 60
+        "{:04}-{:02}-{:02} {:02}:{:02} UTC",
+        at.year, at.month, at.day, at.hour, at.minute
     )
 }
 
