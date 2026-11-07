@@ -4798,6 +4798,71 @@ fn a_skill_the_search_found_is_taken_as_the_gather_line_naming_it() {
     )));
 }
 
+/// A finder the search's line got no answer from, rate limited, is left out
+/// of what the screen lists, beside the line's warning, rather than read
+/// from the answer an earlier search kept of it: the screen lists what the
+/// line found, and numbers it as the line did.
+#[test]
+fn a_skill_search_lists_nothing_of_a_finder_its_line_got_no_answer_from() {
+    use common::finders::{finder_fixture, list_finders, SKILLS_SH_PDF};
+    use mindweaver_core::adapter::SystemClock;
+    use mindweaver_core::http::{Cache, Entry, Headers};
+    use mindweaver_core::Clock;
+
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+    list_finders(dir.path(), &["skills.sh", "claude-plugins.dev"]);
+    let limited = (
+        429,
+        vec![(String::from("Retry-After"), String::from("60"))],
+        String::from("{}"),
+    );
+    let finders = Finders {
+        skills_sh: FixtureFinder::serving([(String::from(SKILLS_SH_PDF), limited)].into()),
+        ..Finders::start()
+    };
+    // What an earlier search kept of skills.sh's answer, an hour ago.
+    let workspace = WeaverWorkspace::open(dir.path()).unwrap();
+    let earlier = Entry {
+        stored: SystemClock.now() - 3600,
+        headers: Headers::new(),
+        body: finder_fixture("skills-sh.json").into_bytes(),
+    };
+    Cache::of(&workspace)
+        .unwrap()
+        .write(
+            &format!("{}{SKILLS_SH_PDF}", finders.skills_sh.url),
+            &earlier,
+        )
+        .unwrap();
+    let mut app = tui_in(dir.path());
+    press_and_run(&mut app, KeyCode::Char('s'));
+
+    tui::step(
+        &mut app,
+        Task::SearchSkills {
+            query: String::from("pdf"),
+            at: finders.at(),
+        },
+    );
+    tui::wait(&mut app);
+
+    let Mode::Skills(skills) = &app.mode else {
+        panic!("{:?}", app.mode);
+    };
+    let names: Vec<&str> = skills.hits.iter().map(|hit| hit.name.as_str()).collect();
+    assert_eq!(names, ["pdf", "slides"]);
+    assert!(
+        skills
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("skills.sh") && warning.contains("rate limited")),
+        "{:?}",
+        skills.warnings
+    );
+    assert_eq!(finders.skills_sh.asked(), [SKILLS_SH_PDF]);
+}
+
 /// A search whose answers no cache keeps, as in a workspace whose marker
 /// lists no finder, is the line's text to read, with nothing to take.
 #[test]

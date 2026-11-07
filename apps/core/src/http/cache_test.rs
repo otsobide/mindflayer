@@ -176,3 +176,24 @@ fn an_entry_is_fresh_for_as_long_as_the_cache_is_told() {
     clock.0.store(1000, Ordering::SeqCst);
     assert!(!Cache::at("unused").stamped_by(clock).is_fresh(&kept));
 }
+
+/// An entry kept before the time a cache is told is not fresh, however long
+/// the cache would serve it otherwise; one kept then or since is.
+#[test]
+fn an_entry_kept_before_the_cache_says_is_not_fresh() {
+    let clock = Arc::new(Set(AtomicI64::new(5000)));
+    let cache = |since| {
+        Cache::at("unused")
+            .fresh_for(Duration::MAX)
+            .kept_since(since)
+            .stamped_by(clock.clone())
+    };
+    let kept = Entry {
+        stored: 1000,
+        ..entry(b"[]")
+    };
+
+    for (since, fresh) in [(999, true), (1000, true), (1001, false)] {
+        assert_eq!(cache(since).is_fresh(&kept), fresh, "since {since}");
+    }
+}

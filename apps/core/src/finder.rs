@@ -417,26 +417,36 @@ impl<'a> Search<'a> {
 }
 
 /// What a search for `query` of `finders`, each at the address `at`
-/// names or its own, found the last time it was made through a client
-/// keeping its answers in `cache`, read from the cache alone: nothing is
-/// sent, however long ago each answer was kept. `None` when the cache keeps
-/// no finder's answer to it.
+/// names or its own, found when it was made through a client keeping its
+/// answers in `cache`, from `since` on, in seconds since the epoch by the
+/// cache's clock, read from the cache alone: nothing is sent. `None` when
+/// the cache keeps no finder's answer to it from then.
 ///
 /// What a front end that ran the search as a command line reads what the
 /// line found from, as the TUI does once the line is over, rather than
 /// reading the line's output back or asking the finders again on the
 /// thread that draws, as [`crate::registry::kept`] reads a registry's.
+/// `since` is when the line started: its client asks every finder, and
+/// keeps each answer it is given, or that it is told has not changed, from
+/// then, while a finder that failed it, rate limited or down, leaves the
+/// answer an earlier search kept, which is not what this line found
+/// ([`Cache::kept_since`]). Told by the second the cache stamps an entry
+/// with, so a search made twice within one second is the one it cannot
+/// tell apart.
+///
 /// No token is sent, and none was kept: what GitHub's code search answered
 /// a token is no answer kept, so it is skipped here, and only the finders
-/// that need none are read again. A finder whose answer is not kept is
-/// left out, as one that was never asked.
+/// that need none are read again. A finder whose answer is not kept from
+/// `since` is left out, as one that was never asked.
 pub fn kept(
     cache: Cache,
     query: &str,
     finders: &[Finder],
     at: &[(Finder, String)],
+    since: i64,
 ) -> Option<Found> {
-    let client = Client::new(&Unsent).with_cache(cache.fresh_for(Duration::MAX));
+    let cache = cache.fresh_for(Duration::MAX).kept_since(since);
+    let client = Client::new(&Unsent).with_cache(cache);
     let search = at
         .iter()
         .fold(Search::new(&client), |search, (finder, base)| {

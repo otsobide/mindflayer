@@ -53,6 +53,9 @@ const KEPT: [&str; 4] = ["content-type", "etag", "last-modified", "link"];
 pub struct Cache {
     folder: PathBuf,
     fresh_for: Duration,
+    /// When the oldest entry served unasked was kept, in seconds since the
+    /// epoch, where a caller says ([`kept_since`](Self::kept_since)).
+    since: Option<i64>,
     clock: Arc<dyn Clock>,
 }
 
@@ -75,6 +78,7 @@ impl Cache {
         Self {
             folder: folder.into(),
             fresh_for: Duration::ZERO,
+            since: None,
             clock: Arc::new(SystemClock),
         }
     }
@@ -82,6 +86,16 @@ impl Cache {
     /// Serve an entry kept less than `fresh_for` ago without asking.
     pub fn fresh_for(mut self, fresh_for: Duration) -> Self {
         self.fresh_for = fresh_for;
+        self
+    }
+
+    /// Serve no entry kept before `stored`, in seconds since the epoch,
+    /// without asking, however fresh it is otherwise: what a front end
+    /// reads back of a line it ran, whose client asked for every answer
+    /// and kept each it was given from when the line started, rather than
+    /// what an earlier line kept of an answer this one did not get.
+    pub fn kept_since(mut self, stored: i64) -> Self {
+        self.since = Some(stored);
         self
     }
 
@@ -173,7 +187,9 @@ impl Cache {
         // A time ahead of the clock, which a clock set back gives, is not
         // fresh: it says nothing of how long ago the entry was kept.
         let age = self.now().saturating_sub(entry.stored);
-        age >= 0 && (age as u64) < self.fresh_for.as_secs()
+        age >= 0
+            && (age as u64) < self.fresh_for.as_secs()
+            && self.since.is_none_or(|since| entry.stored >= since)
     }
 }
 

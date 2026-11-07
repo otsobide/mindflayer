@@ -14,13 +14,15 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::io;
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use mindweaver_core::adapter::SystemClock;
 use mindweaver_core::finder::{self, Failure, Finder, Found, Search, Token};
 use mindweaver_core::http::{Answer, Cache, Client, Headers, HttpError, Request};
 use mindweaver_core::mother::WorkspaceMother;
-use mindweaver_core::{Http, WeaverWorkspace};
+use mindweaver_core::{Clock, Http, WeaverWorkspace};
 
 // ---------------------------------------------------------------------------
 // The fake, and the fixtures it answers with
@@ -587,9 +589,17 @@ fn a_search_is_read_again_from_what_the_cache_kept() {
     let (_dir, workspace) = WorkspaceMother::empty();
     let fake = every_finder();
     let client = Client::new(&fake).with_cache(Cache::of(&workspace).unwrap());
+    let since = SystemClock.now();
     let searched = Search::new(&client).run(QUERY, &Finder::ALL).unwrap();
 
-    let kept = finder::kept(Cache::of(&workspace).unwrap(), QUERY, &Finder::ALL, &[]).unwrap();
+    let kept = finder::kept(
+        Cache::of(&workspace).unwrap(),
+        QUERY,
+        &Finder::ALL,
+        &[],
+        since,
+    )
+    .unwrap();
 
     assert_eq!(kept.hits, searched.hits);
     assert_eq!(kept.skipped, [Finder::Github]);
@@ -605,12 +615,20 @@ fn what_a_token_unlocked_is_not_read_again() {
     let (_dir, workspace) = WorkspaceMother::empty();
     let fake = every_finder();
     let client = Client::new(&fake).with_cache(Cache::of(&workspace).unwrap());
+    let since = SystemClock.now();
     Search::new(&client)
         .with_token(token())
         .run(QUERY, &Finder::ALL)
         .unwrap();
 
-    let kept = finder::kept(Cache::of(&workspace).unwrap(), QUERY, &Finder::ALL, &[]).unwrap();
+    let kept = finder::kept(
+        Cache::of(&workspace).unwrap(),
+        QUERY,
+        &Finder::ALL,
+        &[],
+        since,
+    )
+    .unwrap();
 
     assert_eq!(
         rows(&kept),
@@ -629,15 +647,25 @@ fn what_a_token_unlocked_is_not_read_again() {
 #[test]
 fn a_search_the_cache_keeps_nothing_of_is_no_listing() {
     let (_dir, workspace) = WorkspaceMother::empty();
+    let kept = |since| {
+        finder::kept(
+            Cache::of(&workspace).unwrap(),
+            QUERY,
+            &Finder::ALL,
+            &[],
+            since,
+        )
+    };
+    let since = SystemClock.now();
 
-    assert!(finder::kept(Cache::of(&workspace).unwrap(), QUERY, &Finder::ALL, &[]).is_none());
+    assert!(kept(since).is_none());
 
     let fake = every_finder();
     let client = Client::new(&fake).with_cache(Cache::of(&workspace).unwrap());
     Search::new(&client)
         .run(QUERY, &[Finder::SkillsSh])
         .unwrap();
-    let kept = finder::kept(Cache::of(&workspace).unwrap(), QUERY, &Finder::ALL, &[]).unwrap();
+    let kept = kept(since).unwrap();
 
     assert!(kept
         .hits
@@ -660,6 +688,7 @@ fn a_search_at_another_address_is_read_again_there() {
         r#"{"skills": [{"name": "docx", "source": "acme/docs"}]}"#,
     );
     let client = Client::new(&fake).with_cache(Cache::of(&workspace).unwrap());
+    let since = SystemClock.now();
     Search::new(&client)
         .at(Finder::SkillsSh, here)
         .run(QUERY, &[Finder::SkillsSh])
@@ -667,11 +696,66 @@ fn a_search_at_another_address_is_read_again_there() {
     let cache = || Cache::of(&workspace).unwrap();
 
     let at = [(Finder::SkillsSh, String::from(here))];
-    let kept = finder::kept(cache(), QUERY, &[Finder::SkillsSh], &at).unwrap();
+    let kept = finder::kept(cache(), QUERY, &[Finder::SkillsSh], &at, since).unwrap();
 
     assert_eq!(
         rows(&kept),
         ["docx https://github.com/acme/docs . None None skills.sh"]
     );
-    assert!(finder::kept(cache(), QUERY, &[Finder::SkillsSh], &[]).is_none());
+    assert!(finder::kept(cache(), QUERY, &[Finder::SkillsSh], &[], since).is_none());
+}
+
+/// A clock that says what it was set to.
+#[derive(Debug)]
+struct Set(AtomicI64);
+
+impl Clock for Set {
+    fn now(&self) -> i64 {
+        self.0.load(Ordering::SeqCst)
+    }
+}
+
+/// When the first search in a test is made: 2026-11-07T09:30:00Z.
+const NOW: i64 = 1_794_043_800;
+
+/// A finder that failed the search's line, rate limited, is left out of
+/// what is read again, rather than read from the answer an earlier search
+/// kept of it, which the line did not get: what is read again is what the
+/// line found, from when it started.
+#[test]
+fn a_finder_that_failed_the_line_is_not_read_again_from_an_earlier_answer() {
+    let (_dir, workspace) = WorkspaceMother::empty();
+    let clock = Arc::new(Set(AtomicI64::new(NOW)));
+    let cache = || Cache::of(&workspace).unwrap().stamped_by(clock.clone());
+    let answering = every_finder();
+    let client = Client::new(&answering).with_cache(cache());
+    Search::new(&client).run(QUERY, &Finder::ALL).unwrap();
+
+    let later = NOW + 3600;
+    clock.0.store(later, Ordering::SeqCst);
+    let limited = every_finder().answering_with(SKILLS_SH, 429, &[("Retry-After", "60")], "{}");
+    let client = Client::new(&limited).with_cache(cache());
+    let searched = Search::new(&client).run(QUERY, &Finder::ALL).unwrap();
+    let kept = finder::kept(cache(), QUERY, &Finder::ALL, &[], later).unwrap();
+
+    assert!(searched.failures.iter().any(|failure| {
+        failure.finder() == Finder::SkillsSh && failure.code() == "http_rate_limited"
+    }));
+    assert_eq!(kept.hits, searched.hits);
+    assert!(kept
+        .hits
+        .iter()
+        .all(|hit| hit.finders == [Finder::ClaudePlugins]));
+    assert!(kept
+        .failures
+        .iter()
+        .all(|failure| failure.finder() == Finder::ClaudePlugins));
+    let earlier = finder::kept(cache(), QUERY, &Finder::ALL, &[], NOW).unwrap();
+    assert!(
+        earlier
+            .hits
+            .iter()
+            .any(|hit| hit.finders == [Finder::SkillsSh]),
+        "the earlier answer is still kept, and read from its own search's start"
+    );
 }

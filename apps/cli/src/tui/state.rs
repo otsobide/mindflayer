@@ -422,6 +422,11 @@ pub enum Update {
 #[derive(Debug)]
 pub struct Running {
     pub task: Task,
+    /// When it started, in seconds since the epoch, by the clock the HTTP
+    /// cache stamps what it keeps with: what a search's line kept is read
+    /// back from then on ([`mindweaver_core::finder::kept`]), and nothing
+    /// an earlier line kept of an answer this one did not get.
+    pub started: i64,
     /// The last step it reported, once it has reported one.
     pub progress: Option<Progress>,
     /// Whether it has been asked to stop.
@@ -434,9 +439,10 @@ pub struct Running {
 }
 
 impl Running {
-    pub fn new(task: Task, watch: Watch, updates: Receiver<Update>) -> Self {
+    pub fn new(task: Task, started: i64, watch: Watch, updates: Receiver<Update>) -> Self {
         Self {
             task,
+            started,
             progress: None,
             cancelling: false,
             watch,
@@ -1689,21 +1695,21 @@ impl App {
     // -----------------------------------------------------------------------
 
     /// Take in what the task running apart has said since this was last
-    /// asked; once it is over, it is no longer running, and here is what came
-    /// of it.
-    pub fn heard(&mut self) -> Option<(Task, Vec<Done>)> {
+    /// asked; once it is over, it is no longer running, and here it is, with
+    /// what came of it.
+    pub fn heard(&mut self) -> Option<(Running, Vec<Done>)> {
         self.hear(false)
     }
 
     /// The same, waiting until it is over.
-    pub fn waited(&mut self) -> Option<(Task, Vec<Done>)> {
+    pub fn waited(&mut self) -> Option<(Running, Vec<Done>)> {
         self.hear(true)
     }
 
-    fn hear(&mut self, wait: bool) -> Option<(Task, Vec<Done>)> {
+    fn hear(&mut self, wait: bool) -> Option<(Running, Vec<Done>)> {
         let dones = self.running.as_mut()?.hear(wait)?;
         let running = self.running.take()?;
-        Some((running.task, dones))
+        Some((running, dones))
     }
 
     /// Show what came of a task, with the disk read again when it asked for

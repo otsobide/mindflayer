@@ -4757,11 +4757,21 @@ with no terminal runs neither, as it runs no gather (`Refusal::Unwatched`).
 
 A search made once is read again from the answers the cache kept of it
 (`finder::kept`), as a registry's is: the same finders, through a client
-whose transport sends nothing, every entry fresh. GitHub's answers to a
-token were never kept, so a search read again skips GitHub, and a finder
-whose answer the cache does not keep is left out; one keeping none is no
-listing at all. It is how the TUI reads what its search line found ([a
-skill search from the shelf](#a-skill-search-from-the-shelf)).
+whose transport sends nothing, every entry kept since the search started
+fresh, and none kept before (`Cache::kept_since`). The command's client
+asks every finder, nothing served unasked, and keeps each answer it is
+given, or that it is told has not changed, from then; a finder that fails
+it, rate limited or down, leaves the answer an earlier search kept, which
+this search did not list, and reading that one again would list results
+beside the warning that the finder failed, numbered otherwise than the
+line numbered them. It is told by the second an entry is stamped with, so
+a search made twice within one second is the one case it cannot tell
+apart. GitHub's answers to a token were never kept, so a search read again
+skips GitHub, and a finder whose answer the cache does not keep from then
+is left out; one keeping none is no listing at all. It is how the TUI reads
+what its search line found ([a skill search from the
+shelf](#a-skill-search-from-the-shelf)), from when it started the line
+(`Running::started`).
 
 ## Installing
 
@@ -6870,7 +6880,9 @@ opens a form for what to look for, and enter runs `gather search <query>`
 it is over, `conclude` reads what the search found through core, from the
 answers its line kept in the workspace's cache (`finder::kept`), as a
 registry search is read ([a registry search from the
-shelf](#a-registry-search-from-the-shelf)). Each result is listed by its
+shelf](#a-registry-search-from-the-shelf)), those kept since the line
+started alone (`Running::started`), so a finder the line got no answer
+from is left out rather than read from an earlier search's. Each result is listed by its
 number, name, repository, folder and finders, and enter on one runs the
 `gather git` line that names it exactly, its repository, its folder after
 `--path`, none for a result with no folder, which is gathered from the root,

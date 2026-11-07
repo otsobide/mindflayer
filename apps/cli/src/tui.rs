@@ -21,6 +21,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
+use mindweaver_core::adapter::SystemClock;
 use mindweaver_core::code::Said;
 use mindweaver_core::doctor::Examined;
 use mindweaver_core::finder;
@@ -33,7 +34,7 @@ use mindweaver_core::status::{EntryStatus, State};
 use mindweaver_core::url::redacted;
 use mindweaver_core::view::{self, Directory, Held, LoadedWorkspace, Snapshot};
 use mindweaver_core::{
-    scan, AgentHomes, Kind, MarkerFile, MindProject, SourceKind, Template, WeaverWorkspace,
+    scan, AgentHomes, Clock, Kind, MarkerFile, MindProject, SourceKind, Template, WeaverWorkspace,
     WorkspaceError, DEFAULT_SUBDIRECTORY,
 };
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
@@ -224,24 +225,25 @@ pub fn step(app: &mut App, task: Task) {
         start(app, task);
         return;
     }
+    let started = SystemClock.now();
     let performed = perform(&task, app);
-    conclude(app, &task, performed);
+    conclude(app, &task, performed, started);
 }
 
 /// Take in what the task running apart has reported since the last frame,
 /// and show what came of it once it is over: what the loop does before each
 /// frame, and public for a test to do the same between the frames it draws.
 pub fn settle(app: &mut App) {
-    if let Some((task, dones)) = app.heard() {
-        conclude(app, &task, Performed::Ran(dones));
+    if let Some((running, dones)) = app.heard() {
+        conclude(app, &running.task, Performed::Ran(dones), running.started);
     }
 }
 
 /// Wait for the task running apart to be over, and show what came of it:
 /// what leaving the TUI does, and how a test runs one to its end.
 pub fn wait(app: &mut App) {
-    if let Some((task, dones)) = app.waited() {
-        conclude(app, &task, Performed::Ran(dones));
+    if let Some((running, dones)) = app.waited() {
+        conclude(app, &running.task, Performed::Ran(dones), running.started);
     }
 }
 
@@ -264,12 +266,14 @@ fn start(app: &mut App, task: Task) {
     let chained = task.chained();
     let base = app.base().to_path_buf();
     let lookup = app.lookup.clone();
+    // Before its lines start, so nothing they keep is stamped earlier.
+    let started = SystemClock.now();
     thread::spawn(move || {
         let dones = run_all(&runner, &lines, &base, &lookup, &reporting, chained);
         // Nobody to tell is a screen already closed, which needs no answer.
         let _ = send.send(Update::Finished(dones));
     });
-    app.running = Some(Running::new(task, watch, updates));
+    app.running = Some(Running::new(task, started, watch, updates));
 }
 
 /// Show what came of a task, with the disk read again when it asked for that.
@@ -279,8 +283,9 @@ fn start(app: &mut App, task: Task) {
 /// ([`marketplace::recorded`]): the screen reads, and the line wrote. A
 /// search of the MCP Registry goes on to what it found, read from what the
 /// line kept in the workspace's cache ([`registry::kept`]), the same way,
-/// and so does a search of the skill directories ([`finder::kept`]).
-fn conclude(app: &mut App, task: &Task, performed: Performed) {
+/// and so does a search of the skill directories ([`finder::kept`]), from
+/// `started`, when its line started, on.
+fn conclude(app: &mut App, task: &Task, performed: Performed, started: i64) {
     let performed = match (task, performed) {
         (
             Task::ListPlugins {
@@ -300,7 +305,7 @@ fn conclude(app: &mut App, task: &Task, performed: Performed) {
         (Task::SearchSkills { query, at }, Performed::Ran(dones))
             if dones.iter().all(|done| done.error.is_none()) =>
         {
-            skills(app.base(), query, at, dones)
+            skills(app.base(), query, at, started, dones)
         }
         (_, performed) => performed,
     };
@@ -410,15 +415,18 @@ fn found(base: &Path, query: &str, registry: Option<&str>, dones: Vec<Done>) -> 
 }
 
 /// What the search for `query` of the finders the workspace at `base`
-/// lists, each at the address `at` names or its own, found, as its line
-/// kept it in that workspace's cache, to take one from, with what the line
-/// warned of: or what the line said, to read in full, when the cache keeps
-/// none of it, as in a workspace not made yet, which has none.
+/// lists, each at the address `at` names or its own, found, as its line,
+/// which started at `since`, kept it in that workspace's cache, to take one
+/// from, with what the line warned of: or what the line said, to read in
+/// full, when the cache keeps none of it, as in a workspace not made yet,
+/// which has none.
 ///
 /// The finders read again are those the line asked, every one the marker
 /// lists, read through core as the line read them; an address `at` names
-/// that core does not read is none the line could have asked either.
-fn skills(base: &Path, query: &str, at: &[String], dones: Vec<Done>) -> Performed {
+/// that core does not read is none the line could have asked either. One
+/// the line could not get an answer from is left out, rather than read
+/// from what an earlier search kept, which the line did not list.
+fn skills(base: &Path, query: &str, at: &[String], since: i64, dones: Vec<Done>) -> Performed {
     let kept = WeaverWorkspace::open(base).ok().and_then(|workspace| {
         let finders = finder::enabled(&workspace).asked(&[]).ok()?;
         let at = at
@@ -426,7 +434,7 @@ fn skills(base: &Path, query: &str, at: &[String], dones: Vec<Done>) -> Performe
             .map(|at| finder::located(at))
             .collect::<Result<Vec<_>, _>>()
             .ok()?;
-        finder::kept(Cache::of(&workspace)?, query, &finders, &at)
+        finder::kept(Cache::of(&workspace)?, query, &finders, &at, since)
     });
     let Some(found) = kept else {
         return Performed::Ran(dones);
