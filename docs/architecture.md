@@ -8076,7 +8076,12 @@ what it calls (`Running::cancelled_by`).
   so every write sent while it runs waits behind it, and so does a second
   gather: no two run side by side. `busy` tells the panel so, with the
   lines of the run under way and how many wait, as each is sent and as
-  the next run starts with some still behind it.
+  the next run starts with some still behind it. A gather over ssh that
+  ssh stops to ask a question of, a host to trust, a passphrase or a
+  password, asks it on the terminal `mindweaver ui` runs in and holds the
+  thread until it is answered or given up, and a cancel taken meanwhile
+  stops it only once `gix` next looks, which is still open ([open
+  questions](#open-questions), private repositories).
 
 What stays refused is what says no step or takes no cancel, and what a
 browser should never pick ([what a browser may
@@ -14768,7 +14773,18 @@ it once as it closes.
   drops every key but `esc` and Ctrl-C, so the loop races the prompt for its
   answer; and neither key stops a gather waiting on one, since `gix` takes a
   cancel only once it is receiving. `BatchMode=yes` would close the TUI's ssh
-  case too.
+  case too. The panel's server is the same case again (#112), since the
+  path policy takes an `ssh://` or scp-like source as typed: either
+  prompt, in a gather the server runs, is asked on the terminal
+  `mindweaver ui` was started from, where nobody may be looking, and the
+  gather holds the writer thread while it waits, every write sent behind
+  it waiting too, told as `busy`. A cancel sent meanwhile is taken,
+  `connecting` being a step one still stops, but stops nothing until
+  `gix` next looks, once the prompt is answered or given up.
+  `BatchMode=yes` in the ssh command of a gather the server runs would
+  make ssh's questions failures the panel is told; refusing an ssh source
+  from a front end with no terminal would close ssh's case too, at the
+  cost of a source the command line gathers.
 - **When the scrub can stop.** `gather::scrub` runs whenever a command
   opens the ledger to write (`WeaverWorkspace::ledger_to_write`), because an
   older build could write a token into the same file. Schema 3 (#30) changes
