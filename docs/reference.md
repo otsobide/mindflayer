@@ -1237,7 +1237,7 @@ $ mindweaver gather search pdf
 3  pdf           https://github.com/acme/skills#main  skills/pdf     321 stars      claude-plugins.dev
 4  slides        https://github.com/beta/decks#main   skills/slides  7 stars        claude-plugins.dev
 hint: github was not asked, since its search needs a token: --token-env names the variable that holds one
-warning: claude-plugins.dev: result 2 (`escape`): its folder climbs out of the repository, so it is not listed
+warning: claude-plugins.dev: result 3 (`escape`): its folder climbs out of the repository, so it is not listed
 ```
 
 A finder only helps find a skill: what is taken is gathered from its

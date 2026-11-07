@@ -90,10 +90,10 @@ fn a_search_lists_each_result_by_its_repository_folder_and_finders() {
     );
     assert_eq!(
         outcome.stderr,
-        "warning: github: result 2 (`docs/skill.md`): it is the file `skill.md`, not a `SKILL.md`, so it is not listed\n\
-         warning: github: result 3 (`vault`): its repository's address carries a credential, so it is not listed\n\
-         warning: skills.sh: result 3 (`broken`): it names no repository, so it is not listed\n\
-         warning: claude-plugins.dev: result 2 (`escape`): its folder climbs out of the repository, so it is not listed\n"
+        "warning: github: result 3 (`docs/skill.md`): it is the file `skill.md`, not a `SKILL.md`, so it is not listed\n\
+         warning: github: result 4 (`vault`): its repository's address carries a credential, so it is not listed\n\
+         warning: skills.sh: result 4 (`broken`): it names no repository, so it is not listed\n\
+         warning: claude-plugins.dev: result 3 (`escape`): its folder climbs out of the repository, so it is not listed\n"
     );
     assert!(!outcome.ok);
 }

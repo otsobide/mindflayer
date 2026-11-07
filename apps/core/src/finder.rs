@@ -366,7 +366,7 @@ impl<'a> Search<'a> {
                             Ok(hit) => found.add(finder, hit),
                             Err((name, why)) => found.failures.push(Failure::Dropped {
                                 finder,
-                                at,
+                                at: at + 1,
                                 name,
                                 why: Redacted::new(&why),
                             }),
@@ -738,7 +738,8 @@ pub enum Failure {
     #[error("{finder}: result {at}{}: {why}, so it is not listed", .name.as_deref().map(|name| format!(" (`{name}`)")).unwrap_or_default())]
     Dropped {
         finder: Finder,
-        /// Where it is among the finder's results, from 0.
+        /// Where it is among the finder's results, counting from 1, as a
+        /// search numbers what it lists and `--take` names one.
         at: usize,
         /// Its name, when it said one, printable.
         name: Option<String>,

@@ -207,35 +207,35 @@ fn each_finder_lists_what_it_found_once_by_its_repository_and_folder() {
             (
                 String::from("finder_result_dropped"),
                 String::from(
-                    "github: result 2 (`docs/skill.md`): it is the file `skill.md`, not a \
+                    "github: result 3 (`docs/skill.md`): it is the file `skill.md`, not a \
                      `SKILL.md`, so it is not listed"
                 )
             ),
             (
                 String::from("finder_result_dropped"),
                 String::from(
-                    "github: result 3 (`vault`): its repository's address carries a \
+                    "github: result 4 (`vault`): its repository's address carries a \
                      credential, so it is not listed"
                 )
             ),
             (
                 String::from("finder_result_dropped"),
                 String::from(
-                    "skills.sh: result 2 (`docx`): it names a folder on this machine, which \
+                    "skills.sh: result 3 (`docx`): it names a folder on this machine, which \
                      only a finder on this machine may, so it is not listed"
                 )
             ),
             (
                 String::from("finder_result_dropped"),
                 String::from(
-                    "skills.sh: result 3 (`broken`): it names no repository, so it is not \
+                    "skills.sh: result 4 (`broken`): it names no repository, so it is not \
                      listed"
                 )
             ),
             (
                 String::from("finder_result_dropped"),
                 String::from(
-                    "claude-plugins.dev: result 2 (`escape`): its folder climbs out of the \
+                    "claude-plugins.dev: result 3 (`escape`): its folder climbs out of the \
                      repository, so it is not listed"
                 )
             ),
