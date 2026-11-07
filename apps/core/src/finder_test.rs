@@ -157,3 +157,122 @@ fn an_edit_of_the_marker_keeps_the_finders_and_their_comment() {
     );
     assert_eq!(enabled(&workspace).finders, [Finder::Github]);
 }
+
+/// What a search found serializes to, name by name: what `--json` prints
+/// in the envelope, each failure as its code and its message.
+#[test]
+fn what_a_search_found_serializes_name_by_name() {
+    let found = Found {
+        hits: vec![Hit {
+            name: String::from("pdf"),
+            repository: Redacted::new("https://github.com/acme/skills"),
+            path: Some(String::from("skills/pdf")),
+            reference: Some(String::from("main")),
+            installs: Some(12),
+            stars: None,
+            finders: vec![Finder::Github, Finder::ClaudePlugins],
+        }],
+        skipped: vec![Finder::Github],
+        failures: vec![Failure::Unreadable {
+            finder: Finder::SkillsSh,
+            detail: Redacted::new("missing field `skills`"),
+        }],
+        warnings: Vec::new(),
+    };
+
+    assert_eq!(
+        serde_json::to_value(&found).unwrap(),
+        serde_json::json!({
+            "hits": [{
+                "name": "pdf",
+                "repository": "https://github.com/acme/skills",
+                "path": "skills/pdf",
+                "reference": "main",
+                "installs": 12,
+                "stars": null,
+                "finders": ["github", "claude-plugins.dev"],
+            }],
+            "skipped": ["github"],
+            "failures": [{
+                "code": "finder_answer_unreadable",
+                "message": "skills.sh: its answer is not in the shape this build reads, so \
+                            nothing it found is listed: missing field `skills`",
+            }],
+            "warnings": [],
+        })
+    );
+}
+
+/// An empty token is none, and a token is never shown.
+#[test]
+fn a_token_is_never_shown_and_an_empty_one_is_none() {
+    assert_eq!(Token::new(""), None);
+    let token = Token::new("t0ps3cret").unwrap();
+    assert_eq!(format!("{token:?}"), "Token(<credential>)");
+}
+
+/// What `gather git` would take of a result: a repository elsewhere, or
+/// here from a finder here; never one with a credential, nor a folder that
+/// climbs out of it.
+#[test]
+fn a_result_resolves_only_to_a_git_source_a_gather_would_take() {
+    let listed = |address: &str, path: Option<&str>| Listed {
+        name: Some(String::from("pdf")),
+        address: Some(address.to_owned()),
+        path: path.map(str::to_owned),
+        ..Listed::default()
+    };
+    let why = |listed: Listed, local: bool| listed.resolved(local).unwrap_err().1;
+
+    let hit = listed("Acme/Skills", Some("/skills/pdf/"))
+        .resolved(false)
+        .unwrap();
+    assert_eq!(hit.repository, "https://github.com/acme/skills");
+    assert_eq!(hit.path.as_deref(), Some("skills/pdf"));
+    let hit = listed("git@gitlab.com:acme/skills.git", Some("."))
+        .resolved(false)
+        .unwrap();
+    assert_eq!(hit.repository, "https://gitlab.com/acme/skills");
+    assert_eq!(hit.path, None);
+    assert_eq!(
+        listed("/srv/skills", None)
+            .resolved(true)
+            .unwrap()
+            .repository,
+        "/srv/skills"
+    );
+
+    assert_eq!(
+        why(listed("/srv/skills", None), false),
+        "it names a folder on this machine, which only a finder on this machine may"
+    );
+    assert_eq!(
+        why(listed("./skills", None), false),
+        "it names a folder on this machine, which only a finder on this machine may"
+    );
+    assert_eq!(
+        why(
+            listed("https://me:secret@github.com/acme/skills", None),
+            false
+        ),
+        "its repository's address carries a credential"
+    );
+    assert_eq!(
+        why(listed("acme/skills", Some("../elsewhere")), false),
+        "its folder climbs out of the repository"
+    );
+    assert_eq!(
+        why(listed("acme/skills\n", None), false),
+        "its repository has a control character or a space at either end"
+    );
+    assert_eq!(
+        why(
+            Listed {
+                address: None,
+                ..listed("", None)
+            },
+            false
+        ),
+        "it names no repository"
+    );
+}

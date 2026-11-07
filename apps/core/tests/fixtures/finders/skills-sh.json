@@ -1,0 +1,26 @@
+{
+  "skills": [
+    {
+      "id": "acme/pdf-skill/pdf-skill",
+      "name": "pdf-skill",
+      "installs": 1234,
+      "source": "acme/pdf-skill"
+    },
+    {
+      "id": "beta/house-rules/commit-style",
+      "name": "commit-style",
+      "installs": 56,
+      "source": "beta/house-rules"
+    },
+    {
+      "id": "local/docx",
+      "name": "docx",
+      "installs": 7,
+      "source": "/home/someone/skills"
+    },
+    {
+      "id": "nowhere",
+      "name": "broken"
+    }
+  ]
+}

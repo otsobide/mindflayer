@@ -781,6 +781,12 @@ fn followed(url: &str, from: &Url, location: &str) -> Result<Url, HttpError> {
     fetchable(next.as_str()).map_err(|_| refused(next.as_str()))
 }
 
+/// Whether `url` is one [`fetchable`] lets through that names this machine:
+/// what a catalog of one's own, or a test's, is reached at.
+pub(crate) fn on_this_machine(url: &str) -> bool {
+    fetchable(url).is_ok_and(|url| is_this_machine(&url))
+}
+
 /// Whether `url` names this machine: a loopback address, or `localhost`.
 ///
 /// Read off the host as the parser writes it, an IPv6 address in brackets,

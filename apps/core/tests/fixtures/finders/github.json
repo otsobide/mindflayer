@@ -1,0 +1,73 @@
+{
+  "total_count": 4,
+  "incomplete_results": false,
+  "items": [
+    {
+      "name": "SKILL.md",
+      "path": "skills/pdf/SKILL.md",
+      "sha": "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
+      "url": "https://api.github.com/repositories/1/contents/skills/pdf/SKILL.md?ref=4b825dc642cb6eb9a060e54bf8d69288fbee4904",
+      "git_url": "https://api.github.com/repositories/1/git/blobs/4b825dc642cb6eb9a060e54bf8d69288fbee4904",
+      "html_url": "https://github.com/acme/skills/blob/4b825dc642cb6eb9a060e54bf8d69288fbee4904/skills/pdf/SKILL.md",
+      "repository": {
+        "id": 1,
+        "name": "skills",
+        "full_name": "acme/skills",
+        "private": false,
+        "owner": { "login": "acme", "id": 1, "type": "Organization" },
+        "html_url": "https://github.com/acme/skills",
+        "description": "Acme's skills",
+        "fork": false
+      },
+      "score": 1.0
+    },
+    {
+      "name": "SKILL.md",
+      "path": "SKILL.md",
+      "sha": "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
+      "html_url": "https://github.com/acme/pdf-skill/blob/4b825dc642cb6eb9a060e54bf8d69288fbee4904/SKILL.md",
+      "repository": {
+        "id": 2,
+        "name": "pdf-skill",
+        "full_name": "acme/pdf-skill",
+        "private": false,
+        "owner": { "login": "acme", "id": 1, "type": "Organization" },
+        "html_url": "https://github.com/acme/pdf-skill",
+        "fork": false
+      },
+      "score": 0.9
+    },
+    {
+      "name": "skill.md",
+      "path": "docs/skill.md",
+      "sha": "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
+      "html_url": "https://github.com/acme/notes/blob/4b825dc642cb6eb9a060e54bf8d69288fbee4904/docs/skill.md",
+      "repository": {
+        "id": 3,
+        "name": "notes",
+        "full_name": "acme/notes",
+        "private": false,
+        "owner": { "login": "acme", "id": 1, "type": "Organization" },
+        "html_url": "https://github.com/acme/notes",
+        "fork": false
+      },
+      "score": 0.5
+    },
+    {
+      "name": "SKILL.md",
+      "path": "skills/vault/SKILL.md",
+      "sha": "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
+      "html_url": "https://github.com/acme/vault/blob/4b825dc642cb6eb9a060e54bf8d69288fbee4904/skills/vault/SKILL.md",
+      "repository": {
+        "id": 4,
+        "name": "vault",
+        "full_name": "acme/vault",
+        "private": true,
+        "owner": { "login": "acme", "id": 1, "type": "Organization" },
+        "html_url": "https://deploy:hunter2@github.com/acme/vault",
+        "fork": false
+      },
+      "score": 0.4
+    }
+  ]
+}
