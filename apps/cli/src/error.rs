@@ -93,6 +93,8 @@ pub enum CliError {
     #[error(transparent)]
     Http(#[from] mindweaver_core::http::HttpError),
     #[error(transparent)]
+    Import(#[from] mindweaver_core::lifecycle::ImportError),
+    #[error(transparent)]
     Ledger(#[from] LedgerError),
     #[error(transparent)]
     Install(#[from] mindweaver_core::install::InstallError),
@@ -303,6 +305,7 @@ codes!(CliError {
     Self::Source(error) => error,
     Self::Marketplace(error) => error,
     Self::Http(error) => error,
+    Self::Import(error) => error,
     Self::Ledger(error) => error,
     Self::Install(error) => error,
     Self::Create(error) => error,

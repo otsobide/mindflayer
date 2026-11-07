@@ -196,3 +196,301 @@ fn a_registry_the_client_would_not_fetch_is_refused_before_anything_is_sent() {
         assert!(!said.contains("hunter2"), "{said}");
     }
 }
+
+// ---------------------------------------------------------------------------
+// A server written into the library
+// ---------------------------------------------------------------------------
+
+/// Every value the fixtures give for a secret, a default, an example or a
+/// fixed value, which nothing prints and no definition holds.
+const SECRET_VALUES: [&str; 4] = [
+    "change-me-in-production",
+    "your-weather-key-here",
+    "acme-key-goes-here",
+    "notes-key-that-ships-with-the-docs",
+];
+
+/// Every file the workspace keeps, its library and its ledger among them,
+/// by its route, with what it holds: all but the answers its HTTP cache
+/// keeps, which a read keeps too.
+fn kept(dir: &Path) -> Vec<(String, Vec<u8>)> {
+    let root = dir.join(WEAVER_DIR);
+    let mut kept = Vec::new();
+    let mut pending = vec![root.clone()];
+    while let Some(folder) = pending.pop() {
+        for entry in fs::read_dir(&folder).unwrap() {
+            let path = entry.unwrap().path();
+            if path.starts_with(root.join("cache")) {
+                continue;
+            }
+            if path.is_dir() {
+                pending.push(path);
+            } else {
+                let route = path.strip_prefix(&root).unwrap().display().to_string();
+                kept.push((route, fs::read(&path).unwrap()));
+            }
+        }
+    }
+    kept.sort();
+    kept
+}
+
+/// What `add` would write said in full, nothing written: the version and
+/// its status, what the library would call it, the command an agent would
+/// start and its inputs, a secret by the variable it is read from; what
+/// the mapping left out a warning that fails nothing.
+#[test]
+fn add_without_yes_writes_nothing_and_prints_the_resolved_command() {
+    let dir = workspace();
+    let registry = FixtureRegistry::start();
+    let before = kept(dir.path());
+
+    let outcome = mcp(dir.path(), &registry, &["add", "io.github.acme/weather"]).unwrap();
+
+    let file = own_directory_for(dir.path(), Kind::Mcp).join("weather.toml");
+    assert_eq!(
+        outcome.stdout,
+        format!(
+            "io.github.acme/weather 1.0.2, active, from {}\n\
+             as the MCP server weather: Forecasts and alerts for any city\n\
+             \n\
+             transport: stdio\n\
+             \x20 command: npx\n\
+             \x20 args:\n\
+             \x20   - -y\n\
+             \x20   - @acme/weather-mcp@1.0.2\n\
+             \x20   - --units\n\
+             \x20   - metric\n\
+             \x20   - {{city}}\n\
+             \x20 env:\n\
+             \x20   WEATHER_API_KEY: {{WEATHER_API_KEY}}\n\
+             \x20   WEATHER_ENDPOINT: https://{{region}}.api.acme.example\n\
+             \x20   WEATHER_LOG_LEVEL: {{WEATHER_LOG_LEVEL}}\n\
+             \n\
+             inputs:\n\
+             \x20 WEATHER_API_KEY: env, secret, required, read from $WEATHER_API_KEY\n\
+             \x20   The key the forecasts are fetched with\n\
+             \x20 WEATHER_LOG_LEVEL: env, read from $WEATHER_LOG_LEVEL\n\
+             \x20   How much it logs\n\
+             \x20 region: env, required, read from $REGION\n\
+             \x20   The region closest to you\n\
+             \x20 city: arg, required, read from $CITY\n\
+             \x20   The city forecasts are for\n\
+             \n\
+             would create mcp weather at {}\n\
+             nothing written: add --yes to go ahead\n",
+            registry.url,
+            file.display(),
+        )
+    );
+    assert_eq!(
+        stderr_codes(&outcome),
+        [
+            Some(String::from("registry_secret_dropped")),
+            Some(String::from("registry_secret_dropped")),
+            Some(String::from("registry_argument_left_out")),
+        ]
+    );
+    assert!(outcome.ok, "{:?}", outcome.stderr);
+    assert_eq!(kept(dir.path()), before);
+    assert!(!file.exists());
+    assert_eq!(
+        registry.asked(),
+        ["/v0.1/servers/io.github.acme%2Fweather/versions/latest"]
+    );
+}
+
+/// The write is the dry run's, said the same way and ending with where it
+/// went, and what it wrote is a definition `validate` finds nothing wrong
+/// with, which tells where it came from.
+#[test]
+fn add_with_yes_writes_a_definition_validate_reads_with_no_issue() {
+    let dir = workspace();
+    let registry = FixtureRegistry::start();
+    let dry = mcp(dir.path(), &registry, &["add", "io.github.acme/weather"]).unwrap();
+
+    let outcome = mcp(
+        dir.path(),
+        &registry,
+        &["add", "--yes", "io.github.acme/weather"],
+    )
+    .unwrap();
+
+    let file = own_directory_for(dir.path(), Kind::Mcp).join("weather.toml");
+    let said = dry
+        .stdout
+        .strip_suffix("nothing written: add --yes to go ahead\n")
+        .unwrap()
+        .replace("would create", "created");
+    assert_eq!(outcome.stdout, said);
+    assert!(outcome.ok, "{:?}", outcome.stderr);
+    let text = fs::read_to_string(&file).unwrap();
+    assert!(
+        text.contains("upstream_name = \"io.github.acme/weather\""),
+        "{text}"
+    );
+    let validated = weaver(dir.path(), &["validate", "mcp:weather"]).unwrap();
+    assert!(validated.ok, "{validated:?}");
+    assert!(validated.stderr.is_empty(), "{validated:?}");
+}
+
+#[test]
+fn add_takes_the_version_and_the_name_it_is_given() {
+    let dir = workspace();
+    let registry = FixtureRegistry::start();
+
+    let outcome = mcp(
+        dir.path(),
+        &registry,
+        &[
+            "add",
+            "--yes",
+            "--version",
+            "1.0.2",
+            "--name",
+            "forecasts",
+            "io.github.acme/weather",
+        ],
+    )
+    .unwrap();
+
+    assert!(outcome
+        .stdout
+        .contains("as the MCP server forecasts: Forecasts and alerts for any city\n"));
+    assert!(own_directory_for(dir.path(), Kind::Mcp)
+        .join("forecasts.toml")
+        .is_file());
+    assert_eq!(
+        registry.asked(),
+        ["/v0.1/servers/io.github.acme%2Fweather/versions/1.0.2"]
+    );
+}
+
+/// What the library holds under the name is left as it is, by the dry run
+/// and by the write alike.
+#[test]
+fn a_name_the_library_holds_is_refused_and_left_as_it_is() {
+    let dir = workspace();
+    let registry = FixtureRegistry::start();
+    mcp(
+        dir.path(),
+        &registry,
+        &["add", "--yes", "io.github.acme/weather"],
+    )
+    .unwrap();
+    let before = kept(dir.path());
+
+    for args in [
+        &["add", "io.github.acme/weather"][..],
+        &["add", "--yes", "io.github.acme/weather"][..],
+    ] {
+        let failure = mcp(dir.path(), &registry, args).unwrap_err();
+
+        assert_eq!(failure.error.code(), "add_exists", "{args:?}");
+    }
+    assert_eq!(kept(dir.path()), before);
+}
+
+/// A bundle, which nothing here starts, is refused, each step to take by
+/// hand said with its code, and nothing is written.
+#[test]
+fn a_server_with_no_runnable_mapping_is_refused_with_its_manual_steps() {
+    let dir = workspace();
+    let registry = FixtureRegistry::start();
+    let before = kept(dir.path());
+
+    let failure = mcp(
+        dir.path(),
+        &registry,
+        &["add", "--yes", "io.github.acme/notes-bundle"],
+    )
+    .unwrap_err();
+
+    assert_eq!(failure.error.code(), "registry_import_unmapped");
+    assert_eq!(
+        failure
+            .warnings
+            .iter()
+            .map(|warning| warning.code)
+            .collect::<Vec<_>>(),
+        [Some("registry_package_mcpb")]
+    );
+    assert_eq!(kept(dir.path()), before);
+}
+
+/// Nothing the registry gives for a secret is printed, nor written: a
+/// default, an example, a value, each read from a variable instead.
+#[test]
+fn a_secrets_value_is_never_printed_nor_written() {
+    let dir = workspace();
+    let registry = FixtureRegistry::start();
+
+    for server in ["io.github.acme/weather", "io.github.acme/notes-cloud"] {
+        for args in [&["add", server][..], &["add", "--yes", server][..]] {
+            let outcome = mcp(dir.path(), &registry, args).unwrap();
+
+            let said = format!("{}{:?}", outcome.stdout, outcome.stderr);
+            for secret in SECRET_VALUES {
+                assert!(!said.contains(secret), "{args:?}: {said}");
+            }
+        }
+    }
+    for (_, written) in kept(dir.path()) {
+        let written = String::from_utf8_lossy(&written);
+        for secret in SECRET_VALUES {
+            assert!(!written.contains(secret), "{written}");
+        }
+    }
+}
+
+/// Neither the dry run nor the write starts anything the definition names:
+/// each program an agent would start stands on the `PATH` the binary is
+/// given, and none of them is run.
+#[cfg(unix)]
+#[test]
+fn nothing_a_definition_starts_is_run_by_the_dry_run_or_the_write() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = workspace();
+    let registry = FixtureRegistry::start();
+    let bin = TempDir::new().unwrap();
+    let started = bin.path().join("started");
+    for program in ["npx", "uvx", "docker", "dnx"] {
+        let path = bin.path().join(program);
+        fs::write(
+            &path,
+            format!("#!/bin/sh\necho {program} >> '{}'\n", started.display()),
+        )
+        .unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let path = bin.path().to_string_lossy().into_owned();
+
+    for server in [
+        "io.github.acme/weather",
+        "io.github.acme/pyweather",
+        "io.github.acme/weather-docker",
+        "io.github.acme/dotnet-weather",
+    ] {
+        for yes in [&[][..], &["--yes"][..]] {
+            let mut args = vec!["gather", "mcp", "add", "--registry", &registry.url];
+            args.extend_from_slice(yes);
+            args.push(server);
+
+            let ran = spawn("mindweaver", dir.path(), &args, &[("PATH", &path)]);
+
+            assert!(ran.ok, "{server}: {}", ran.stderr);
+        }
+    }
+    assert!(
+        !started.exists(),
+        "{}",
+        fs::read_to_string(&started).unwrap_or_default()
+    );
+    assert_eq!(
+        fs::read_dir(own_directory_for(dir.path(), Kind::Mcp))
+            .unwrap()
+            .count(),
+        4
+    );
+}

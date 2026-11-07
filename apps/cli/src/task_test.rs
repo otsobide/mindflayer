@@ -1465,6 +1465,11 @@ fn a_front_end_with_no_terminal_refuses_what_draws_edits_activates_gathers_or_sh
             "mind weaver gather mcp search --json --registry https://registry.example weather",
             Refusal::Unwatched,
         ),
+        ("mindweaver gather mcp add io.github.acme/weather", Refusal::Unwatched),
+        (
+            "mindweaver gather mcp add --yes --version 1.0.2 io.github.acme/weather",
+            Refusal::Unwatched,
+        ),
         ("mind show deploy", Refusal::Unheld),
         ("mind -C alpha show --json rule:style", Refusal::Unheld),
         ("mindweaver show -p alpha deploy", Refusal::Unheld),

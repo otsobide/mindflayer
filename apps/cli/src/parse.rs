@@ -1647,13 +1647,15 @@ pub enum GatherCommand {
         json: bool,
     },
 
-    /// Search the MCP Registry for servers.
+    /// Search the MCP Registry for servers, and write one it lists into
+    /// the library.
     #[command(subcommand)]
     Mcp(McpCommand),
 }
 
-/// What `gather mcp` does with the MCP Registry, read from the official
-/// registry unless `--registry` names another.
+/// What `gather mcp` does with the MCP Registry: a search, and a server it
+/// lists written into the library, each read from the official registry
+/// unless `--registry` names another.
 #[derive(Debug, Subcommand)]
 pub enum McpCommand {
     /// List the servers the registry finds for a query: each by the name
@@ -1675,6 +1677,42 @@ pub enum McpCommand {
         /// shares.
         #[arg(long)]
         json: bool,
+    },
+
+    /// Write a server the registry lists into the library, as `add mcp`
+    /// writes one: how an agent starts or reaches it, and what is supplied
+    /// for it, each secret read from an environment variable.
+    ///
+    /// Without --yes it says what it would write, the command an agent
+    /// would start or the address it would reach, and writes nothing.
+    /// Nothing is started, whichever it is.
+    //
+    // No `--version` flag of clap's own here, which `propagate_version`
+    // would give it: the version is the server's.
+    #[command(disable_version_flag = true)]
+    Add {
+        /// The server, by the name the registry gives it, as `gather mcp
+        /// search` lists it (`io.github.acme/weather`).
+        server: String,
+
+        /// The version to take, as the registry names it, instead of the
+        /// latest.
+        #[arg(long, value_name = "V")]
+        version: Option<String>,
+
+        /// What to call it in the library, instead of the last part of the
+        /// name the registry gives it.
+        #[arg(long, value_name = "NAME")]
+        name: Option<String>,
+
+        /// The registry to read: https, or http on this machine.
+        #[arg(long, value_name = "URL", default_value = registry::OFFICIAL)]
+        registry: String,
+
+        /// Write it. Without this nothing is written, and the command says
+        /// what would be.
+        #[arg(short, long)]
+        yes: bool,
     },
 }
 

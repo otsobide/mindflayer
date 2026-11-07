@@ -576,7 +576,7 @@ pub(crate) fn show(
 /// what a request to it carries. Each value made printable, since it is
 /// from a file somebody wrote, and each argument on a line of its own,
 /// since one may hold a space.
-fn transport_lines(transport: &ShownTransport) -> String {
+pub(crate) fn transport_lines(transport: &ShownTransport) -> String {
     let mut lines = format!("transport: {}\n", transport.transport.slug());
     if let Some(command) = &transport.command {
         let _ = writeln!(lines, "  command: {}", printable(command));
@@ -608,7 +608,7 @@ fn transport_lines(transport: &ShownTransport) -> String {
 /// is written, whether it is a secret and needed, and the variable it is
 /// read from, its description below it when it has one. A secret is said
 /// by its variable alone, since no definition holds its value.
-fn input_lines(inputs: &[ShownInput]) -> String {
+pub(crate) fn input_lines(inputs: &[ShownInput]) -> String {
     let mut lines = String::from("inputs:\n");
     for input in inputs {
         let mut said = vec![input.kind.slug()];
