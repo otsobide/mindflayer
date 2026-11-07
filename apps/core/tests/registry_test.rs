@@ -375,13 +375,14 @@ fn the_latest_version_is_asked_for_as_the_registry_names_it() {
 }
 
 /// One server asked for by name that does not read is the answer failing,
-/// said without the credential a string of it quotes.
+/// said without the credential a string of it quotes: a string where a
+/// list belongs, which serde quotes, where a table it would only call a map.
 #[test]
 fn a_version_that_does_not_read_is_a_failure() {
     let url = format!("{REGISTRY}/v0.1/servers/io.github.acme%2Fbroken/versions/1");
     let fake = Fake::new().answering(
         &url,
-        r#"{"server":{"name":"io.github.acme/broken","version":{"url":"https://u:p4ss@acme.example"}}}"#,
+        r#"{"server":{"name":"io.github.acme/broken","version":"1","packages":"https://u:p4ss@acme.example"}}"#,
     );
     let client = Client::new(&fake);
 
@@ -391,11 +392,12 @@ fn a_version_that_does_not_read_is_a_failure() {
         .unwrap_err();
 
     assert_eq!(failed.error.code(), "http_json_invalid");
+    let said = failed.error.to_string();
     assert!(
-        !failed.error.to_string().contains("p4ss"),
-        "{}",
-        failed.error
+        said.contains(r#"invalid type: string "https://acme.example""#),
+        "{said}"
     );
+    assert!(!said.contains("p4ss"), "{said}");
 }
 
 // ---------------------------------------------------------------------------
