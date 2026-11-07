@@ -11225,7 +11225,9 @@ skills ([which kind a name is](#which-kind-a-name-is)).
   a block that cannot be read or holds somebody's section, a place no rule
   is written (`agents_md::misplaced`), an `AGENTS.md` linked out of the
   project, a `CLAUDE.md` whose block cannot be read (`claude_md::reach`), a
-  rule linked out of the workspace offering it (`InstallError::Outside`).
+  rule linked out of the workspace offering it, or, on the shelf, out of
+  its source's folder there, as a shelf skill's copy is held to its own
+  (`InstallError::Outside`).
   The block is written before the import and the files; one of those that
   fails after it records what was written, then is raised, and the next
   render finishes it.

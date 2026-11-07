@@ -932,7 +932,7 @@ fn definition(
             },
         });
     }
-    rules::inside(&from, &rules::within(workspace, &candidate.offer, &from))?;
+    rules::inside(&from, &rules::within(workspace, &candidate.offer))?;
     let text = fs::read_to_string(&from).map_err(|source| ArtifactError::Read {
         path: from.clone(),
         source,

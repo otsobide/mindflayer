@@ -748,6 +748,36 @@ fn a_shelf_rule_its_source_changed_is_outdated_until_an_update_and_orphaned_once
     assert_eq!(fixture.standing("review/tone"), Standing::Orphaned);
 }
 
+/// A shelf rule is held to its source's folder on the shelf, as a shelf
+/// skill's copy is to its own: one a hand made a link leading out of it is
+/// refused, nothing of it written into the block.
+#[cfg(unix)]
+#[test]
+fn a_shelf_rule_linked_out_of_its_source_s_folder_is_not_installed() {
+    let fixture = fixture(Share::Shared, &Agent::ALL);
+    let _source = fixture.gathered(&[("rules/git/no-force-push.md", NO_FORCE_PUSH)]);
+    let source = mindweaver_core::sources::named(&fixture.ledger, "team-rules").unwrap();
+    let outside = TempDir::new().unwrap();
+    let secret = outside.path().join("secret.md");
+    fs::write(&secret, "token=hunter2\n").unwrap();
+    let file = fixture
+        .workspace
+        .gathered_dir(Kind::Rule)
+        .join(&source.directory)
+        .join("git/no-force-push.md");
+    fs::remove_file(&file).unwrap();
+    std::os::unix::fs::symlink(&secret, &file).unwrap();
+
+    let refused = fixture.try_install("git/no-force-push").unwrap_err();
+
+    assert!(
+        matches!(refused, InstallError::Outside { .. }),
+        "{refused:?}"
+    );
+    assert!(!fixture.agents_md().exists());
+    assert!(fixture.records().is_empty());
+}
+
 /// A project a `mind.toml` marks is given a shelf rule as it is given one
 /// of the workspace's own: a copy, filed by its route.
 #[test]

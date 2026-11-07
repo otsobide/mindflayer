@@ -724,7 +724,7 @@ impl Wanted {
         before: Option<InstallRecord>,
     ) -> Result<Wanted, InstallError> {
         let path = offer.source(workspace);
-        let within = within(workspace, offer, &path);
+        let within = within(workspace, offer);
         inside(&path, &within)?;
         let artifact = Artifact::rule(&path, offer.name().to_string(), &within)?;
         let bytes = fs::read(artifact.file()).map_err(|source| {
@@ -795,13 +795,19 @@ impl Wanted {
     }
 }
 
-/// Where links in the rule `offer` offers, at `path`, may lead: the
-/// workspace that keeps it, as for a skill's copy.
-pub(super) fn within(workspace: &WeaverWorkspace, offer: &Offer, path: &Path) -> PathBuf {
+/// Where links in the rule `offer` offers may lead: the workspace that
+/// keeps it, as for a skill's copy, and for one on the shelf its source's
+/// folder there, as a shelf skill's copy is held to its own folder. A
+/// gather files a rule as the bytes it holds, never a link, so a link there
+/// is a hand's; held to the rule's own file it would hold nothing, a file
+/// being inside itself wherever it leads.
+pub(super) fn within(workspace: &WeaverWorkspace, offer: &Offer) -> PathBuf {
     match offer {
         Offer::Loaded { entry, .. } => paths::normalize(&workspace.root().join(entry)),
         Offer::Workspace { .. } => workspace.root().to_path_buf(),
-        Offer::Shelf(_) => path.to_path_buf(),
+        Offer::Shelf(gathered) => workspace
+            .gathered_dir(gathered.kind)
+            .join(&gathered.source.directory),
     }
 }
 
