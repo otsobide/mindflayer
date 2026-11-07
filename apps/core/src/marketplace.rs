@@ -1289,6 +1289,22 @@ pub fn recorded(
     )))
 }
 
+/// What the marketplace `request` names listed when it was last gathered,
+/// as [`recorded`] reads it, or [`MarketplaceError::NotRecorded`] when no
+/// marketplace is recorded there: for a front end that asks for it by its
+/// address alone, as the panel does once its `gather marketplace --list`
+/// ran, where the TUI reads it after a line of its own and says what the
+/// line said when there is none.
+pub fn listed(
+    workspace: &WeaverWorkspace,
+    ledger: &Ledger,
+    request: &gather::Request,
+) -> Result<Listed, MarketplaceError> {
+    recorded(workspace, ledger, request)?.ok_or_else(|| MarketplaceError::NotRecorded {
+        url: Redacted::new(request.source.url()),
+    })
+}
+
 /// The marketplace's source, registered when it is new, its clone, fetched
 /// from `url` into its folder of the cache, and its catalog, read there,
 /// with the source called what it is to be called and logged: or why not,
@@ -1770,6 +1786,14 @@ pub enum MarketplaceError {
     /// none, or one no source can be called.
     #[error("{}: give the marketplace a name with --name", match .name { Some(name) => format!("the catalog calls it `{name}`, which cannot name a source: it has to be letters, digits, `.`, `_` and `-`"), None => String::from("the catalog gives it no name") })]
     NameUnusable { name: Option<String> },
+    /// No marketplace is recorded at the address asked about, its folder
+    /// and its branch: its catalog was never listed, or was listed at
+    /// another of them ([`listed`]). The address as typed, without any
+    /// credential it was typed with.
+    #[error(
+        "no marketplace is recorded at {url}: `gather marketplace --list` lists its plugins first"
+    )]
+    NotRecorded { url: Redacted },
     /// A `--plugin` its catalog does not list.
     #[error("the marketplace {marketplace} lists no plugin called `{name}`: `--list` lists them")]
     NotListed {
@@ -1817,6 +1841,7 @@ pub enum MarketplaceError {
 
 codes!(MarketplaceError {
     Self::NameUnusable { .. } => "marketplace_name_unusable",
+    Self::NotRecorded { .. } => "marketplace_not_recorded",
     Self::NotListed { .. } => "marketplace_plugin_not_listed",
     Self::Unconfirmed { .. } => "marketplace_all_unconfirmed",
     Self::CatalogMissing { .. } => "marketplace_catalog_missing",

@@ -362,6 +362,35 @@ fn what_a_marketplace_listed_is_read_again_from_its_clone_without_fetching() {
     );
 }
 
+/// Asked for by its address alone, as the panel asks once its listing ran,
+/// what was listed is what [`marketplace::recorded`] reads, and an address
+/// nothing was listed at is refused with a code of its own, said without
+/// any credential it was typed with.
+#[test]
+fn a_marketplace_asked_for_by_its_address_is_what_was_listed_or_refused_as_not_recorded() {
+    let market = anthropic();
+    let routes = Arc::new(Routes::default().to(MARKET, &market));
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    let listing = request(&routes, Pick::Listing);
+    let listed = marketplace::gather(&workspace, &ledger, &listing)
+        .unwrap()
+        .catalog;
+
+    assert_eq!(
+        marketplace::listed(&workspace, &ledger, &listing.catalog).unwrap(),
+        listed
+    );
+    let elsewhere = Request::git("https://u:t0ken@github.com/acme/elsewhere");
+    let refused = marketplace::listed(&workspace, &ledger, &elsewhere).unwrap_err();
+    assert_eq!(refused.code(), "marketplace_not_recorded");
+    assert_eq!(
+        refused.to_string(),
+        "no marketplace is recorded at https://github.com/acme/elsewhere: `gather marketplace \
+         --list` lists its plugins first"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Gathering the plugins picked
 // ---------------------------------------------------------------------------
