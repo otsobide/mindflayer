@@ -119,13 +119,20 @@ impl Underway {
     }
 
     /// The run of `lines` is under way, from its start, once its lines
-    /// passed, to its end; told as busy when jobs still wait behind it, so
-    /// the panel knows what they wait for now.
+    /// passed, to its end: told to every subscriber as started only once
+    /// it is, so a cancel sent on hearing that reaches it, as one sent on
+    /// hearing it finished is told nothing runs; and told as busy when jobs
+    /// still wait behind it, so the panel knows what they wait for now.
     fn started(&self, lines: &[String], running: &Running, events: &Events) {
         let mut turns = self.lock();
         turns.current = Some(Current {
             lines: lines.to_vec(),
             running: running.clone(),
+        });
+        // Under the lock, as a job queued is told, so busy behind this run
+        // is never told before it started.
+        events.publish(Event::CommandStarted {
+            lines: lines.to_vec(),
         });
         if turns.waiting > 0 {
             events.publish(Event::Busy {
@@ -300,10 +307,11 @@ fn panicked(message: &'static str) -> Failed {
 /// finishes, however it finishes, a refusal or a panic included, so a panel
 /// showing it running never waits for an end that is not coming, and in
 /// between each step the backend says of how far it got ([`Running`]).
-/// Finished is told once the run is in the transcript, as the reply is
-/// sent, so whoever asks for the transcript on hearing it finds the run
-/// there, and once it is no longer under way, so a cancel sent on hearing
-/// it is told nothing runs.
+/// Started is told once the run is under way, so a cancel sent on hearing
+/// it reaches the run. Finished is told once the run is in the transcript,
+/// as the reply is sent, so whoever asks for the transcript on hearing it
+/// finds the run there, and once it is no longer under way, so a cancel
+/// sent on hearing it is told nothing runs.
 ///
 /// Said in the log, when there is one, once its lines are worked out, with
 /// how long it waited its turn and how long they took to work out, and
@@ -341,9 +349,6 @@ fn perform<B: Backend>(backend: &B, task: B::Task, around: Around<'_>, took: Too
         Ok(Err(refusal)) => return Ok(Err(refusal)),
         Err(_) => return Err(failed()),
     };
-    events.publish(Event::CommandStarted {
-        lines: lines.clone(),
-    });
     // Each step it says told with its lines, as its start and its finish
     // are, so a subscriber that heard neither knows which run it is of.
     let running = Running::new({

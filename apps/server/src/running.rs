@@ -121,6 +121,11 @@ impl Running {
     /// the front end's own flag, a gather's watch, which the server cannot
     /// make, and setting it is all `cancel` should do. It is called where
     /// the cancel is answered, on the async runtime, so it must not block.
+    ///
+    /// Called first thing in [`Backend::run`](crate::Backend::run), before
+    /// anything that takes time: the run is told started as it is handed
+    /// over, and a cancel sent on hearing that before this is called is
+    /// refused as one the run takes none of.
     pub fn cancelled_by(&self, cancel: impl Fn() + Send + Sync + 'static) {
         self.state().cancel = Some(Arc::new(cancel));
     }

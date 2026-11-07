@@ -8042,10 +8042,14 @@ what it calls (`Running::cancelled_by`).
   subscriber reading as it should never falls behind the bus's 64.
 - **A cancel** is `POST /api/v1/commands/cancel`, with no body: it stops
   the run under way, the one the stream told started and has not told
-  finished, which the writer thread keeps beside its queue. It is
-  answered where it arrives rather than queued, since the queue waits on
-  the run, with the run's lines; what it calls is the backend's, held as
-  a call of the backend's is (`backend_failed` should it panic). The CLI's
+  finished, which the writer thread keeps beside its queue, recording the
+  run there before it tells it started; the CLI's backend hands its cancel
+  over before it plans the lines again, so a cancel sent on hearing
+  `command_started` reaches the run, as one sent on hearing
+  `command_finished` is told nothing runs. It is answered where it
+  arrives rather than queued, since the queue waits on the run, with the
+  run's lines; what it calls is the backend's, held as a call of the
+  backend's is (`backend_failed` should it panic). The CLI's
   backend hands over the watch's flag for a task that takes one
   (`Task::cancellable`: a gather, a source gathered again, a
   marketplace's catalog or its plugins), the flag the TUI's `esc` sets,

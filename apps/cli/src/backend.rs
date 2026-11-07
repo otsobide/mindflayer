@@ -1019,6 +1019,19 @@ impl Backend for PanelBackend {
     /// local disk, hands none over, and a cancel sent while it runs is
     /// refused by the server.
     fn run(&self, task: Task, running: &Running) -> Result<Outcome, Refusal> {
+        // The flag a cancel sets kept apart from the watch that reports, so
+        // what `running` holds of it holds no way back to `running`. Handed
+        // over before the plan, which reads the disk: the run is told
+        // started as it is handed here, and a cancel sent on hearing that
+        // is kept by the flag until the gather looks.
+        let stop = Watch::new();
+        let watch = stop.clone().reporting_to({
+            let running = running.clone();
+            move |progress| running.report(crate::progress::carried(progress))
+        });
+        if task.cancellable() {
+            running.cancelled_by(move || stop.cancel());
+        }
         let pin = self.pin();
         let plan = self.plan(&task, &pin)?;
         let _scratch = match &task {
@@ -1028,16 +1041,6 @@ impl Backend for PanelBackend {
             ),
             _ => None,
         };
-        // The flag a cancel sets kept apart from the watch that reports, so
-        // what `running` holds of it holds no way back to `running`.
-        let stop = Watch::new();
-        let watch = stop.clone().reporting_to({
-            let running = running.clone();
-            move |progress| running.report(crate::progress::carried(progress))
-        });
-        if task.cancellable() {
-            running.cancelled_by(move || stop.cancel());
-        }
         let mut runs: Vec<Run> = Vec::new();
         for (index, words) in plan.lines.iter().enumerate() {
             let started = Instant::now();
