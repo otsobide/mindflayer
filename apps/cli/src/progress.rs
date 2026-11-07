@@ -1,9 +1,9 @@
 //! What a gather is doing, in words, and drawn on the terminal while it runs.
 //!
 //! Core says which step a gather is at ([`Progress`]); how that reads is the
-//! front end's to decide, and both of this crate's say it with [`said`]: the
-//! line `mindweaver gather` keeps rewriting on stderr, and the box the TUI draws
-//! while a gather runs.
+//! front end's to decide, and each of this crate's says it with [`said`]: the
+//! line `mindweaver gather` keeps rewriting on stderr, the box the TUI draws
+//! while a gather runs, and the panel's `progress` event ([`carried`]).
 
 use std::io::{self, IsTerminal as _, Write};
 use std::sync::{Arc, Mutex};
@@ -27,6 +27,35 @@ pub(crate) fn said(progress: Progress) -> String {
         // has started.
         None if done == 0 => what.to_owned(),
         None => format!("{what} {done}"),
+    }
+}
+
+/// One step of a gather as the panel's server carries it
+/// (`mindweaver_server::Progress`): a word for the step, its words as the
+/// terminal reads them ([`said`]), its counts, and whether a cancel still
+/// stops it, as core says ([`Progress::cancellable`]), so the panel stops
+/// offering one where the TUI does.
+///
+/// The word is the step's name in snake_case, which no command line takes:
+/// what a script tells the steps apart by, where the words may be made
+/// clearer. A step not counted yet, connecting, is none of none.
+#[cfg(feature = "ui")]
+pub(crate) fn carried(progress: Progress) -> mindweaver_server::Progress {
+    let (step, done, total) = match progress {
+        Progress::Connecting => ("connecting", 0, None),
+        Progress::Receiving { done, total } => ("receiving", done, total),
+        Progress::Resolving { done, total } => ("resolving", done, total),
+        Progress::CheckingOut { done, total } => ("checking_out", done, total),
+        Progress::Harvesting { done, total } => ("harvesting", done, Some(total)),
+        Progress::Placing { done, total } => ("placing", done, Some(total)),
+    };
+    let counted = |count: usize| u64::try_from(count).unwrap_or(u64::MAX);
+    mindweaver_server::Progress {
+        step: step.to_owned(),
+        message: said(progress),
+        done: counted(done),
+        total: total.map(counted),
+        cancellable: progress.cancellable(),
     }
 }
 

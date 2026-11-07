@@ -16,7 +16,9 @@ use common::*;
 use mindweaver_cli::backend::{Outcome, PanelBackend, Query, Switch};
 use mindweaver_cli::task::{naming, shell, Caution};
 use mindweaver_core::watch;
-use mindweaver_server::{Backend, Grounds, Own, Preview, Ran, Refusal, Running, API};
+use mindweaver_server::{
+    Backend, Condition, Grounds, Own, Preview, Progress, Ran, Refusal, Running, API,
+};
 use serde_json::{json, Value};
 
 /// The backend over the workspace at `root`, launched there with nothing
@@ -826,6 +828,29 @@ fn a_link_out_of_its_holder_is_listed_with_why_and_never_followed() {
     assert!(
         !wire.contains("token") && !wire.contains("TOP SECRET"),
         "{wire}"
+    );
+}
+
+/// A task over the local disk is over before anybody could read a count:
+/// it says nothing of how far it got, and hands no cancel over, so the
+/// server refuses one sent while it runs, as a cancel nothing looks for.
+#[test]
+fn a_task_of_the_local_disk_says_no_progress_and_takes_no_cancel() {
+    let dir = workspace_with_two();
+    let backend = backend(dir.path());
+    let heard = Arc::new(Mutex::new(Vec::new()));
+    let running = Running::new({
+        let heard = Arc::clone(&heard);
+        move |progress: &Progress| heard.lock().unwrap().push(progress.clone())
+    });
+
+    let outcome = Backend::run(&backend.0, task(json!({"type": "shelf"})), &running).unwrap();
+
+    assert!(outcome.ok, "{outcome:?}");
+    assert!(heard.lock().unwrap().is_empty());
+    assert_eq!(
+        running.cancel().map_err(|(condition, _)| condition),
+        Err(Condition::RunUncancellable)
     );
 }
 

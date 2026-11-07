@@ -1002,7 +1002,17 @@ impl Backend for PanelBackend {
     /// A save's text is put where its line reads it before the line runs,
     /// and taken away once the lines have run, whatever came of them
     /// ([`Scratch`]): the browser sends the text, never a path.
-    fn run(&self, task: Task, _running: &Running) -> Result<Outcome, Refusal> {
+    ///
+    /// Every line runs with one [`Watch`], as a TUI's task does, whose
+    /// steps go to `running` as the server carries them
+    /// ([`progress::carried`](crate::progress::carried)), and, for a task a
+    /// cancel stops ([`Task::cancellable`], a gather's), whose flag a
+    /// cancel sets: the same flag the TUI's `esc` sets, honoured by core
+    /// until the gather starts to place, and before its first line starts
+    /// for a `mindweaver init` in front of it. A task that takes none, the
+    /// local disk, hands none over, and a cancel sent while it runs is
+    /// refused by the server.
+    fn run(&self, task: Task, running: &Running) -> Result<Outcome, Refusal> {
         let pin = self.pin();
         let plan = self.plan(&task, &pin)?;
         let _scratch = match &task {
@@ -1012,7 +1022,16 @@ impl Backend for PanelBackend {
             ),
             _ => None,
         };
-        let watch = Watch::new();
+        // The flag a cancel sets kept apart from the watch that reports, so
+        // what `running` holds of it holds no way back to `running`.
+        let stop = Watch::new();
+        let watch = stop.clone().reporting_to({
+            let running = running.clone();
+            move |progress| running.report(crate::progress::carried(progress))
+        });
+        if task.cancellable() {
+            running.cancelled_by(move || stop.cancel());
+        }
         let mut runs: Vec<Run> = Vec::new();
         for (index, words) in plan.lines.iter().enumerate() {
             let started = Instant::now();
