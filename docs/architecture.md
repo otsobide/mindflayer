@@ -2667,6 +2667,17 @@ type derives `Serialize` from the start:
   prints; and what a gather took off the shelf, as `removed` on its
   `Report`, each a `Harvested`, a name added ([what a source no longer
   holds](#what-a-source-no-longer-holds)).
+- **Read from the MCP Registry by #106**, for #107's commands to print: a
+  server version as a listing shows it (`registry::ServerVersion`, its
+  `registry::Status` by the registry's word, the `server.json` it was read
+  from serialized nowhere), a `registry::Listing`, and what one maps to
+  (`registry::Imported`, the definition as its file's text), each written
+  by hand where a field is an error, a server that could not be read, a
+  manual step or a warning, each a `code::Said` ([the MCP
+  Registry](#the-mcp-registry), [importing
+  one](#importing-one-from-the-mcp-registry)). Handed to no front end yet,
+  they have no TypeScript and no schema, and move neither
+  `ENVELOPE_VERSION` nor `view::FORMAT`.
 - **Not yet**, being older than the rule and handed to no front end so far:
   the ledger's record of an install (`InstallRecord`), and what an update or
   a change of agents would do as each plans it (`update::Plan`,
