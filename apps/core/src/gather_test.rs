@@ -1436,6 +1436,7 @@ fn each_gather_failure_names_its_path_and_gives_its_code() {
     );
     let clash = Failure::Clash {
         path: PathBuf::from("/w/.mindweaver/cache/s/skills/pdf"),
+        kind: Kind::Skill,
         name: String::from("pdf"),
         with: vec![
             String::from(".claude/skills/pdf"),
@@ -1448,6 +1449,18 @@ fn each_gather_failure_names_its_path_and_gives_its_code() {
         "/w/.mindweaver/cache/s/skills/pdf: another skill in this source is called `pdf` too, \
          at .claude/skills/pdf, vendor/pdf, so neither is gathered: gather the one you want \
          with --path naming its folder"
+    );
+    // Two rules of one route share a folder, which no --path tells apart.
+    let rules = Failure::Clash {
+        path: PathBuf::from("/w/.mindweaver/cache/s/rules/style.MD"),
+        kind: Kind::Rule,
+        name: String::from("style"),
+        with: vec![String::from("rules/style.md")],
+    };
+    assert_eq!(
+        rules.to_string(),
+        "/w/.mindweaver/cache/s/rules/style.MD: another rule in this source is called `style` \
+         too, at rules/style.md, so neither is gathered"
     );
     let listed_outside = Failure::ListedOutside {
         path: PathBuf::from("/w/.mindweaver/cache/s/../../etc"),

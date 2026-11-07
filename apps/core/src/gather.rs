@@ -1610,7 +1610,7 @@ fn offered(
             total: found.len(),
         });
     }
-    let taken = unclashed(taken, clone, failures);
+    let taken = unclashed(request.kind, taken, clone, failures);
     let held = found
         .iter()
         .filter_map(|directory| filed(directory, clone, repository.as_deref()))
@@ -1689,7 +1689,7 @@ fn offered_files(
             total: found.len(),
         });
     }
-    let taken = unclashed(taken, clone, failures);
+    let taken = unclashed(request.kind, taken, clone, failures);
     Ok(Offered {
         held,
         taken,
@@ -2015,10 +2015,21 @@ fn read(
     Some((directory.to_path_buf(), folder, artifact))
 }
 
-/// What of `taken`, read out of the repository cloned at `clone`, no other
-/// skill read beside it shares a name with: each one that does is said
-/// among `failures`, by the name it shares and where the others are, and
-/// not taken.
+/// What a [`Failure::Clash`] of two artifacts of `kind` leaves somebody to
+/// do: gather the skill they want by its folder, with `--path`. Two rules
+/// of one route are one name in one folder but for their extension's case,
+/// `.md` and `.MD`, which no `--path` tells apart, so nothing is said of it.
+fn picked_by(kind: Kind) -> &'static str {
+    match kind.layout() {
+        Layout::Directory { .. } => ": gather the one you want with --path naming its folder",
+        Layout::Files { .. } | Layout::Flat { .. } => "",
+    }
+}
+
+/// What of `taken`, artifacts of `kind` read out of the repository cloned
+/// at `clone`, no other read beside it shares a name with: each one that
+/// does is said among `failures`, by the name it shares and where the
+/// others are, and not taken.
 ///
 /// Both names, the folder a skill is filed under on the shelf, where two
 /// would be one folder, and the name it declares, which the ledger keeps
@@ -2029,6 +2040,7 @@ fn read(
 /// the source holds, so what an earlier gather took of either stays on the
 /// shelf as it was ([`take_off`]).
 fn unclashed(
+    kind: Kind,
     taken: Vec<(PathBuf, String, Artifact)>,
     clone: &Path,
     failures: &mut Vec<Failure>,
@@ -2060,6 +2072,7 @@ fn unclashed(
         let filed_alike = sharing[at].iter().any(|other| taken[*other].1 == *folder);
         failures.push(Failure::Clash {
             path: directory.clone(),
+            kind,
             name: if filed_alike {
                 folder.clone()
             } else {
@@ -2469,13 +2482,14 @@ pub enum Failure {
         #[source]
         source: io::Error,
     },
-    /// Another skill in the same source is filed under `name` on the shelf,
-    /// or declares it, at each of `with`, its folder in the repository, so
-    /// neither is taken: which one a source means is not a gather's to
-    /// guess ([`unclashed`]).
-    #[error("{path}: another skill in this source is called `{name}` too, at {}, so neither is gathered: gather the one you want with --path naming its folder", .with.join(", "))]
+    /// Another artifact of `kind` in the same source is filed under `name`
+    /// on the shelf, or declares it, at each of `with`, where it is in the
+    /// repository, so neither is taken: which one a source means is not a
+    /// gather's to guess ([`unclashed`]).
+    #[error("{path}: another {} in this source is called `{name}` too, at {}, so neither is gathered{}", .kind.noun(), .with.join(", "), picked_by(*.kind))]
     Clash {
         path: PathBuf,
+        kind: Kind,
         name: String,
         with: Vec<String>,
     },
@@ -2555,8 +2569,14 @@ impl Failure {
                 path: route(path),
                 to,
             },
-            Failure::Clash { path, name, with } => Failure::Clash {
+            Failure::Clash {
+                path,
+                kind,
+                name,
+                with,
+            } => Failure::Clash {
                 path: route(path),
+                kind,
                 name,
                 with,
             },

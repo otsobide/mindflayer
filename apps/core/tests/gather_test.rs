@@ -853,8 +853,14 @@ fn clashes(
         .failures
         .iter()
         .map(|failure| match failure {
-            gather::Failure::Clash { path, name, with } => {
+            gather::Failure::Clash {
+                path,
+                kind,
+                name,
+                with,
+            } => {
                 assert_eq!(failure.code(), "gathered_name_clash");
+                assert_eq!(*kind, Kind::Skill);
                 let route = path.strip_prefix(&clone).unwrap();
                 (
                     route.to_string_lossy().into_owned(),
@@ -2806,6 +2812,41 @@ fn a_rule_whose_route_is_no_rule_s_name_is_said_and_the_rest_are_taken() {
         ]
     );
     assert_eq!(ledger.gathered().unwrap().len(), 3);
+}
+
+/// Two files of one route, which only a filesystem telling case apart
+/// holds, name one rule twice: neither is taken, and each is said as a
+/// rule, with no `--path` to pick one, since they share a folder.
+#[cfg(target_os = "linux")]
+#[test]
+fn two_rules_of_one_route_are_each_said_as_a_rule_and_neither_is_taken() {
+    let source = repository(&[
+        ("rules/style.md", "One.\n"),
+        ("rules/style.MD", "The other.\n"),
+        ("rules/good.md", "Fine.\n"),
+    ]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let report = gather::gather(&workspace, &ledger, &rules_in(&source, "rules")).unwrap();
+
+    let added: Vec<&str> = report.added.iter().map(|it| it.name.as_str()).collect();
+    assert_eq!(added, ["good"]);
+    let said: Vec<(&str, String)> = report
+        .failures
+        .iter()
+        .map(|failure| (failure.code(), failure.to_string()))
+        .collect();
+    assert_eq!(said.len(), 2, "{said:?}");
+    assert!(
+        said.iter()
+            .all(|(code, text)| *code == "gathered_name_clash"
+                && text.contains(
+                    ": another rule in this source is called `style` too, at rules/style."
+                )
+                && text.ends_with(", so neither is gathered")),
+        "{said:?}"
+    );
 }
 
 #[test]
