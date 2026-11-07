@@ -71,6 +71,7 @@ pub mod skill;
 pub mod sources;
 pub mod status;
 pub mod template;
+pub mod text;
 #[cfg(feature = "ts")]
 pub mod typescript;
 pub mod update;

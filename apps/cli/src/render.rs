@@ -364,18 +364,9 @@ pub(crate) fn indent(text: &str) -> String {
     })
 }
 
-/// Text safe to put in a row.
-///
-/// A name or an opening line comes from a file somebody wrote, and a carriage
-/// return in one would let a row overwrite the row above it on the terminal,
-/// hiding an entry, or fabricating one that looks real.
-pub(crate) fn printable(text: &str) -> String {
-    text.chars()
-        .map(|c| if c.is_control() { ' ' } else { c })
-        .collect::<String>()
-        .trim()
-        .to_owned()
-}
+/// Text safe to put in a row: core's, so a row and what core hands a front
+/// end of a catalog's text read alike.
+pub(crate) use mindweaver_core::text::printable;
 
 /// What is wrong with one artifact: `label: ok`, or the count after the
 /// label and a line for each thing under it. Whether the artifact is invalid

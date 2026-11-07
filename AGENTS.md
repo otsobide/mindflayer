@@ -239,7 +239,9 @@ under `apps/` with its own `Makefile`:
   and `validate` say of each
   artifact (`reading`), and what core says of one a command is about to
   write, by the command's own checks and in `validate`'s words, for a
-  front end judging what is typed (`draft`). Every record, report and view
+  front end judging what is typed (`draft`), and text somebody else wrote
+  made fit to be shown as it is, by every front end alike
+  (`text::printable`). Every record, report and view
   it builds is an aggregate of the value objects in `value` (a copy's
   `ContentHash`, a `Redacted` URL or message, an `Origin`, an
   `ArtifactName`, a `Revision`, a `ProjectId`), each of which, and each
