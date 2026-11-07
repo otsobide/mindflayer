@@ -39,8 +39,8 @@ impl Progress {
     /// until it starts placing, and at none after.
     ///
     /// Core's to say rather than each front end's, so the TUI that stops
-    /// offering a cancel and the server that will stream these steps (#112)
-    /// cannot disagree with the gather about when one comes too late.
+    /// offering a cancel and the server that streams these steps cannot
+    /// disagree with the gather about when one comes too late.
     pub fn cancellable(self) -> bool {
         !matches!(self, Self::Placing { .. })
     }
