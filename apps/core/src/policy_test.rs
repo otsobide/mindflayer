@@ -139,6 +139,28 @@ fn a_source_named_with_a_credential_is_refused_as_a_gather_refuses_one() {
     assert!(crate::gather::GatherError::CODES.contains(&"credentials_in_url"));
 }
 
+/// A name given a source is refused only for a credential in it, said
+/// without it, with the gather's own code: what else a name may hold is the
+/// command's to say, so one it would refuse for another reason, or a word
+/// starting with a dash, goes to its line.
+#[test]
+fn a_source_s_name_is_refused_only_for_a_credential_in_it() {
+    use crate::mother::UrlMother;
+
+    for credentialed in UrlMother::every_credentialed() {
+        let refused = named(&credentialed.typed).unwrap_err();
+
+        assert_eq!(refused.code(), "credentials_in_url", "{credentialed:?}");
+        assert!(
+            !refused.to_string().contains(&credentialed.secret),
+            "{refused}"
+        );
+    }
+    for name in ["acme-skills", "team.ops", "--yes", "not a name", ""] {
+        assert!(named(name).is_ok(), "{name:?}");
+    }
+}
+
 #[test]
 fn a_path_not_spelled_as_its_folder_is_refused() {
     let (dir, _workspace) = fixture();

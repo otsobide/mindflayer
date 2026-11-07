@@ -262,11 +262,27 @@ pub enum Task {
     /// `mindweaver workspaces`: the workspaces this machine knows, the one in
     /// use marked, to read.
     Workspaces,
-    /// `mindweaver gather git [--path <folder>] [--ref <ref>] <url>`.
+    /// `mindweaver gather git [--path <folder>] [--kind <kind>] [--ref <ref>]
+    /// [--name <name>] [--dry-run] <url>`: the panel's form adding a
+    /// source sends every field, the TUI's and a search's take only the
+    /// first three, each of the rest left unsaid as the command defaults it.
+    ///
+    /// With `dry_run`, what it would gather, by name and folder, and
+    /// nothing gathered: what the panel shows before it asks to gather.
     Gather {
         url: String,
         folder: String,
         reference: Option<String>,
+        /// What to take, skills or rules, as `--kind` takes it by its
+        /// folder's word; none for the command's own, skills.
+        #[serde(default)]
+        kind: Option<Kind>,
+        /// What to call the source, as `--name` takes it; none for the name
+        /// the command derives, or the one it already has.
+        #[serde(default)]
+        name: Option<String>,
+        #[serde(default)]
+        dry_run: bool,
     },
     /// `mindweaver gather update <source>`, or `mindweaver gather update
     /// --all` when no source is named: sources gathered again, as each was
@@ -768,20 +784,30 @@ impl Task {
                 url,
                 folder,
                 reference,
+                kind,
+                name,
+                dry_run,
             } => {
-                let mut head = vec!["mindweaver", "gather", "git"];
-                let path = option("--path", folder);
-                let at = reference
-                    .as_deref()
-                    .map(|reference| option("--ref", reference));
+                let mut head = owned(&["mindweaver", "gather", "git"]);
                 // The default folder is left unsaid, so the line reads the
-                // way somebody would type it.
+                // way somebody would type it, and so is every option not
+                // asked for.
                 if folder != DEFAULT_SUBDIRECTORY {
-                    head.extend(path.iter().map(String::as_str));
+                    head.extend(option("--path", folder));
                 }
-                if let Some(at) = &at {
-                    head.extend(at.iter().map(String::as_str));
+                if let Some(kind) = kind {
+                    head.extend(option("--kind", kind.folder()));
                 }
+                if let Some(reference) = reference {
+                    head.extend(option("--ref", reference));
+                }
+                if let Some(name) = name {
+                    head.extend(option("--name", name));
+                }
+                if *dry_run {
+                    head.push(String::from("--dry-run"));
+                }
+                let head: Vec<&str> = head.iter().map(String::as_str).collect();
                 vec![words(&head, &[url])]
             }
             Task::UpdateSource { source } => match source {
@@ -1003,7 +1029,7 @@ impl Task {
                 | Task::Save { .. }
                 | Task::Rename { .. }
                 | Task::Remove { yes: true, .. }
-                | Task::Gather { .. }
+                | Task::Gather { dry_run: false, .. }
                 | Task::UpdateSource { .. }
                 | Task::RemoveSource { yes: true, .. }
                 | Task::ListPlugins { .. }

@@ -2428,6 +2428,9 @@ impl GatherForm {
                 url,
                 folder,
                 reference,
+                kind: None,
+                name: None,
+                dry_run: false,
             }
         })
     }
@@ -2663,6 +2666,9 @@ impl Skills {
                 .clone()
                 .unwrap_or_else(|| String::from(DEFAULT_SUBDIRECTORY)),
             reference: hit.reference.clone(),
+            kind: None,
+            name: None,
+            dry_run: false,
         })
     }
 }

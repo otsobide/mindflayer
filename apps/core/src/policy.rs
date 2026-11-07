@@ -90,7 +90,8 @@ pub enum PolicyError {
         from: Option<Redacted>,
     },
     /// A source to gather named with a credential in its address, its
-    /// branch or its folder, which `typed` holds without it: the condition
+    /// branch, its folder or the name it is to be called, which `typed`
+    /// holds without it: the condition
     /// a gather refuses with (`credentials_in_url`), said before any line
     /// is built, since the line would carry it to the preview, the panel's
     /// stream and the transcript before the gather refused it.
@@ -197,6 +198,25 @@ pub fn gathered(typed: &str, folder: &str, reference: Option<&str>) -> Result<()
         return Ok(());
     }
     path(&address).map(drop)
+}
+
+/// A name a request gives a source, `typed`, as `gather git --name` and
+/// `gather rename` take one: refused when it carries a credential
+/// (`credentials_in_url`, [`PolicyError::Credentials`]), as a source's
+/// address, branch or folder is ([`gathered`]), before any line is built.
+///
+/// Only that: whether it is a name a source may be called is the
+/// command's to say, with its own code, as it says it at a terminal, since
+/// a name names nothing on the disk. But a URL typed where the name goes
+/// is somebody's credential all the same, which the gather refuses too
+/// only once the line holding it was shown, told and kept.
+pub fn named(typed: &str) -> Result<(), PolicyError> {
+    if url::carries_credentials(typed) {
+        return Err(PolicyError::Credentials {
+            typed: Redacted::new(typed),
+        });
+    }
+    Ok(())
 }
 
 /// `given`, as a path a request may name: absolute, spelled exactly as

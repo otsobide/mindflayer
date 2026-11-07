@@ -30,7 +30,8 @@
 //! - **A source a gather or a marketplace names** is another machine's by
 //!   its address, or a folder on this one held as a folder to link is, a
 //!   `file://` URL refused as a URL, and none carries a credential
-//!   (`policy::gathered`); it goes to the command verbatim.
+//!   (`policy::gathered`), nor does the name a gather gives it
+//!   (`policy::named`); it goes to the command verbatim.
 //!
 //! The walk over the variants is here, beside `Task`; what each value may be
 //! is core's, so a second front end taking tasks from outside asks the same
@@ -80,8 +81,15 @@ impl Admission<'_> {
                 url,
                 folder,
                 reference,
+                name,
+                ..
+            } => {
+                policy::gathered(url, folder, reference.as_deref())?;
+                if let Some(name) = name {
+                    policy::named(name)?;
+                }
             }
-            | Task::ListPlugins {
+            Task::ListPlugins {
                 url,
                 folder,
                 reference,

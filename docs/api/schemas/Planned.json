@@ -960,11 +960,35 @@
           ]
         },
         {
-          "description": "`mindweaver gather git [--path <folder>] [--ref <ref>] <url>`.",
+          "description": "`mindweaver gather git [--path <folder>] [--kind <kind>] [--ref <ref>]\n[--name <name>] [--dry-run] <url>`: the panel's form adding a\nsource sends every field, the TUI's and a search's take only the\nfirst three, each of the rest left unsaid as the command defaults it.\n\nWith `dry_run`, what it would gather, by name and folder, and\nnothing gathered: what the panel shows before it asks to gather.",
           "type": "object",
           "properties": {
+            "dry_run": {
+              "type": "boolean",
+              "default": false
+            },
             "folder": {
               "type": "string"
+            },
+            "kind": {
+              "description": "What to take, skills or rules, as `--kind` takes it by its\nfolder's word; none for the command's own, skills.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Kind"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "name": {
+              "description": "What to call the source, as `--name` takes it; none for the name\nthe command derives, or the one it already has.",
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
             },
             "reference": {
               "type": [
@@ -984,7 +1008,10 @@
             "type",
             "url",
             "folder",
-            "reference"
+            "reference",
+            "kind",
+            "name",
+            "dry_run"
           ]
         },
         {

@@ -494,6 +494,17 @@ fn a_source_a_gather_names_goes_to_its_line_as_sent_once_the_policy_takes_it() {
                 url: url.clone(),
                 folder: String::from("skills"),
                 reference: Some(String::from("main")),
+                kind: None,
+                name: None,
+                dry_run: false,
+            },
+            Task::Gather {
+                url: url.clone(),
+                folder: String::new(),
+                reference: None,
+                kind: Some(Kind::Rule),
+                name: Some(String::from("team-rules")),
+                dry_run: true,
             },
             Task::ListPlugins {
                 url: url.clone(),
@@ -515,8 +526,8 @@ fn a_source_a_gather_names_goes_to_its_line_as_sent_once_the_policy_takes_it() {
 
 /// What the path policy refuses of a folder to link, it refuses of a source
 /// on this machine, a `file://` URL among it; and a credential in the
-/// address, the folder or the branch is refused as the gather refuses one,
-/// before a line holding it is built.
+/// address, the folder, the branch or the name a gather gives it is
+/// refused as the gather refuses one, before a line holding it is built.
 #[test]
 fn a_source_on_this_machine_or_with_a_credential_is_refused_as_the_policy_says() {
     let (_dir, workspace) = fixture();
@@ -525,6 +536,9 @@ fn a_source_on_this_machine_or_with_a_credential_is_refused_as_the_policy_says()
         url: url.to_owned(),
         folder: folder.to_owned(),
         reference: reference.map(str::to_owned),
+        kind: None,
+        name: None,
+        dry_run: false,
     };
     let cases = [
         (gather("file:///etc", "", None), "path_url"),
@@ -558,6 +572,17 @@ fn a_source_on_this_machine_or_with_a_credential_is_refused_as_the_policy_says()
                 "",
                 Some("https://u:t0ken@example.com/x"),
             ),
+            "credentials_in_url",
+        ),
+        (
+            Task::Gather {
+                url: String::from("https://github.com/acme/skills"),
+                folder: String::new(),
+                reference: None,
+                kind: None,
+                name: Some(String::from("https://u:t0ken@example.com/x")),
+                dry_run: false,
+            },
             "credentials_in_url",
         ),
     ];

@@ -1167,6 +1167,9 @@ fn gathering_in_the_tui_is_weaver_gather_git() {
             url: url.clone(),
             folder: String::new(),
             reference: None,
+            kind: None,
+            name: None,
+            dry_run: false,
         })
     );
     let Mode::Reading(reader) = &app.mode else {
@@ -2321,6 +2324,9 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
             url: String::from("https://example.com/skills.git"),
             folder: String::from("agents"),
             reference: Some(String::from("-weird")),
+            kind: None,
+            name: None,
+            dry_run: false,
         },
         Task::Add {
             holder: Holder::Project(String::from("alpha")),
@@ -4779,6 +4785,9 @@ fn a_skill_the_search_found_is_taken_as_the_gather_line_naming_it() {
             url: url.clone(),
             folder: String::from("skills/docx"),
             reference: None,
+            kind: None,
+            name: None,
+            dry_run: false,
         }
     );
     assert!(take.runs_apart() && take.cancellable() && take.writes());

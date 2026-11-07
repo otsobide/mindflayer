@@ -96,6 +96,9 @@ pub(crate) fn run_take(
             .clone()
             .unwrap_or_else(|| String::from(DEFAULT_SUBDIRECTORY)),
         reference: hit.reference.clone(),
+        kind: None,
+        name: None,
+        dry_run: false,
     }
     .commands();
     let request = match Request::addressed(&hit.repository, hit.reference.clone(), hit.path.clone())
