@@ -4590,6 +4590,15 @@ by a test), what it could not read and what went wrong as `code::Said`;
 the `server.json` it was
 read from is kept beside it, for the mapping, and serialized nowhere.
 
+A search made once can be read again from the answers the cache kept of
+it, and from them alone (`registry::kept`): a client whose transport sends
+nothing, told every entry is fresh, so a page the cache does not keep is
+no listing at all rather than a fetch. It is how a front end that ran the
+search as a command line reads what the line found, as the TUI does: the
+line fetched, and the screen reads what it kept, rather than reading
+the line's text back or asking the registry again on the thread that
+draws. A workspace not made yet has no cache, so nothing is kept to read.
+
 ## Installing
 
 Gathering fills the shelf; installing is the other half, and the only thing in

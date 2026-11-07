@@ -28,6 +28,7 @@
 
 use std::fmt;
 use std::sync::Arc;
+use std::time::Duration;
 
 use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
@@ -35,8 +36,8 @@ use thiserror::Error;
 
 use crate::adapter::SystemClock;
 use crate::code::{codes, Said};
-use crate::http::{fetchable, Client, Failed, HttpError, Paging, Request};
-use crate::port::Clock;
+use crate::http::{fetchable, Answer, Cache, Client, Failed, HttpError, Paging, Request};
+use crate::port::{Clock, Http};
 use crate::text::{printable, Utc};
 use crate::value::Redacted;
 
@@ -236,6 +237,35 @@ impl<'a> Registry<'a> {
 /// A request for JSON at `url`.
 fn request(url: &str) -> Request {
     Request::get(url).header("Accept", "application/json")
+}
+
+/// What a search for `query` of the registry at `base` found the last time
+/// it was made through a client keeping its answers in `cache`, read from
+/// the cache alone: nothing is sent, however long ago each page was kept.
+/// `None` when the cache keeps no page of it, or not every one.
+///
+/// What a front end that ran the search as a command line reads what the
+/// line found from, as the TUI does once the line is over: the line fetched
+/// and kept the answers, and the screen reads them, rather than reading the
+/// line's output back, or asking the registry a second time on the thread
+/// that draws.
+pub fn kept(cache: Cache, base: &str, query: &str) -> Option<Listing> {
+    let client = Client::new(&Unsent).with_cache(cache.fresh_for(Duration::MAX));
+    Registry::new(&client).at(base).search(query).ok()
+}
+
+/// A transport that sends nothing, for a client that reads its cache
+/// alone: whatever the cache does not keep fails as no transport to send
+/// with.
+#[derive(Debug)]
+struct Unsent;
+
+impl Http for Unsent {
+    fn send(&self, _: &Request, _: Duration) -> Result<Answer, HttpError> {
+        Err(HttpError::Unavailable {
+            detail: Redacted::new("only what is kept is read"),
+        })
+    }
 }
 
 /// The servers a listing read, and what it could not.

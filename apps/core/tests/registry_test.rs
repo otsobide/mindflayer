@@ -24,7 +24,7 @@ use mindweaver_core::lifecycle::{self, ImportError};
 use mindweaver_core::mcp::{Input, InputKind, Transport, Upstream};
 use mindweaver_core::mother::McpMother;
 use mindweaver_core::registry::{
-    Imported, Manual, Registry, ServerVersion, Status, Warning, OFFICIAL,
+    self, Imported, Manual, Registry, ServerVersion, Status, Warning, OFFICIAL,
 };
 use mindweaver_core::value::{InputName, Redacted, VariableName};
 use mindweaver_core::{Catalog, Clock, CreateError, Http, Kind, McpDefinition, WeaverWorkspace};
@@ -338,6 +338,30 @@ fn a_search_is_kept_in_the_cache_the_client_is_given() {
     );
     assert_eq!(names(&again.servers), names(&first.servers));
     assert!(again.warnings.is_empty());
+}
+
+/// What a search kept is read back from the cache alone, however old,
+/// with nothing sent; one the cache does not keep is none.
+#[test]
+fn a_search_kept_is_read_back_from_the_cache_alone() {
+    let folder = TempDir::new().unwrap();
+    let second = format!(
+        "{}&cursor=io.github.acme%2Fdotnet-weather%3A2.1.0",
+        searched("acme")
+    );
+    let fake = Fake::new()
+        .answering(&searched("acme"), &fixture("2025-09-29", "search-1.json"))
+        .answering(&second, &fixture("2025-09-29", "search-2.json"));
+    let client = Client::new(&fake).with_cache(Cache::at(folder.path()));
+    let found = Registry::new(&client).at(REGISTRY).search("acme").unwrap();
+
+    let kept = registry::kept(Cache::at(folder.path()), REGISTRY, "acme").unwrap();
+
+    assert_eq!(names(&kept.servers), names(&found.servers));
+    assert_eq!(kept.failures, found.failures);
+    assert_eq!(fake.sent().len(), 2, "nothing more is sent");
+    assert!(registry::kept(Cache::at(folder.path()), REGISTRY, "notes").is_none());
+    assert!(registry::kept(Cache::at(folder.path()), OFFICIAL, "acme").is_none());
 }
 
 // ---------------------------------------------------------------------------
