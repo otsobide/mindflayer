@@ -928,6 +928,15 @@ command line says the server is started or reached, or from a template
 ([adding one](#adding-an-mcp-server)), and installing one writes an entry
 into each agent's config file ([installing an MCP
 server](#installing-an-mcp-server)); gathering one and adopting one wait.
+One core makes rather than a command line describes, imported from a
+registry first, is written out whole (`McpDefinition::text`,
+`mcp/file.rs`): every key the format defines that it holds, a comment above
+each part as `add` writes one, and `fetched_at` as the TOML date and time
+it reads as, which `parse` reads back as the definition it is. Written from
+the parts rather than serialized, which would write no comment and a
+table's keys where TOML puts them; and what is written is what the
+definition keeps, so an address typed with a credential in its userinfo is
+written without it.
 `add`, `edit --contents` and `rename` hold a definition to every problem
 `validate` reports (`artifact::mcp_strict_issues`, a name an agent only
 uses for its own being a warning and no problem), its name to its file as

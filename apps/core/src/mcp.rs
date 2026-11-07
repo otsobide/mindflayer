@@ -63,6 +63,7 @@ use crate::value::{ArtifactName, InputName, Redacted, VariableName};
 
 mod blanked;
 mod expressible;
+mod file;
 mod given;
 pub(crate) mod name;
 mod runs;
