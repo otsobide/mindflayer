@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Cancelling",
+  "description": "What a cancel taken is answered with: the lines of the run it asked to\nstop, `{\"lines\": [...]}`.\n\nAsked, not done: a run stops where its backend next looks, which a cancel\nthat comes just as it stops looking misses, and the run's own outcome is\nwhat says whether it stopped. The lines say which run that is, since the\ncancel names none: it is the run under way's.",
+  "type": "object",
+  "properties": {
+    "lines": {
+      "description": "The command lines of the run asked to stop, each as somebody would\ntype it.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "lines"
+  ]
+}

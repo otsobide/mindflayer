@@ -629,6 +629,23 @@ Tasks run one at a time, in the order they arrive, whoever sends them, and
 a run is in the transcript before its answer leaves. A read, a plan and a
 preview are no runs, and are not there.
 
+### Stopping a run
+
+`POST /commands/cancel` asks the run under way to stop, with no body: what
+it stops is the run [the stream](#following-what-happens) told started and
+has not told finished. A run that takes a cancel stops where it next looks
+for one, its outcome saying so, and the cancel is answered with its
+`lines`. One is refused with a 409, and nothing changes, when nothing runs
+(`nothing_running`), when the run under way takes no cancel
+(`run_uncancellable`), or when it is past the point where one stops it,
+as its last `progress` says (`cancel_too_late`):
+
+```console
+$ curl -s -w '\n%{http_code}\n' -X POST -H "Authorization: Bearer $token" "$api/commands/cancel"
+{"code":"nothing_running","error":"no run is under way to cancel"}
+409
+```
+
 ### Switching workspace
 
 `POST /switch` has the server act on another workspace from then on, one
@@ -686,6 +703,9 @@ What the server finds itself has a code of its own:
 | 403 | `x_mindflayer_required` | a change sent with the panel's cookie without `X-Mindweaver: 1` |
 | 404 | `unknown_route` | a path no route names, of another version or of none |
 | 405 | `method_not_allowed` | a method the route does not take |
+| 409 | `nothing_running` | a cancel with no run under way |
+| 409 | `run_uncancellable` | a cancel of a run that takes none |
+| 409 | `cancel_too_late` | a cancel of a run past the point where one stops it |
 | 413 | `body_too_large` | a body larger than the server reads |
 | 415 | `json_required` | a body not sent as `application/json` |
 | 422 | `invalid_body` | JSON that is not what the route reads |

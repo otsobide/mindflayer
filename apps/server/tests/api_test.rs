@@ -211,8 +211,9 @@ async fn a_body_that_is_no_json_too_large_or_cut_off_is_refused_with_its_code() 
 /// be refused for (`Route::conditions`, `Own::conditions`), which a
 /// description of the API says. Every condition the server has is met here
 /// but two no request can bring about, a way to fail axum has yet to add
-/// and a writer thread that has stopped, so one added later is met here
-/// too, or said.
+/// and a writer thread that has stopped, and two only a run held under way
+/// does, a cancel it takes none of or one too late, which `cancel_test`
+/// meets, so one added later is met here too, or said.
 #[tokio::test]
 async fn every_answer_under_the_api_that_is_no_success_carries_an_error_and_a_code() {
     let (server, _) = launch();
@@ -377,6 +378,16 @@ async fn every_answer_under_the_api_that_is_no_success_carries_an_error_and_a_co
             "a switch the backend refuses",
             sent("/api/v1/switch", json!({ "to": "a", "refuse": true })),
         ),
+        (
+            "a cancel with nothing running",
+            request(
+                &server,
+                Method::POST,
+                "/api/v1/commands/cancel",
+                token,
+                None,
+            ),
+        ),
     ];
 
     let listed = |path: &str| {
@@ -440,7 +451,15 @@ async fn every_answer_under_the_api_that_is_no_success_carries_an_error_and_a_co
         .copied()
         .filter(|code| !met.iter().any(|met| met == code))
         .collect();
-    assert_eq!(unmet, ["body_refused", "writer_stopped"]);
+    assert_eq!(
+        unmet,
+        [
+            "body_refused",
+            "run_uncancellable",
+            "cancel_too_late",
+            "writer_stopped"
+        ]
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]

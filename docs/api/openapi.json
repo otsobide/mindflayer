@@ -159,6 +159,22 @@
         ],
         "type": "object"
       },
+      "Cancelling": {
+        "description": "What a cancel taken is answered with: the lines of the run it asked to\nstop, `{\"lines\": [...]}`.\n\nAsked, not done: a run stops where its backend next looks, which a cancel\nthat comes just as it stops looking misses, and the run's own outcome is\nwhat says whether it stopped. The lines say which run that is, since the\ncancel names none: it is the run under way's.",
+        "properties": {
+          "lines": {
+            "description": "The command lines of the run asked to stop, each as somebody would\ntype it.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "lines"
+        ],
+        "type": "object"
+      },
       "Caution": {
         "description": "What a command line takes away, which a front end asks somebody to\nconfirm before it runs the line: what [`cautions`] reads off the parsed\ncommand, as [`refused`] reads a refusal, so a line is asked about the\nsame way whatever task it came from, and by every front end.\n\nOne list, here, rather than one per front end: the panel holds no rules\n(D-18), so which of its lines need a yes first is said with each preview\nit is answered with, in these words, and a list in TypeScript would be a\nsecond place for a command to be forgotten. The TUI asks its own\nquestions, worded for the row they are about, before it builds a task.\n\nOnly what takes something away, or writes over somebody's work: a line\nthat only adds, or that changes what is installed where its agents now\nread, is shown before it runs and runs once asked. And never a dry run,\nwhich a line of a command that takes `--yes` is without it: it takes\nnothing away, and says what it would.",
         "oneOf": [
@@ -6891,6 +6907,214 @@
   "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
   "openapi": "3.1.1",
   "paths": {
+    "/commands/cancel": {
+      "post": {
+        "operationId": "post_commands_cancel",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cancelling"
+                }
+              }
+            },
+            "description": "The lines of the run asked to stop: whether it stopped, its outcome says."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refused"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "unknown_parameter"
+                          ],
+                          "type": "string"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "What the request sent could not be read, a parameter or a body, as the code says."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refused"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "token_required"
+                          ],
+                          "type": "string"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Without the launch token, or with another server's.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "How to bring the token: as a Bearer token.",
+                "schema": {
+                  "const": "Bearer",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refused"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "unknown_host",
+                            "foreign_origin",
+                            "same_origin_required",
+                            "x_mindflayer_required"
+                          ],
+                          "type": "string"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Turned away by a guard: a Host the server does not answer to, a page of another origin, or a change by cookie the panel's own page would not send."
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refused"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "method_not_allowed"
+                          ],
+                          "type": "string"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Asked by another method than the one its path takes, which `Allow` names: the answer to every other method here, never to this one.",
+            "headers": {
+              "Allow": {
+                "description": "The methods the path takes.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refused"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "nothing_running",
+                            "run_uncancellable",
+                            "cancel_too_late"
+                          ],
+                          "type": "string"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "No run under way that a cancel stops now: none is, the one under way takes none, or it is past the point where one stops it, as the code says."
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refused"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "json_required"
+                          ],
+                          "type": "string"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "A body not sent as `application/json`."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refused"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "backend_failed"
+                          ],
+                          "type": "string"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "What the request was handed on to failed, as the code says."
+          }
+        },
+        "summary": "Ask the run under way to stop, while it still takes a cancel: the lines of the run asked, whose outcome says whether it stopped"
+      }
+    },
     "/contents": {
       "get": {
         "operationId": "get_contents",
@@ -7281,7 +7505,7 @@
             }
           }
         },
-        "summary": "What happens as it happens, a change on disk or a run starting and finishing, as server-sent events"
+        "summary": "What happens as it happens, a change on disk, a run starting, going on and finishing, as server-sent events"
       }
     },
     "/files": {

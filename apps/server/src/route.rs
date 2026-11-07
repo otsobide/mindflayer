@@ -54,6 +54,8 @@ pub enum Own {
     Run,
     /// `POST /switch`.
     Switch,
+    /// `POST /commands/cancel`.
+    Cancel,
     /// `GET /transcript`.
     Transcript,
     /// `GET /events`.
@@ -64,10 +66,11 @@ pub enum Own {
 
 impl Own {
     /// Every one, in the order a description of the API lists them.
-    pub const ALL: [Own; 6] = [
+    pub const ALL: [Own; 7] = [
         Own::Preview,
         Own::Run,
         Own::Switch,
+        Own::Cancel,
         Own::Transcript,
         Own::Events,
         Own::Document,
@@ -76,7 +79,7 @@ impl Own {
     /// How it is asked for: a POST takes its body, and a GET nothing.
     pub fn method(self) -> Method {
         match self {
-            Own::Preview | Own::Run | Own::Switch => Method::Post,
+            Own::Preview | Own::Run | Own::Switch | Own::Cancel => Method::Post,
             Own::Transcript | Own::Events | Own::Document => Method::Get,
         }
     }
@@ -87,6 +90,7 @@ impl Own {
             Own::Preview => "/tasks/preview",
             Own::Run => "/tasks",
             Own::Switch => "/switch",
+            Own::Cancel => "/commands/cancel",
             Own::Transcript => "/transcript",
             Own::Events => "/events",
             Own::Document => "/openapi.json",
@@ -108,21 +112,27 @@ impl Own {
                 "Act on what the body names from now on, once every task sent before it \
                  has run: what is acted on then"
             }
+            Own::Cancel => {
+                "Ask the run under way to stop, while it still takes a cancel: the lines of \
+                 the run asked, whose outcome says whether it stopped"
+            }
             Own::Transcript => "Every task the session ran, oldest first, with what each said",
             Own::Events => {
-                "What happens as it happens, a change on disk or a run starting and \
+                "What happens as it happens, a change on disk, a run starting, going on and \
                  finishing, as server-sent events"
             }
             Own::Document => "This description of the API, as an OpenAPI 3.1 document",
         }
     }
 
-    /// What its body holds; none for a GET, which takes none.
+    /// What its body holds; none for a GET, which takes none, nor for a
+    /// cancel, which names nothing, since what it stops is the run under
+    /// way.
     pub fn body(self) -> Option<Sent> {
         match self {
             Own::Preview | Own::Run => Some(Sent::Task),
             Own::Switch => Some(Sent::Switch),
-            Own::Transcript | Own::Events | Own::Document => None,
+            Own::Cancel | Own::Transcript | Own::Events | Own::Document => None,
         }
     }
 
@@ -132,6 +142,7 @@ impl Own {
             Own::Preview => Answer::Preview,
             Own::Run => Answer::Ran,
             Own::Switch => Answer::Switched,
+            Own::Cancel => Answer::Cancelling,
             Own::Transcript => Answer::Runs,
             Own::Events => Answer::Events,
             Own::Document => Answer::Document,
@@ -143,16 +154,23 @@ impl Own {
     /// API lists among its answers, beside what the backend refuses a
     /// preview, a run or a switch for.
     pub fn conditions(self) -> Vec<Condition> {
-        conditions(self.method(), &[], false, self.reaches())
+        let read = Read {
+            method: self.method(),
+            parameters: &[],
+            query: false,
+            body: self.body().is_some(),
+        };
+        conditions(&read, self.reaches())
     }
 
     /// What it hands a request on to: a preview the backend, a run and a
-    /// switch the writer thread, and the rest nothing, answered from what
-    /// the server holds.
+    /// switch the writer thread, a cancel the run under way, and the rest
+    /// nothing, answered from what the server holds.
     pub(crate) fn reaches(self) -> Reaches {
         match self {
             Own::Preview => Reaches::Backend,
             Own::Run | Own::Switch => Reaches::Writer,
+            Own::Cancel => Reaches::Run,
             Own::Transcript | Own::Events | Own::Document => Reaches::Nothing,
         }
     }
@@ -186,6 +204,9 @@ pub enum Answer {
     /// What the backend acts on after the switch, as its own JSON
     /// ([`Backend::switch`](crate::Backend::switch)).
     Switched,
+    /// The lines of the run a cancel asked to stop, the server's
+    /// [`Cancelling`](crate::Cancelling): `{"lines": [...]}`.
+    Cancelling,
     /// Server-sent events (`text/event-stream`) rather than JSON: each one
     /// [`Event`](crate::Event), as a `data:` line of JSON.
     Events,
@@ -323,7 +344,13 @@ impl<Q> Route<Q> {
     /// GET whose `query` never fails as for one that does, since the
     /// server cannot see inside a route's `query`.
     pub fn conditions(&self) -> Vec<Condition> {
-        conditions(self.method, &self.parameters, true, Reaches::Backend)
+        let read = Read {
+            method: self.method,
+            parameters: &self.parameters,
+            query: true,
+            body: self.body.is_some(),
+        };
+        conditions(&read, Reaches::Backend)
     }
 }
 
@@ -338,12 +365,26 @@ pub(crate) enum Reaches {
     /// The backend, on the writer thread every run and switch takes its
     /// turn on.
     Writer,
+    /// The run under way on the writer thread, through the cancel its
+    /// backend handed over, called where the request is answered.
+    Run,
 }
 
-/// Every condition a request to a route asked by `method`, taking
-/// `parameters`, may be refused for: a read of the backend's (`read`),
-/// whose `query` makes what it sent into one, or one of the server's own,
-/// handing it on to what `reaches` says.
+/// What a request to a route sends, as [`conditions`] reads it: by which
+/// method, with which parameters, whether a route's `query` makes the
+/// backend's query of them (`query`, a read of the backend's), and whether
+/// its body is read (`body`).
+struct Read<'a> {
+    method: Method,
+    parameters: &'a [Parameter],
+    query: bool,
+    body: bool,
+}
+
+/// Every condition a request to a route may be refused for, as `read`
+/// says what it sends: a read of the backend's, whose `query` makes what it
+/// sent into one, or one of the server's own, handing it on to what
+/// `reaches` says.
 ///
 /// Decided for each condition by a match with no wildcard, so a condition
 /// added is placed among the routes before it compiles, rather than left
@@ -351,14 +392,10 @@ pub(crate) enum Reaches {
 /// and the gate before a route is matched, a query string read by its
 /// parameters ([`arguments`]), a body by axum's JSON extractor, and what
 /// the request is handed on to.
-fn conditions(
-    method: Method,
-    parameters: &[Parameter],
-    read: bool,
-    reaches: Reaches,
-) -> Vec<Condition> {
-    let post = method == Method::Post;
-    let any = |test: fn(&Parameter) -> bool| parameters.iter().any(test);
+fn conditions(read: &Read<'_>, reaches: Reaches) -> Vec<Condition> {
+    let post = read.method == Method::Post;
+    let body = post && read.body;
+    let any = |test: fn(&Parameter) -> bool| read.parameters.iter().any(test);
     let may = |condition: Condition| match condition {
         // The Host and the Origin before anything, the token before any
         // route; a parameter no route takes, one of the server's own
@@ -368,22 +405,27 @@ fn conditions(
         | Condition::ForeignOrigin
         | Condition::UnknownParameter
         | Condition::MethodNotAllowed => true,
-        // A change, as every POST is, sent by cookie; and a body, read as
-        // JSON.
+        // A change, as every POST is, sent by cookie, which the guard
+        // holds to JSON whether a body is read or not; and a body, read as
+        // JSON, where one is.
         Condition::SameOriginRequired
         | Condition::PanelHeaderRequired
-        | Condition::JsonRequired
-        | Condition::MalformedJson
+        | Condition::JsonRequired => post,
+        Condition::MalformedJson
         | Condition::InvalidBody
         | Condition::BodyTooLarge
         | Condition::BodyUnreadable
-        | Condition::BodyRefused => post,
+        | Condition::BodyRefused => body,
         Condition::RepeatedParameter => any(|parameter| parameter.shape != Shape::List),
         Condition::MalformedParameter => {
             any(|parameter| matches!(parameter.shape, Shape::Number | Shape::Flag))
         }
         Condition::MissingParameter => any(|parameter| parameter.required),
-        Condition::InvalidParameters => read && !post,
+        Condition::InvalidParameters => read.query && !post,
+        // A cancel, by the run under way, or none.
+        Condition::NothingRunning | Condition::RunUncancellable | Condition::CancelTooLate => {
+            reaches == Reaches::Run
+        }
         // A path no route names: never one route's.
         Condition::UnknownRoute => false,
         Condition::BackendFailed => reaches != Reaches::Nothing,

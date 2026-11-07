@@ -535,7 +535,7 @@ async fn without_being_told_of_it_the_server_refuses_the_dev_servers_pages() {
 /// Every route under the version as a script or the panel's page asks for
 /// it, with what it is sent: one for each of the fake's reads, and each of
 /// the server's own.
-fn versioned() -> [(Method, &'static str, Option<Value>); 9] {
+fn versioned() -> [(Method, &'static str, Option<Value>); 10] {
     [
         (Method::GET, "/api/v1/echo?echo=hi", None),
         (Method::GET, "/api/v1/words?word=a", None),
@@ -551,6 +551,7 @@ fn versioned() -> [(Method, &'static str, Option<Value>); 9] {
             "/api/v1/switch",
             Some(json!({ "to": "beta" })),
         ),
+        (Method::POST, "/api/v1/commands/cancel", Some(json!({}))),
         (Method::GET, "/api/v1/transcript", None),
         (Method::GET, "/api/v1/events", None),
         (Method::GET, "/api/v1/openapi.json", None),
@@ -566,7 +567,8 @@ fn versioned() -> [(Method, &'static str, Option<Value>); 9] {
 /// the code of the guard that turned it away. Every refusal, and every
 /// answer, carries the policy, `nosniff` and `no-store`;
 /// and either credential, sent as a script or the page sends it, is
-/// answered.
+/// answered: a cancel, with nothing running here, by the conflict that
+/// is.
 #[tokio::test]
 async fn every_versioned_route_holds_every_guard_by_bearer_and_cookie_alike() {
     let (server, _) = launch();
@@ -694,7 +696,12 @@ async fn every_versioned_route_holds_every_guard_by_bearer_and_cookie_alike() {
                 let reply = send(&server, method.clone(), path, auth, body.clone()).await;
                 (reply.status, reply.headers)
             };
-            assert_eq!(status, StatusCode::OK, "{case}");
+            let answered = if path.ends_with("/commands/cancel") {
+                StatusCode::CONFLICT
+            } else {
+                StatusCode::OK
+            };
+            assert_eq!(status, answered, "{case}");
             carries_the_policy(&headers, &case);
         }
     }

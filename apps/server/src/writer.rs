@@ -2,7 +2,7 @@
 
 use std::io;
 use std::panic::{self, AssertUnwindSafe};
-use std::sync::{mpsc, Arc};
+use std::sync::{mpsc, Arc, Mutex, PoisonError};
 use std::thread;
 use std::time::Instant;
 
@@ -12,7 +12,7 @@ use tokio::sync::oneshot;
 use crate::code::Condition;
 use crate::events::{Event, Events};
 use crate::log::{Log, Planned};
-use crate::running::Running;
+use crate::running::{Cancelling, Running};
 use crate::transcript::{Ran, Transcript};
 use crate::watcher::Watcher;
 use crate::{Backend, Refusal};
@@ -63,6 +63,46 @@ enum Job<B: Backend> {
 /// on being answered while it runs.
 pub(crate) struct Writer<B: Backend> {
     queue: mpsc::Sender<Job<B>>,
+    /// The run the thread is on, which a cancel reaches beside the queue.
+    underway: Underway,
+}
+
+/// The run under way on the writer thread, if one is: what a cancel
+/// reaches it through, while the thread is the run's.
+#[derive(Clone, Default)]
+struct Underway(Arc<Mutex<Option<Current>>>);
+
+/// A run under way: its lines, and what its backend was handed of it.
+#[derive(Clone)]
+struct Current {
+    lines: Vec<String>,
+    running: Running,
+}
+
+impl Underway {
+    /// The run of `lines` is under way, from its start, once its lines
+    /// passed, to its end.
+    fn started(&self, lines: &[String], running: &Running) {
+        *self.lock() = Some(Current {
+            lines: lines.to_vec(),
+            running: running.clone(),
+        });
+    }
+
+    /// None is, whatever came of the one that was.
+    fn finished(&self) {
+        *self.lock() = None;
+    }
+
+    /// The run under way, if one is: taken out of the lock, so what a
+    /// cancel calls runs outside it.
+    fn current(&self) -> Option<Current> {
+        self.lock().clone()
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, Option<Current>> {
+        self.0.lock().unwrap_or_else(PoisonError::into_inner)
+    }
 }
 
 impl<B: Backend> Writer<B> {
@@ -80,6 +120,8 @@ impl<B: Backend> Writer<B> {
         log: Option<Arc<Log>>,
     ) -> io::Result<Self> {
         let (queue, jobs) = mpsc::channel::<Job<B>>();
+        let underway = Underway::default();
+        let on_it = underway.clone();
         thread::Builder::new()
             .name(String::from("mindweaver-writes"))
             .spawn(move || {
@@ -90,8 +132,12 @@ impl<B: Backend> Writer<B> {
                     match job {
                         Job::Run { task, sent, reply } => {
                             let took = Took { sent, log };
-                            let _ =
-                                reply.send(perform(&*backend, task, &transcript, &events, took));
+                            let around = Around {
+                                transcript: &transcript,
+                                events: &events,
+                                underway: &on_it,
+                            };
+                            let _ = reply.send(perform(&*backend, task, around, took));
                         }
                         Job::Switch { to, sent, reply } => {
                             let took = Took { sent, log };
@@ -100,7 +146,7 @@ impl<B: Backend> Writer<B> {
                     }
                 }
             })?;
-        Ok(Self { queue })
+        Ok(Self { queue, underway })
     }
 
     /// Queue a task behind every one that arrived before it, and wait for it
@@ -124,6 +170,35 @@ impl<B: Backend> Writer<B> {
             .map_err(|_| stopped())?;
         done.await.map_err(|_| stopped())?
     }
+
+    /// Ask the run under way to stop ([`Running::cancel`]), and say which
+    /// run that is; or why none was asked, with nothing changed.
+    ///
+    /// Beside the queue rather than on it: the thread is the run's until it
+    /// ends, so a cancel queued behind it would arrive once there is
+    /// nothing left to stop. What it calls is the backend's, held as a
+    /// call of the backend's is, so one that panics loses that answer and
+    /// not the server.
+    pub(crate) fn cancel(&self) -> Result<Cancelling, Failed> {
+        let Current { lines, running } = self.underway.current().ok_or(Failed {
+            condition: Condition::NothingRunning,
+            message: "no run is under way to cancel",
+        })?;
+        match panic::catch_unwind(AssertUnwindSafe(|| running.cancel())) {
+            Ok(Ok(())) => Ok(Cancelling { lines }),
+            Ok(Err((condition, message))) => Err(Failed { condition, message }),
+            Err(_) => Err(panicked("the backend panicked while cancelling the run")),
+        }
+    }
+}
+
+/// What a run is recorded in, told to and reached through by a cancel, as
+/// it runs.
+#[derive(Clone, Copy)]
+struct Around<'a> {
+    transcript: &'a Transcript,
+    events: &'a Events,
+    underway: &'a Underway,
 }
 
 /// The thread has stopped, so nothing queued on it is answered.
@@ -167,7 +242,8 @@ fn panicked(message: &'static str) -> Failed {
 /// between each step the backend says of how far it got ([`Running`]).
 /// Finished is told once the run is in the transcript, as the reply is
 /// sent, so whoever asks for the transcript on hearing it finds the run
-/// there.
+/// there, and once it is no longer under way, so a cancel sent on hearing
+/// it is told nothing runs.
 ///
 /// Said in the log, when there is one, once its lines are worked out, with
 /// how long it waited its turn and how long they took to work out, and
@@ -181,13 +257,12 @@ fn panicked(message: &'static str) -> Failed {
 /// lines that ran rather than raised: raised, it would leave the transcript
 /// a run short, and the client a bare 500 for lines that may well have
 /// changed the disk.
-fn perform<B: Backend>(
-    backend: &B,
-    task: B::Task,
-    transcript: &Transcript,
-    events: &Events,
-    took: Took<'_>,
-) -> Done {
+fn perform<B: Backend>(backend: &B, task: B::Task, around: Around<'_>, took: Took<'_>) -> Done {
+    let Around {
+        transcript,
+        events,
+        underway,
+    } = around;
     let failed = || panicked("the backend panicked while running the task");
     let queued = took.sent.elapsed();
     let working = Instant::now();
@@ -220,8 +295,10 @@ fn perform<B: Backend>(
             });
         }
     });
+    underway.started(&lines, &running);
     let started = Instant::now();
-    let ran = panic::catch_unwind(AssertUnwindSafe(move || backend.run(task, &running)));
+    let ran = panic::catch_unwind(AssertUnwindSafe(|| backend.run(task, &running)));
+    underway.finished();
     if let Some(log) = took.log {
         log.ran(started.elapsed(), lines.len());
     }

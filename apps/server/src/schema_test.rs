@@ -125,12 +125,24 @@ fn every_event() -> Vec<Event> {
 }
 
 #[test]
-fn the_server_s_roots_are_a_preview_a_run_an_event_and_a_refusal() {
+fn the_server_s_roots_are_a_preview_a_run_a_cancel_an_event_and_a_refusal() {
     let mut given = Given::default();
     roots(&mut given);
     let names: Vec<&str> = given.0.iter().map(|(name, _)| name.as_str()).collect();
 
-    assert_eq!(names, ["Preview", "Ran", "Event", "Refused"]);
+    assert_eq!(names, ["Preview", "Ran", "Cancelling", "Event", "Refused"]);
+}
+
+#[test]
+fn a_cancel_taken_holds_to_its_schema() {
+    holds_to(
+        "Cancelling",
+        &Cancelling {
+            lines: vec!["mindweaver gather git /home/you/src/acme".to_owned()],
+        },
+    );
+    refused_by("Cancelling", &json!({"lines": "one"}));
+    refused_by("Cancelling", &json!({}));
 }
 
 #[test]
@@ -474,6 +486,13 @@ fn the_servers_own_answers_say_what_the_backend_fills_them_with() {
         json!({"type": "array", "items": ran})
     );
     assert_eq!(answer("/switch"), json!({"carried": "Switched"}));
+    assert_eq!(answer("/commands/cancel"), json!({"own": "Cancelling"}));
+    assert!(
+        operation_at(&described, "/commands/cancel")
+            .get("requestBody")
+            .is_none(),
+        "a cancel takes no body"
+    );
     let events = &operation_at(&described, "/events")["responses"]["200"]["content"];
     assert_eq!(
         events["text/event-stream"]["x-itemSchema"],

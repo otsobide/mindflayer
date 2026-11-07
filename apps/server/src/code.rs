@@ -84,7 +84,8 @@ macro_rules! codes {
 /// Why the server answers a request under `/api` with no success, when the
 /// server rather than the backend found it: the guards, the token, a route
 /// that is not there or not asked that way, what a request sends that a
-/// route cannot read, and a backend or a thread that failed.
+/// route cannot read, a cancel no run under way takes, and a backend or a
+/// thread that failed.
 ///
 /// Conditions without the words for them: each place that finds one says
 /// what it found, the route, the parameter or the header named, so the
@@ -143,6 +144,17 @@ pub enum Condition {
     /// A GET whose parameters, each read, its route's `query` cannot make
     /// a query of.
     InvalidParameters,
+    /// A cancel sent while no run is under way: none was, or the one it
+    /// was meant for has finished.
+    NothingRunning,
+    /// A cancel sent while a run is under way that takes none: its backend
+    /// never said one reaches it
+    /// ([`Running::cancelled_by`](crate::Running::cancelled_by)).
+    RunUncancellable,
+    /// A cancel sent once the run under way is past the point where one
+    /// stops it, as the latest step its backend said of it tells
+    /// ([`Progress::cancellable`](crate::Progress::cancellable)).
+    CancelTooLate,
     /// A path under `/api` that no route names: a typo, a version not
     /// served, or the panel's old unversioned endpoints.
     UnknownRoute,
@@ -150,7 +162,8 @@ pub enum Condition {
     /// says which it does.
     MethodNotAllowed,
     /// The backend failed while answering, its call panicking, so there
-    /// is no answer to give: a query, a preview, a run or a switch.
+    /// is no answer to give: a query, a preview, a run, a switch, or the
+    /// cancel a run handed over.
     BackendFailed,
     /// The thread every run and switch goes through has stopped, so
     /// nothing can be queued on it.
@@ -174,6 +187,9 @@ codes!(Condition {
     Self::MalformedParameter => (BAD_REQUEST, "malformed_parameter"),
     Self::MissingParameter => (BAD_REQUEST, "missing_parameter"),
     Self::InvalidParameters => (BAD_REQUEST, "invalid_parameters"),
+    Self::NothingRunning => (CONFLICT, "nothing_running"),
+    Self::RunUncancellable => (CONFLICT, "run_uncancellable"),
+    Self::CancelTooLate => (CONFLICT, "cancel_too_late"),
     Self::UnknownRoute => (NOT_FOUND, "unknown_route"),
     Self::MethodNotAllowed => (METHOD_NOT_ALLOWED, "method_not_allowed"),
     Self::BackendFailed => (INTERNAL_SERVER_ERROR, "backend_failed"),

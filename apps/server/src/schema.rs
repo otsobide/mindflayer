@@ -34,7 +34,7 @@ use serde_json::{json, Map, Value};
 use crate::auth::COOKIE_PREFIX;
 use crate::guard::PANEL_HEADER;
 use crate::route::{Answer, Method, Own, Parameter, Reaches, Route, Sent, Shape};
-use crate::{Condition, Event, Grounds, Preview, Ran, Refused};
+use crate::{Cancelling, Condition, Event, Grounds, Preview, Ran, Refused};
 
 /// What [`roots`] is handed: each type the server answers with of its own,
 /// for whatever is made of its schema. Only what is given, as serde writes
@@ -46,12 +46,13 @@ pub trait Visitor {
 
 /// Every type the server answers with of its own, whatever the backend:
 /// what a task's preview is ([`Preview`]), what a run did, which the
-/// transcript lists too ([`Ran`]), each event the stream tells ([`Event`]),
-/// and what every answer under `/api` that is no success holds
-/// ([`Refused`]).
+/// transcript lists too ([`Ran`]), which run a cancel asked to stop
+/// ([`Cancelling`]), each event the stream tells ([`Event`]), and what
+/// every answer under `/api` that is no success holds ([`Refused`]).
 pub fn roots(visitor: &mut impl Visitor) {
     visitor.given::<Preview>();
     visitor.given::<Ran>();
+    visitor.given::<Cancelling>();
     visitor.given::<Event>();
     visitor.given::<Refused>();
 }
@@ -200,7 +201,10 @@ pub fn paths<Q>(routes: &[Route<Q>], describe: &mut impl Describe) -> Value {
             let body = describe.sent(body);
             operation.insert("requestBody".into(), sent(body));
         }
-        let called = (own.reaches() != Reaches::Nothing).then_some(Called::Own(own));
+        // A cancel reaches the run under way, never the backend's rules:
+        // nothing the backend refuses a request for is among its answers.
+        let called =
+            matches!(own.reaches(), Reaches::Backend | Reaches::Writer).then_some(Called::Own(own));
         let mut responses = refusals(&own.conditions(), called, describe);
         responses.insert("200".into(), answered(own.answers(), describe));
         operation.insert("responses".into(), Value::Object(responses));
@@ -263,6 +267,10 @@ pub fn answered(answer: Answer, describe: &mut impl Describe) -> Value {
         Answer::Switched => json_answer(
             "What the backend acts on from now on.",
             describe.carried(Carried::Switched),
+        ),
+        Answer::Cancelling => json_answer(
+            "The lines of the run asked to stop: whether it stopped, its outcome says.",
+            describe.own::<Cancelling>(),
         ),
         Answer::Events => {
             let scope = describe.carried(Carried::Scope);
@@ -375,6 +383,10 @@ fn said(status: u16) -> &'static str {
         405 => {
             "Asked by another method than the one its path takes, which `Allow` names: the \
              answer to every other method here, never to this one."
+        }
+        409 => {
+            "No run under way that a cancel stops now: none is, the one under way takes \
+             none, or it is past the point where one stops it, as the code says."
         }
         413 => "A body larger than the server reads.",
         415 => "A body not sent as `application/json`.",

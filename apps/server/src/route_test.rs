@@ -255,6 +255,7 @@ fn the_servers_own_routes_are_pinned_by_what_a_description_says() {
                 Some(Sent::Switch),
                 Answer::Switched
             ),
+            (Method::Post, "/commands/cancel", None, Answer::Cancelling),
             (Method::Get, "/transcript", None, Answer::Runs),
             (Method::Get, "/events", None, Answer::Events),
             (Method::Get, "/openapi.json", None, Answer::Document),
@@ -294,7 +295,7 @@ const EVERY: [&str; 5] = [
     "method_not_allowed",
 ];
 
-/// A change sent by cookie, and a body read as JSON.
+/// A change sent by cookie, the first three, and a body read as JSON.
 const POSTED: [&str; 8] = [
     "same_origin_required",
     "x_mindflayer_required",
@@ -347,17 +348,31 @@ fn a_read_by_its_body_may_be_refused_for_the_body_and_never_a_parameter_it_reads
 }
 
 /// Pinned, as their table is: what each of the server's own routes hands
-/// a request on to, and so what may fail under it.
+/// a request on to, and so what may fail under it. A cancel reads no body,
+/// so nothing a body is refused for, but what the guard holds a change by
+/// cookie to, and is refused for the run under way, or none.
 #[test]
 fn each_of_the_servers_own_routes_may_be_refused_for_what_it_reaches() {
     let task = [&EVERY[..], &POSTED].concat();
     let preview = [&task[..], &["backend_failed"]].concat();
     let run = [&task[..], &["backend_failed", "writer_stopped"]].concat();
+    let cancel = [
+        &EVERY[..],
+        &POSTED[..3],
+        &[
+            "nothing_running",
+            "run_uncancellable",
+            "cancel_too_late",
+            "backend_failed",
+        ],
+    ]
+    .concat();
 
     for (own, listed) in [
         (Own::Preview, ordered(&preview)),
         (Own::Run, ordered(&run)),
         (Own::Switch, ordered(&run)),
+        (Own::Cancel, ordered(&cancel)),
         (Own::Transcript, ordered(&EVERY)),
         (Own::Events, ordered(&EVERY)),
         (Own::Document, ordered(&EVERY)),

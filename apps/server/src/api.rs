@@ -66,6 +66,7 @@ pub(crate) fn own<B: Backend>(own: Own) -> MethodRouter<Arc<Api<B>>> {
         Own::Preview => on(method, preview::<B>),
         Own::Run => on(method, run::<B>),
         Own::Switch => on(method, switch::<B>),
+        Own::Cancel => on(method, cancel::<B>),
         Own::Transcript => on(method, transcript::<B>),
         Own::Events => on(method, events::<B>),
         Own::Document => on(method, document::<B>),
@@ -191,6 +192,26 @@ pub(crate) async fn switch<B: Backend>(
     match api.writer.switch(to).await {
         Ok(Ok(answer)) => Json(answer).into_response(),
         Ok(Err(refusal)) => refused_by(refusal),
+        Err(failed) => error(failed.condition, failed.message),
+    }
+}
+
+/// `POST /api/v1/commands/cancel`: ask the run under way to stop, and say
+/// which run that is; or why none was asked: nothing runs, the run takes no
+/// cancel, or it is past the point where one stops it.
+///
+/// Answered at once, beside the writer thread rather than queued on it,
+/// which the run holds until it ends. No body: what it stops is the run
+/// under way, the one the stream told started and has not told finished.
+/// Held to every guard a change is, as a POST: a page on another port that
+/// could stop a gather half way would do no harm a gather's own cancel
+/// does not, but it would still be a change it made.
+pub(crate) async fn cancel<B: Backend>(State(api): State<Arc<Api<B>>>, uri: Uri) -> Response {
+    if let Some(refusal) = unasked(&uri) {
+        return refusal;
+    }
+    match api.writer.cancel() {
+        Ok(cancelling) => Json(cancelling).into_response(),
         Err(failed) => error(failed.condition, failed.message),
     }
 }

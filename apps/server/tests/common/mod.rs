@@ -19,6 +19,7 @@ pub use std::sync::{Arc, Condvar, Mutex};
 
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize, Serializer};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tower::ServiceExt;
 
@@ -129,9 +130,11 @@ fn echoed(sent: Arguments) -> Result<FakeQuery, String> {
 /// whether to refuse it, when its lines are asked for (`refuse`) or only
 /// once it is handed over to run (`refuse_run`), whether its run panics, as
 /// a backend with a bug would, what its preview says to confirm first, in
-/// words of the fake's own (`confirm`), and the steps its run says it
-/// reached, in order, before it waits at the hold (`steps`, each counted
-/// by its place among them, of how many there are).
+/// words of the fake's own (`confirm`), the steps its run says it reached,
+/// in order, before it waits at the hold (`steps`, each counted by its
+/// place among them, of how many there are), and whether a cancel reaches
+/// its run (`takes_cancel`), which lets it go from the hold, and its
+/// outcome then says so.
 ///
 /// A run takes no notice of `refuse`: one whose lines were refused and is
 /// handed over all the same runs, and the runs it leaves say so.
@@ -152,6 +155,8 @@ pub struct FakeTask {
     pub confirm: Vec<String>,
     #[serde(default)]
     pub steps: Vec<FakeStep>,
+    #[serde(default)]
+    pub takes_cancel: bool,
 }
 
 /// A step a fake run says it reached: a word of the fake's own, and
@@ -207,6 +212,9 @@ pub struct FakeOutcome {
     pub thread: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub unwritable: Option<Unwritable>,
+    /// Whether a cancel reached it.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub cancelled: bool,
 }
 
 /// A part of an outcome that refuses to serialize, as a path that is not
@@ -287,6 +295,14 @@ impl Backend for Fake {
             .lock()
             .unwrap()
             .push(format!("start {}", task.name));
+        let cancelled = Arc::new(AtomicBool::new(false));
+        if task.takes_cancel {
+            let (cancelled, hold) = (Arc::clone(&cancelled), Arc::clone(&self.hold));
+            running.cancelled_by(move || {
+                cancelled.store(true, Ordering::SeqCst);
+                hold.release();
+            });
+        }
         let total = task.steps.len() as u64;
         for (done, step) in (1..).zip(&task.steps) {
             running.report(Progress {
@@ -305,6 +321,7 @@ impl Backend for Fake {
             ran: task.name,
             thread: std::thread::current().name().map(str::to_owned),
             unwritable: task.unwritable.then_some(Unwritable),
+            cancelled: cancelled.load(Ordering::SeqCst),
         })
     }
 
