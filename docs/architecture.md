@@ -8037,9 +8037,13 @@ what it calls (`Running::cancelled_by`).
   each of core's steps carried to the server's shape
   (`progress::carried`): its snake_case name, the words the terminal draws
   (`progress::said`), its counts, and `Progress::cancellable`, core's, so
-  the panel stops offering a cancel where the TUI stops, at placing. Only
-  what changed is said, as the gather reads gix ten times a second, so a
-  subscriber reading as it should never falls behind the bus's 64.
+  the panel stops offering a cancel where the TUI stops, at placing. Of
+  gix's counts only what changed is said, as the gather reads them ten
+  times a second, but each folder read and each placed is said as it
+  goes, and the backend passes every step on: a source of many folders
+  can say more than the bus's 64 before a subscriber slow to read gets to
+  them, which is then told `resync` and hears the steps after, each saying
+  on its own how far the run has got.
 - **A cancel** is `POST /api/v1/commands/cancel`, with no body: it stops
   the run under way, the one the stream told started and has not told
   finished, which the writer thread keeps beside its queue, recording the

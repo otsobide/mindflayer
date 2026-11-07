@@ -18,10 +18,13 @@ use crate::running::Progress;
 /// it is told it fell behind ([`Event::Resync`]).
 ///
 /// Enough for the bursts there are, a command's start and end and a change
-/// or two, many times over, and for a long run's progress, which the CLI's
-/// backend says ten times a second at most; a subscriber further behind than
-/// this has stopped reading, and what it needs then is one word to ask for
-/// everything again, not the backlog.
+/// or two, many times over. Not always for a long run's progress: the CLI's
+/// backend says gix's counts ten times a second at most, but a gather's
+/// folders one at a time as it reads and places them, so a source of many
+/// folders can say more than this before a subscriber slow to read gets to
+/// them. A subscriber further behind than this needs one word to ask for
+/// everything again, not the backlog, and each step it hears after says on
+/// its own how far the run has got.
 pub const CAPACITY: usize = 64;
 
 /// One thing the panel is told.
