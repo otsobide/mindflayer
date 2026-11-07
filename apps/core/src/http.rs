@@ -290,6 +290,21 @@ pub struct Fetched {
     pub warnings: Vec<HttpError>,
 }
 
+/// A fetch, or a listing, that brought nothing back: why, and what went
+/// wrong with the cache on the way to that failure.
+///
+/// An entry that could not be read is no less unreadable for the fetch
+/// failing, and nothing writes over it then, so it is said here rather than
+/// lost with the fetch, for as long as the fetch keeps failing. Not an
+/// error of its own, with no code: what failed is `error`, which the caller
+/// collects as a failure, each warning beside it.
+#[derive(Debug)]
+pub struct Failed {
+    pub error: HttpError,
+    /// As [`Fetched::warnings`] says them.
+    pub warnings: Vec<HttpError>,
+}
+
 impl Fetched {
     /// The body read as JSON, into the shape `T` a caller declares.
     ///
@@ -381,7 +396,27 @@ impl<'a> Client<'a> {
     /// from, and a relative `Link` in it is read against that URL, so a
     /// listing read again from the cache would follow it from the URL asked,
     /// to pages the network never named.
-    pub fn get(&self, request: &Request) -> Result<Fetched, HttpError> {
+    ///
+    /// What went wrong with the cache comes back with the answer
+    /// ([`Fetched::warnings`]), or with the failure ([`Failed::warnings`]).
+    pub fn get(&self, request: &Request) -> Result<Fetched, Failed> {
+        let mut warnings = Vec::new();
+        match self.cached(request, &mut warnings) {
+            Ok(fetched) => Ok(Fetched {
+                warnings,
+                ..fetched
+            }),
+            Err(error) => Err(Failed { error, warnings }),
+        }
+    }
+
+    /// [`Client::get`], what went wrong with the cache put in `warnings`
+    /// whatever came of the fetch.
+    fn cached(
+        &self,
+        request: &Request,
+        warnings: &mut Vec<HttpError>,
+    ) -> Result<Fetched, HttpError> {
         let url = request.url();
         // Before the cache is looked in, which a refused URL never reaches.
         fetchable(url)?;
@@ -393,28 +428,27 @@ impl<'a> Client<'a> {
             return self.fetch(request, false);
         };
 
-        let mut warnings = Vec::new();
         let kept = cache.read(url).unwrap_or_else(|warning| {
             warnings.push(warning);
             None
         });
-        let served = |entry: Entry, served, warnings| Fetched {
+        let served = |entry: Entry, served| Fetched {
             url: url.to_owned(),
             status: 200,
             headers: entry.headers,
             body: entry.body,
             served,
-            warnings,
+            warnings: Vec::new(),
         };
         let kept = match kept {
             Some(entry) if cache.is_fresh(&entry) => {
-                return Ok(served(entry, Served::Cache, warnings));
+                return Ok(served(entry, Served::Cache));
             }
             kept => kept,
         };
 
         let asking = kept.as_ref().and_then(|entry| entry.conditional(request));
-        let mut fetched = self.fetch(asking.as_ref().unwrap_or(request), asking.is_some())?;
+        let fetched = self.fetch(asking.as_ref().unwrap_or(request), asking.is_some())?;
         match kept {
             Some(entry) if asking.is_some() && fetched.status == 304 => {
                 // Kept again, so how long it is fresh for starts from now.
@@ -425,7 +459,7 @@ impl<'a> Client<'a> {
                 if let Err(warning) = cache.write(url, &entry) {
                     warnings.push(warning);
                 }
-                Ok(served(entry, Served::Revalidated, warnings))
+                Ok(served(entry, Served::Revalidated))
             }
             _ => {
                 if fetched.status == 200 && fetched.url == url {
@@ -433,7 +467,6 @@ impl<'a> Client<'a> {
                         warnings.push(warning);
                     }
                 }
-                fetched.warnings = warnings;
                 Ok(fetched)
             }
         }

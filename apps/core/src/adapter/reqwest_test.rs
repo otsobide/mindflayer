@@ -168,7 +168,8 @@ fn a_body_past_the_cap_is_refused_while_it_is_read() {
     let error = Client::new(&http)
         .with_limits(limits(Duration::from_secs(10), 64 * 1024))
         .get(&Request::get(server.at("/big")))
-        .unwrap_err();
+        .unwrap_err()
+        .error;
 
     assert_eq!(error.code(), "http_too_large");
 }
@@ -184,7 +185,8 @@ fn a_length_declared_past_the_cap_is_refused() {
     let error = Client::new(&http)
         .with_limits(limits(Duration::from_secs(10), 1024))
         .get(&Request::get(server.at("/big")))
-        .unwrap_err();
+        .unwrap_err()
+        .error;
 
     assert_eq!(error.code(), "http_too_large");
     assert!(
@@ -207,7 +209,8 @@ fn a_body_that_stops_coming_is_cut_at_the_time_limit() {
     let error = Client::new(&http)
         .with_limits(limits(Duration::from_millis(300), 1024 * 1024))
         .get(&Request::get(server.at("/slow")))
-        .unwrap_err();
+        .unwrap_err()
+        .error;
 
     assert_eq!(error.code(), "http_timed_out");
     assert!(
@@ -230,7 +233,8 @@ fn a_server_that_never_answers_is_cut_at_the_time_limit() {
     let error = Client::new(&http)
         .with_limits(limits(Duration::from_millis(300), 1024))
         .get(&Request::get(server.at("/silent")))
-        .unwrap_err();
+        .unwrap_err()
+        .error;
 
     assert_eq!(error.code(), "http_timed_out");
     assert!(
@@ -248,7 +252,10 @@ fn a_refused_connection_is_said_as_one() {
     drop(listener);
     let http = Reqwest::new().unwrap();
 
-    let error = Client::new(&http).get(&Request::get(&url)).unwrap_err();
+    let error = Client::new(&http)
+        .get(&Request::get(&url))
+        .unwrap_err()
+        .error;
 
     assert_eq!(error.code(), "http_connect_failed");
     assert!(
@@ -270,7 +277,8 @@ fn a_status_that_is_not_a_success_is_a_failure() {
 
     let error = Client::new(&http)
         .get(&Request::get(server.at("/gone")))
-        .unwrap_err();
+        .unwrap_err()
+        .error;
 
     assert_eq!(error.code(), "http_status_unsuccessful");
 }
@@ -321,7 +329,8 @@ fn redirects_past_the_bound_are_not_followed() {
             ..Limits::default()
         })
         .get(&Request::get(server.at("/again")))
-        .unwrap_err();
+        .unwrap_err()
+        .error;
 
     assert_eq!(error.code(), "http_too_many_redirects");
     assert_eq!(server.heads().len(), 3);
@@ -342,7 +351,8 @@ fn a_redirect_to_another_scheme_is_refused_and_never_followed() {
 
     let error = Client::new(&http)
         .get(&Request::get(server.at("/first")))
-        .unwrap_err();
+        .unwrap_err()
+        .error;
 
     assert_eq!(error.code(), "http_redirect_refused");
     assert_eq!(server.heads().len(), 1);
@@ -359,7 +369,7 @@ fn a_header_http_cannot_carry_is_refused_without_its_value() {
         Request::get(server.at("/")).header("Bad Name", "x"),
         Request::get(server.at("/")).credential("X-Api-Key", "k3y\r\nInjected: yes"),
     ] {
-        let error = Client::new(&http).get(&request).unwrap_err();
+        let error = Client::new(&http).get(&request).unwrap_err().error;
 
         assert_eq!(error.code(), "http_header_invalid");
         assert!(!error.to_string().contains("k3y"), "{error}");

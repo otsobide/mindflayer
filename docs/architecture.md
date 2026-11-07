@@ -4341,7 +4341,11 @@ last one whole; so it takes no lock. It is read leniently, as a cache can
 be: an entry that cannot be read, or that another build wrote in a format
 of its own, is a miss, said (`http_cache_unreadable`) and written over by
 the answer fetched in its place, and one that cannot be kept is said
-(`http_cache_unwritable`) beside the answer, which is still served.
+(`http_cache_unwritable`) beside the answer, which is still served. What
+went wrong with the cache is said beside a fetch that fails too
+(`http::Failed`), every page's before it for a listing: nothing writes
+over an unreadable entry then, so it would go unsaid for as long as the
+fetch kept failing.
 
 `cache/http` sits beside the clones, each a folder of the cache named from
 its source, so it is kept from ever being one: the ledger takes `http` as

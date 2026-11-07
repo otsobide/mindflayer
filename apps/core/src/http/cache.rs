@@ -16,11 +16,12 @@
 //!
 //! Read leniently, as a cache can be: an entry that cannot be read, or that
 //! another build wrote in a format of its own, is a miss and said
-//! ([`HttpError::CacheUnreadable`]), never a reason to fail the fetch, and
-//! the answer fetched in its place writes over it. Written through a
-//! temporary file and a rename, so a reader finds an entry whole or not at
-//! all, and two writers of one entry leave the last one whole: no lock is
-//! taken, as none is needed for that.
+//! ([`HttpError::CacheUnreadable`]) beside the answer or the failure
+//! ([`super::Failed`]), never a reason to fail the fetch, and the answer
+//! fetched in its place writes over it. Written through a temporary file
+//! and a rename, so a reader finds an entry whole or not at all, and two
+//! writers of one entry leave the last one whole: no lock is taken, as none
+//! is needed for that.
 
 use std::fs;
 use std::io;

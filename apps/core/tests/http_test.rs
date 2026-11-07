@@ -336,7 +336,8 @@ fn a_body_larger_than_the_cap_is_refused_while_it_is_read() {
     let error = Client::new(&fake)
         .with_limits(limits(Duration::from_secs(30), 64 * 1024))
         .get(&Request::get(CATALOG))
-        .unwrap_err();
+        .unwrap_err()
+        .error;
 
     assert_eq!(error.code(), "http_too_large");
     assert_eq!(
@@ -358,7 +359,8 @@ fn a_length_declared_over_the_cap_is_refused_before_a_byte_is_read() {
     let error = Client::new(&fake)
         .with_limits(limits(Duration::from_secs(30), 1000))
         .get(&Request::get(CATALOG))
-        .unwrap_err();
+        .unwrap_err()
+        .error;
 
     assert_eq!(error.code(), "http_too_large");
     assert!(!fake.read.load(Ordering::SeqCst), "the body was read");
@@ -378,7 +380,8 @@ fn a_length_declared_under_the_cap_does_not_lift_it() {
     let error = Client::new(&fake)
         .with_limits(limits(Duration::from_secs(30), 64 * 1024))
         .get(&Request::get(CATALOG))
-        .unwrap_err();
+        .unwrap_err()
+        .error;
 
     assert_eq!(error.code(), "http_too_large");
 }
@@ -431,7 +434,8 @@ fn a_slow_body_is_cut_at_the_time_limit() {
     let error = Client::new(&fake)
         .with_limits(limits(Duration::from_millis(200), 1024 * 1024))
         .get(&Request::get(CATALOG))
-        .unwrap_err();
+        .unwrap_err()
+        .error;
 
     assert_eq!(error.code(), "http_timed_out");
     assert_eq!(
@@ -475,7 +479,8 @@ fn a_transport_that_gives_up_is_said_as_the_fetchs_timeout() {
     let error = Client::new(&fake)
         .with_limits(limits(Duration::from_secs(7), 1024))
         .get(&Request::get(CATALOG))
-        .unwrap_err();
+        .unwrap_err()
+        .error;
 
     assert!(
         matches!(&error, HttpError::Timeout { after, .. } if *after == Duration::from_secs(7)),
@@ -488,7 +493,10 @@ fn a_status_that_is_not_a_success_is_a_failure() {
     for status in [404, 500, 503, 301] {
         let fake = Fake::new().answering(CATALOG, Reply::status(status, "<html>no</html>"));
 
-        let error = Client::new(&fake).get(&Request::get(CATALOG)).unwrap_err();
+        let error = Client::new(&fake)
+            .get(&Request::get(CATALOG))
+            .unwrap_err()
+            .error;
 
         assert_eq!(error.code(), "http_status_unsuccessful", "{status}");
         assert_eq!(
@@ -524,7 +532,10 @@ fn a_failure_while_reading_is_said_without_the_credentials_it_quotes() {
         },
     );
 
-    let error = Client::new(&fake).get(&Request::get(CATALOG)).unwrap_err();
+    let error = Client::new(&fake)
+        .get(&Request::get(CATALOG))
+        .unwrap_err()
+        .error;
 
     assert_eq!(error.code(), "http_transfer_failed");
     assert_eq!(
@@ -588,7 +599,8 @@ fn redirects_are_bounded() {
             ..Limits::default()
         })
         .get(&Request::get(CATALOG))
-        .unwrap_err();
+        .unwrap_err()
+        .error;
 
     assert_eq!(error.code(), "http_too_many_redirects");
     assert_eq!(
@@ -606,7 +618,10 @@ fn redirects_are_bounded() {
 fn a_redirect_to_plain_http_elsewhere_is_refused_and_never_followed() {
     let fake = Fake::new().answering(CATALOG, redirect(302, "http://mirror.example/servers"));
 
-    let error = Client::new(&fake).get(&Request::get(CATALOG)).unwrap_err();
+    let error = Client::new(&fake)
+        .get(&Request::get(CATALOG))
+        .unwrap_err()
+        .error;
 
     assert_eq!(error.code(), "http_redirect_refused");
     assert_eq!(
@@ -628,7 +643,10 @@ fn a_redirect_to_another_scheme_is_refused() {
     ] {
         let fake = Fake::new().answering(CATALOG, redirect(302, location));
 
-        let error = Client::new(&fake).get(&Request::get(CATALOG)).unwrap_err();
+        let error = Client::new(&fake)
+            .get(&Request::get(CATALOG))
+            .unwrap_err()
+            .error;
 
         assert_eq!(error.code(), "http_redirect_refused", "{location}");
         assert_eq!(fake.sent().len(), 1, "{location}");
@@ -654,7 +672,10 @@ fn a_redirect_carrying_credentials_is_refused_without_repeating_them() {
         redirect(302, "https://me:s3cret@mirror.example/servers"),
     );
 
-    let error = Client::new(&fake).get(&Request::get(CATALOG)).unwrap_err();
+    let error = Client::new(&fake)
+        .get(&Request::get(CATALOG))
+        .unwrap_err()
+        .error;
 
     assert_eq!(error.code(), "http_redirect_refused");
     assert!(!error.to_string().contains("s3cret"), "{error}");
@@ -708,7 +729,10 @@ fn credentials_go_along_a_redirect_within_the_origin() {
 fn a_redirect_status_with_nowhere_to_go_is_a_failure() {
     let fake = Fake::new().answering(CATALOG, Reply::status(302, ""));
 
-    let error = Client::new(&fake).get(&Request::get(CATALOG)).unwrap_err();
+    let error = Client::new(&fake)
+        .get(&Request::get(CATALOG))
+        .unwrap_err()
+        .error;
 
     assert_eq!(error.code(), "http_status_unsuccessful");
 }
@@ -959,7 +983,8 @@ fn a_next_link_to_plain_http_elsewhere_is_refused() {
 
     let error = Client::new(&fake)
         .pages::<Search>(&Request::get(SEARCH), &Paging::NextLink, 10)
-        .unwrap_err();
+        .unwrap_err()
+        .error;
 
     assert_eq!(error.code(), "http_url_refused");
     assert_eq!(fake.sent().len(), 1);
@@ -979,7 +1004,8 @@ fn a_page_that_fails_fails_the_listing() {
 
     let error = Client::new(&fake)
         .pages::<Search>(&Request::get(SEARCH), &Paging::NextLink, 10)
-        .unwrap_err();
+        .unwrap_err()
+        .error;
 
     assert_eq!(error.code(), "http_json_invalid");
     assert!(error.to_string().starts_with(second), "{error}");
@@ -1106,7 +1132,8 @@ fn an_unchanged_answer_to_a_request_that_did_not_ask_is_a_failure() {
     let error = Client::new(&fake)
         .with_cache(cache(&folder, &clock))
         .get(&Request::get(CATALOG))
-        .unwrap_err();
+        .unwrap_err()
+        .error;
 
     assert_eq!(error.code(), "http_status_unsuccessful");
 }
@@ -1132,6 +1159,55 @@ fn a_corrupt_entry_is_a_miss_and_said() {
     let codes: Vec<&str> = fetched.warnings.iter().map(HttpError::code).collect();
     assert_eq!(codes, ["http_cache_unreadable"]);
     assert_eq!(kept.read(CATALOG).unwrap().unwrap().body, b"[1]");
+}
+
+/// A corrupt entry is said beside a fetch that fails as well: nothing writes
+/// over it then, so it would otherwise go unsaid for as long as the fetch
+/// keeps failing.
+#[test]
+fn a_corrupt_entry_is_said_beside_a_fetch_that_fails() {
+    let folder = TempDir::new().unwrap();
+    let clock = Set::at(NOW);
+    let kept = cache(&folder, &clock);
+    fs::create_dir_all(kept.folder()).unwrap();
+    fs::write(kept.path_of(CATALOG), "half an entr").unwrap();
+    let fake = Fake::new().answering(CATALOG, Reply::status(503, "busy"));
+
+    let failed = Client::new(&fake)
+        .with_cache(cache(&folder, &clock))
+        .get(&Request::get(CATALOG))
+        .unwrap_err();
+
+    assert_eq!(failed.error.code(), "http_status_unsuccessful");
+    let codes: Vec<&str> = failed.warnings.iter().map(HttpError::code).collect();
+    assert_eq!(codes, ["http_cache_unreadable"]);
+}
+
+/// A listing that fails says what went wrong with the cache on the way, a
+/// page's before the one that failed included.
+#[test]
+fn a_listing_that_fails_says_what_went_wrong_with_the_cache_before_it() {
+    let folder = TempDir::new().unwrap();
+    let clock = Set::at(NOW);
+    let second = "https://api.example/search?q=skill&page=2";
+    let kept = cache(&folder, &clock);
+    fs::create_dir_all(kept.folder()).unwrap();
+    fs::write(kept.path_of(SEARCH), "half an entr").unwrap();
+    let fake = Fake::new()
+        .answering(
+            SEARCH,
+            Reply::ok(&search(&["a"])).with("Link", &format!("<{second}>; rel=next")),
+        )
+        .answering(second, Reply::status(503, "busy"));
+
+    let failed = Client::new(&fake)
+        .with_cache(cache(&folder, &clock))
+        .pages::<Search>(&Request::get(SEARCH), &Paging::NextLink, 10)
+        .unwrap_err();
+
+    assert_eq!(failed.error.code(), "http_status_unsuccessful");
+    let codes: Vec<&str> = failed.warnings.iter().map(HttpError::code).collect();
+    assert_eq!(codes, ["http_cache_unreadable"]);
 }
 
 /// Written through a temporary file renamed into place, so a reader finds

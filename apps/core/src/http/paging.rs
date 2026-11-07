@@ -8,7 +8,7 @@
 
 use serde::de::DeserializeOwned;
 
-use super::{fetchable, Client, Fetched, HttpError, Request};
+use super::{fetchable, Client, Failed, Fetched, HttpError, Request};
 use crate::value::Redacted;
 
 /// How a listing says where its next page is.
@@ -45,7 +45,8 @@ pub struct Paged<T> {
     /// to collect beside what was read, rather than a reason to hide it.
     pub cut: Option<HttpError>,
     /// What went wrong with the cache on the way, each page's
-    /// ([`Fetched::warnings`]).
+    /// ([`Fetched::warnings`]); with a listing that failed, in
+    /// [`Failed::warnings`].
     pub warnings: Vec<HttpError>,
 }
 
@@ -58,16 +59,32 @@ impl Client<'_> {
     /// credentials only while the next page is on the origin `first` named,
     /// as a redirect leaves them. A page that cannot be fetched, or read as
     /// `T`, fails the listing: what came before it is a listing cut short at
-    /// a place nobody chose.
+    /// a place nobody chose. What went wrong with the cache on the way to
+    /// it comes back with the failure, every page's before it included.
     pub fn pages<T: Page>(
         &self,
         first: &Request,
         paging: &Paging,
         max_pages: usize,
+    ) -> Result<Paged<T>, Failed> {
+        let mut warnings = Vec::new();
+        match self.paged(first, paging, max_pages, &mut warnings) {
+            Ok(paged) => Ok(Paged { warnings, ..paged }),
+            Err(error) => Err(Failed { error, warnings }),
+        }
+    }
+
+    /// [`Client::pages`], what went wrong with the cache put in `warnings`
+    /// whatever came of the listing.
+    fn paged<T: Page>(
+        &self,
+        first: &Request,
+        paging: &Paging,
+        max_pages: usize,
+        warnings: &mut Vec<HttpError>,
     ) -> Result<Paged<T>, HttpError> {
         let origin = fetchable(first.url())?.origin();
         let mut pages = Vec::new();
-        let mut warnings = Vec::new();
         let mut asked = 0;
         let mut next = Some(first.clone());
         while let Some(request) = next.take() {
@@ -78,12 +95,11 @@ impl Client<'_> {
                         url: Redacted::new(first.url()),
                         limit: max_pages,
                     }),
-                    warnings,
+                    warnings: Vec::new(),
                 });
             }
             asked += 1;
-            let mut fetched = self.get(&request)?;
-            warnings.append(&mut fetched.warnings);
+            let fetched = self.cached(&request, warnings)?;
             let page: T = fetched.json()?;
             let after = match paging {
                 Paging::NextLink => next_link(&fetched)?,
@@ -96,7 +112,7 @@ impl Client<'_> {
         Ok(Paged {
             pages,
             cut: None,
-            warnings,
+            warnings: Vec::new(),
         })
     }
 }
