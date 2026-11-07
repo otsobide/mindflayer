@@ -748,6 +748,49 @@ fn a_shelf_rule_its_source_changed_is_outdated_until_an_update_and_orphaned_once
     assert_eq!(fixture.standing("review/tone"), Standing::Orphaned);
 }
 
+/// A rule its source dropped is orphaned as one deleted from the library is,
+/// and keeps another rule from being installed into the project until it is
+/// taken out, since every install renders every rule the project has (#45),
+/// and leaving its section out would take it from every agent.
+#[test]
+fn a_shelf_rule_its_source_dropped_refuses_another_rule_s_install_until_it_is_taken_out() {
+    let fixture = fixture(Share::Shared, &Agent::ALL);
+    let source = fixture.gathered(&[
+        ("rules/git/no-force-push.md", NO_FORCE_PUSH),
+        ("rules/review/tone.md", TONE),
+    ]);
+    let origin = mindweaver_core::sources::named(&fixture.ledger, "team-rules")
+        .unwrap()
+        .origin()
+        .to_string();
+    fixture.install("review/tone");
+    fs::remove_file(source.path().join("rules/review/tone.md")).unwrap();
+    common::commit(source.path());
+    mindweaver_core::sources::update(
+        &fixture.workspace,
+        &fixture.ledger,
+        mindweaver_core::sources::Which::Every,
+        &mindweaver_core::gather::Watch::new(),
+    )
+    .unwrap();
+    let before = fixture.text();
+
+    let refused = fixture.try_install("git/no-force-push").unwrap_err();
+
+    assert!(
+        matches!(&refused, InstallError::NoLongerOffered { name, origin: from }
+            if name == "review/tone" && from.as_deref() == Some(origin.as_str())),
+        "{refused:?}"
+    );
+    assert_eq!(fixture.text(), before);
+
+    fixture.uninstall("review/tone");
+    fixture.install("git/no-force-push");
+
+    assert!(!fixture.text().contains("review/tone"));
+    assert_eq!(fixture.standing("git/no-force-push"), Standing::Current);
+}
+
 /// A shelf rule is held to its source's folder on the shelf, as a shelf
 /// skill's copy is to its own: one a hand made a link leading out of it is
 /// refused, nothing of it written into the block.

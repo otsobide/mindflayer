@@ -3542,7 +3542,12 @@ rules do ([installing rules](#installing-rules)): a section of the block in
 a project's `AGENTS.md`, a file in Claude's rules folder where #45 puts
 one, or a copy filed by its route in a project a `mind.toml` marks. Its
 installation points at its source, as a skill's does, so removing the
-source leaves it orphaned and says so. Cursor's `.mdc` rules, whose front
+source, or a gather again that no longer finds it, leaves it orphaned and
+says so; and in a project its settings mark, an orphaned rule refuses
+every install of another rule until it is uninstalled, as one no longer
+offered anywhere does ([installing rules](#installing-rules)). An
+install's render keeping it as the project holds it, as an update's does,
+is left open ([open questions](#open-questions)). Cursor's `.mdc` rules, whose front
 matter is Cursor's own, are not gathered: they are not `.md`, and
 converting what they declare is a question of its own.
 
@@ -11207,7 +11212,9 @@ skills ([which kind a name is](#which-kind-a-name-is)).
   as every render did before #47, lost the edit the next time any rule of
   the project was installed.
 - **A rule no longer offered refuses the render.** A rule whose origin
-  offers it no more (deleted from the library, a load gone) cannot be
+  offers it no more (deleted from the library, a load gone, or dropped by
+  its source or with it, as a `gather update` or a `gather remove` may do
+  now that [rules are gathered](#gathering-rules)) cannot be
   rendered, and leaving its section out would take it from every agent,
   which is what the block refuses a rule it cannot read for. So the render
   is refused (`NoLongerOffered`) until it is put back, or uninstalled,
@@ -14942,7 +14949,8 @@ it once as it closes.
   would close that, at the price of a target that holds two.
 - **A rule whose offer has gone.** Every render an install runs gives each
   rule from the offer it was installed from, so one no longer offered there
-  (deleted from the library, a load gone) refuses every install of another
+  (deleted from the library, a load gone, a source that dropped it, which
+  `gather update` makes routine since #111) refuses every install of another
   rule into the project until it is put back or uninstalled ([installing
   rules](#installing-rules)). An update's render, and an uninstall's, keep
   it instead, as the project holds it, which reads as orphaned

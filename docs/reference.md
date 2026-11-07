@@ -1158,9 +1158,15 @@ project](#installing-into-a-project)), into the block of the project's
 `AGENTS.md`, or Claude's rules folder, or as a copy in a project a
 `mind.toml` marks, and `gather update` and `gather remove` work on its
 source as on one of skills: a rule the source no longer holds is taken off
-the shelf and said `removed`, and an install of it reads `orphaned`. A folder gathered for skills and again for rules is two sources,
-each with a name of its own, gathered again for what it took. Cursor's
-`.mdc` rules are not taken.
+the shelf and said `removed`, and an install of it reads `orphaned`. Unlike
+an orphaned skill, an orphaned rule refuses the install of any other rule
+into its project, unless a `mind.toml` marks it, until it is uninstalled
+(`uninstall --orphaned` takes out every one): each install renders all of
+the project's rules, and leaving that one out would take it from every
+agent. An update and an uninstall of another rule go past it. A
+folder gathered for skills and again for rules is two sources, each with a
+name of its own, gathered again for what it took. Cursor's `.mdc` rules are
+not taken.
 
 ### From a plugin marketplace
 
