@@ -6586,11 +6586,13 @@ run. A screen of its own; `edit` in an editor, which hands the terminal to
 one, and `edit --contents -`, which reads standard input, the terminal's
 too, where a file given in its place runs ([contents given
 whole](#contents-given-whole)); `activate`, which prints code for a shell;
-`gather git` and `gather update`, the network for as long as it
-takes, until #112 brings to the server the progress and the cancel only a
-screen has now; and `show`, which prints an artifact whole, read through any
-link on the way, as a terminal's user may ask of their own disk, where a
-front end without one reads a file at a time, held to its holder
+`gather git`, `gather marketplace`, `gather update` and `gather mcp`
+(its `search` and its `add`, each of which fetches what the MCP Registry
+says), the network for as long as it takes, until #112 brings to the
+server the progress and the cancel only a screen has now; and `show`,
+which prints an artifact whole, read through any link on the way, as a
+terminal's user may ask of their own disk, where a front end without one
+reads a file at a time, held to its holder
 ([what a browser may name](#what-a-browser-may-name)). And `ui`, which
 serves the panel until Ctrl-C, so a front end that ran it as a line would
 wait on it for good. The TUI has a terminal, so of the list it refuses only
