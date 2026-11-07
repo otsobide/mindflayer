@@ -69,7 +69,7 @@ use crate::install::{
 };
 use crate::kind::UnknownKind;
 use crate::ledger::LedgerError;
-use crate::lifecycle::LifecycleError;
+use crate::lifecycle::{ImportError, LifecycleError};
 use crate::lock::LockError;
 use crate::marketplace::{EntryFailure, MarketplaceError};
 use crate::mcp::{Inexpressible, McpError};
@@ -246,6 +246,7 @@ pub const ALL: &[(&str, &[&str])] = &[
     ("kind::UnknownKind", UnknownKind::CODES),
     ("ledger::LedgerError", LedgerError::CODES),
     ("lifecycle::LifecycleError", LifecycleError::CODES),
+    ("lifecycle::import::ImportError", ImportError::CODES),
     ("lock::LockError", LockError::CODES),
     ("marketplace::EntryFailure", EntryFailure::CODES),
     ("marketplace::MarketplaceError", MarketplaceError::CODES),

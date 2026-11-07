@@ -1048,7 +1048,9 @@ These are easy to break from a single file without noticing.
   a skill `artifact::strict_issues` refuses), the project's own, and a name
   the library holds. A front end adds through
   `lifecycle::add`, never `create` or `create_from`, which leave a stale
-  record in place. A rule is one installation too: in a project marked by its
+  record in place, and a server version a registry gave through
+  `lifecycle::import`, which writes what it maps to as `add` writes a
+  server (`create::Start::Definition`). A rule is one installation too: in a project marked by its
   settings, its targets are its section of the block, recorded as `AGENTS.md`,
   and its file for Claude, each with a hash of its own
   (`Target::content_hash`, since the two hold different bytes); in one a
@@ -1272,7 +1274,9 @@ These are easy to break from a single file without noticing.
   plan it makes again until its record is written, `sources::rename`, from
   finding the source until it is renamed, `sources::remove`, from the plan
   it makes again until its rows are gone, a marketplace's plugins' among
-  them, `marketplace::gather`, from registering the marketplace until its
+  them, `lifecycle::import`, from its plan until the definition is written,
+  dropping a stale record once it lets go, as `add` drops one,
+  `marketplace::gather`, from registering the marketplace until its
   catalog is recorded and each plugin of its own repository is placed,
   every other plugin a gather of its own that takes it in turn, and `update::apply`, from the plan it makes again until its last
   installation is written, through `install::install_held` (the body

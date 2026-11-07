@@ -310,6 +310,7 @@ export type CoreCode =
   | "change_failed"
   | "edit_transport_not_mcp"
   | "edit_server_unreadable"
+  | "registry_import_unmapped"
   | "workspace_busy"
   | "lock_open_failed"
   | "marketplace_entry_unreadable"

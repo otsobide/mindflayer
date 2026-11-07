@@ -27,8 +27,8 @@
 //! given and the rest to every problem `validate` reports, and one that
 //! falls short is no definition but a manual step saying why, the next
 //! package or remote tried: a token the registry wrote as a value that is
-//! no secret is refused there, as `add` refuses it. Writing what it makes
-//! into a library is #107's.
+//! no secret is refused there, as `add` refuses it. What it makes is
+//! written into a library by [`crate::lifecycle::import`] (#107).
 
 use std::collections::BTreeMap;
 

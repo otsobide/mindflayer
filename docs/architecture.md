@@ -1311,10 +1311,12 @@ template, through the group clap gives `ServerOptions`, which `--template`,
 A server version read from the registry ([the MCP
 Registry](#the-mcp-registry)) maps to a definition
 (`ServerVersion::import`, in `apps/core/src/registry/import.rs`), which
-#106 returns with what was said on the way and writes nowhere: writing it
-into a library is #107's command. The registry says how a server is
-started, a package of a registry type, or reached, a remote at an address;
-a definition says one transport (D-10). So the first package that maps to
+#106 returns with what was said on the way and writes nowhere: what
+writes it into a library is `lifecycle::import` ([an imported server,
+written into the library](#an-imported-server-written-into-the-library)),
+which #107's command calls. The registry says how a server is started, a
+package of a registry type, or reached, a remote at an address; a
+definition says one transport (D-10). So the first package that maps to
 a definition becomes a program, in the order the registry lists them, and
 failing every one the first remote that maps to one becomes an address: a
 program first, since every agent is given one, where Codex and OpenCode
@@ -1409,6 +1411,29 @@ back through `McpDefinition::parse` as itself and has no issue, and none
 holds any value a fixture gives for a secret, nor a token put together at
 run time ([a secret is an environment
 reference](#a-secret-is-an-environment-reference)).
+
+### An imported server, written into the library
+
+What a version maps to is written into a workspace's library as `add`
+writes a server, through the same plan (`create::plan`, told
+`Start::Definition`, the definition's own text with the name and the
+description given), so it is held to every rule a definition `add` writes
+is held to, its name to what sits beside it in the library among them,
+made with `create_new`, and a record of an install under its name that
+outlived its copy dropped (`lifecycle::import`, in
+`apps/core/src/lifecycle/import.rs`). A version nothing maps to a
+definition is refused whole, each manual step carried in the refusal for a
+front end to say (`registry_import_unmapped`), rather than written in part,
+and a name the library holds is refused as `add` refuses it
+(`add_exists`), what holds it left as it is. `lifecycle::importing` is the
+dry run: the same mapping and plan, and whether the name is taken, with
+nothing written and nothing made, not even the library's folder, so it
+says what the write would.
+
+The import holds the workspace's lock from the plan it makes again until
+the file is written, since the library is the workspace's and its writers
+take turns ([writers at the same time](#writers-at-the-same-time)); `add`
+takes none, the file it makes with `create_new` being its own check.
 
 ### Adding a third kind
 
@@ -11999,7 +12024,11 @@ other, and none of them makes a reader wait for the workspace.
   (`relink::new_id`), as a change to the agents does. An adoption holds it
   from the plan it makes again until its record is written
   (`adopt::apply`), so what the ledger says was adopted is what the library
-  holds. A source's rename holds it from finding the source until it is
+  holds. An import of a server version a registry gave holds it from the
+  plan it makes again until the definition is in the library
+  (`lifecycle::import`), and drops a record of an install under its name
+  only once it has let go, as `add` drops one, since opening the ledger to
+  write may scrub it, which takes the lock. A source's rename holds it from finding the source until it is
   renamed (`sources::rename`), so two renames to one name cannot both find
   it free, and its removal from planning again until its rows are gone
   (`sources::remove`); gathering sources again takes it for each gather in

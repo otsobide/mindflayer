@@ -44,7 +44,7 @@ pub const DESCRIPTION_PLACEHOLDER: &str = "{{description}}";
 
 /// What an artifact is written from beside its name and its description.
 ///
-/// One of three, never two: a template says how a server is started as
+/// One of four, never two: a template says how a server is started as
 /// surely as a command line does, so a front end's grammar refuses both
 /// before one of these is made.
 #[derive(Debug, Clone, Copy)]
@@ -57,6 +57,12 @@ pub enum Start<'a> {
     /// reached: what [`create_server`] writes, and refused for any other
     /// kind.
     Server(&'a Given),
+    /// A definition core made of an MCP server, as a registry's server
+    /// version maps to one ([`crate::registry::ServerVersion::import`]),
+    /// written as its file holds it with the name and the description
+    /// given: what [`crate::lifecycle::import`] writes, and refused for
+    /// any other kind, as a server's options are.
+    Definition(&'a McpDefinition),
 }
 
 /// Create an artifact of `kind` called `name` in `project`, and load it back.
@@ -183,7 +189,7 @@ pub(crate) fn plan(
     // kind no agent starts, or a template of another kind, is the line's
     // mistake whatever the name.
     match start {
-        Start::Server(_) if kind != Kind::Mcp => {
+        Start::Server(_) | Start::Definition(_) if kind != Kind::Mcp => {
             return Err(CreateError::TransportNotMcp { kind });
         }
         Start::Template(template) if template.kind != kind => {
@@ -193,7 +199,7 @@ pub(crate) fn plan(
                 wanted: kind,
             }));
         }
-        Start::Scratch | Start::Template(_) | Start::Server(_) => {}
+        Start::Scratch | Start::Template(_) | Start::Server(_) | Start::Definition(_) => {}
     }
     // Matched on the kind, as `rename` holds a name: a server's to the keys
     // an agent takes and to what sits beside it, read off the folder it is
@@ -224,7 +230,7 @@ pub(crate) fn plan(
     let directory = project.required_directory(kind)?;
     let template = match start {
         Start::Template(template) => Some(template),
-        Start::Scratch | Start::Server(_) => None,
+        Start::Scratch | Start::Server(_) | Start::Definition(_) => None,
     };
     // Matched on the kind rather than its layout, so a third kind has to say
     // how it is scaffolded before it compiles.
@@ -361,6 +367,15 @@ fn plan_mcp(
             writable(given)?;
             given.text(name, description)
         }
+        // Its own text, the name and the description `add` was given in
+        // place of its own, so what is written is what the plan was told,
+        // and held below to what every definition `add` writes is.
+        Start::Definition(definition) => McpDefinition {
+            name: ArtifactName::from(name),
+            description: description.to_owned(),
+            ..definition.clone()
+        }
+        .text(),
     };
     let file = place_in(directory, name);
     let definition = McpDefinition::parse(&text).map_err(|error| CreateError::Manifest {

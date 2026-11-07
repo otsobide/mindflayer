@@ -23,7 +23,8 @@
 //!
 //! A server version read is mapped to a definition by
 //! [`ServerVersion::import`] (`registry/import.rs`), which writes nothing
-//! either: writing what it maps to into a library is a command's (#107).
+//! either: what it maps to is written into a library by
+//! [`crate::lifecycle::import`] (#107), as `add` writes a server.
 
 use std::fmt;
 use std::sync::Arc;

@@ -20,11 +20,14 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use mindweaver_core::http::{Answer, Cache, Client, Headers, HttpError, Request};
+use mindweaver_core::lifecycle::{self, ImportError};
 use mindweaver_core::mcp::{Input, InputKind, Transport, Upstream};
 use mindweaver_core::mother::McpMother;
-use mindweaver_core::registry::{Imported, Registry, ServerVersion, Status, Warning, OFFICIAL};
+use mindweaver_core::registry::{
+    Imported, Manual, Registry, ServerVersion, Status, Warning, OFFICIAL,
+};
 use mindweaver_core::value::{InputName, Redacted, VariableName};
-use mindweaver_core::{Clock, Http, McpDefinition};
+use mindweaver_core::{Catalog, Clock, CreateError, Http, Kind, McpDefinition, WeaverWorkspace};
 use tempfile::TempDir;
 
 // ---------------------------------------------------------------------------
@@ -1072,4 +1075,125 @@ fn a_token_the_registry_gives_is_never_written_nor_said_whole() {
             assert!(!json.contains(&token), "{json}");
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Imported into a library
+// ---------------------------------------------------------------------------
+
+/// A workspace of its own, made, with nothing in its library.
+fn library() -> (TempDir, WeaverWorkspace) {
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
+    (dir, workspace)
+}
+
+/// Each MCP server the library of `workspace` holds, by its name, and
+/// whatever `validate` says of it.
+fn served(workspace: &WeaverWorkspace) -> Vec<(String, Vec<String>)> {
+    let own = workspace.own();
+    Catalog::discover_kinds(std::slice::from_ref(&own), &[Kind::Mcp])
+        .artifacts()
+        .iter()
+        .map(|artifact| {
+            let issues = artifact
+                .validate()
+                .iter()
+                .map(ToString::to_string)
+                .collect();
+            (artifact.name().to_string(), issues)
+        })
+        .collect()
+}
+
+/// A dry run says where the definition would go and makes nothing, not
+/// even the folder it would go in; the import then writes it there as
+/// `add` writes one, read back as what was mapped and with nothing
+/// `validate` would say of it.
+#[test]
+fn a_server_version_is_written_into_the_library_only_by_the_import() {
+    let (_dir, workspace) = library();
+    let weather = named(&listed_2025_09_29(), "io.github.acme/weather");
+    let folder = workspace.own().directory_for(Kind::Mcp).unwrap();
+
+    let importing = lifecycle::importing(&workspace, &weather, None).unwrap();
+
+    assert_eq!(importing.file, folder.join("weather.toml"));
+    assert_eq!(importing.definition, held(&weather.import(None)));
+    assert_eq!(importing.warnings, weather.import(None).warnings);
+    assert!(!folder.exists());
+
+    let (imported, added) = lifecycle::import(&workspace, &weather, None).unwrap();
+
+    assert_eq!(added.artifact.path(), importing.file);
+    assert_eq!(imported.file, importing.file);
+    let text = fs::read_to_string(&importing.file).unwrap();
+    assert_eq!(McpDefinition::parse(&text).unwrap(), importing.definition);
+    assert_eq!(served(&workspace), [(String::from("weather"), Vec::new())]);
+    for secret in SECRET_VALUES {
+        assert!(!text.contains(secret), "{text}");
+    }
+}
+
+#[test]
+fn a_name_given_is_the_one_the_definition_is_written_under() {
+    let (_dir, workspace) = library();
+    let weather = named(&listed_2025_09_29(), "io.github.acme/weather");
+
+    let (importing, _) = lifecycle::import(&workspace, &weather, Some("forecasts")).unwrap();
+
+    assert_eq!(importing.definition.name, "forecasts");
+    assert!(importing.file.ends_with("forecasts.toml"));
+    assert_eq!(
+        served(&workspace),
+        [(String::from("forecasts"), Vec::new())]
+    );
+}
+
+/// What the library holds under the name is left as it is, by the dry run
+/// and by the import alike, refused as `add` refuses it.
+#[test]
+fn a_name_the_library_holds_is_refused_and_what_holds_it_left_alone() {
+    let (_dir, workspace) = library();
+    let weather = named(&listed_2025_09_29(), "io.github.acme/weather");
+    let (first, _) = lifecycle::import(&workspace, &weather, None).unwrap();
+    fs::write(&first.file, "# somebody's own\n").unwrap();
+
+    let planned = lifecycle::importing(&workspace, &weather, None).unwrap_err();
+    let written = lifecycle::import(&workspace, &weather, None).unwrap_err();
+
+    for error in [planned, written] {
+        assert_eq!(error.code(), "add_exists");
+        assert!(
+            matches!(error, ImportError::Create(CreateError::Exists { ref path }) if *path == first.file),
+            "{error:?}"
+        );
+    }
+    assert_eq!(
+        fs::read_to_string(&first.file).unwrap(),
+        "# somebody's own\n"
+    );
+}
+
+/// A bundle, which nothing here starts, is refused with the step to take
+/// by hand, and nothing is written.
+#[test]
+fn a_version_nothing_maps_to_a_definition_is_refused_with_its_manual_steps() {
+    let (_dir, workspace) = library();
+    let bundle = named(&listed_2025_12_11(), "io.github.acme/notes-bundle");
+
+    let error = lifecycle::import(&workspace, &bundle, None).unwrap_err();
+
+    assert_eq!(error.code(), "registry_import_unmapped");
+    let ImportError::Unmapped { manual, .. } = &error else {
+        panic!("{error:?}");
+    };
+    let codes: Vec<&str> = manual.iter().map(Manual::code).collect();
+    assert_eq!(codes, ["registry_package_mcpb"]);
+    assert_eq!(
+        error.to_string(),
+        "`io.github.acme/notes-bundle` 2.0.0: nothing it names maps to a definition \
+         Mindweaver writes, so nothing was written; it is set up by hand instead"
+    );
+    assert_eq!(served(&workspace), []);
 }

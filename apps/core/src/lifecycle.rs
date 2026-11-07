@@ -52,6 +52,10 @@ use crate::workspace::{
     replace_bytes_unresolved, replace_file, MindProject, WeaverWorkspace, WorkspaceError,
 };
 
+mod import;
+
+pub use import::{import, importing, ImportError, Importing};
+
 /// An artifact found by what somebody typed.
 #[derive(Debug, Clone)]
 pub struct Target {
