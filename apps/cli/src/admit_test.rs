@@ -480,6 +480,94 @@ fn what_names_nothing_on_the_disk_is_left_as_it_was_sent() {
     assert_eq!(admitted(&workspace, &task).unwrap(), task);
 }
 
+/// A gather, a marketplace's listing and its plugins gathered each name a
+/// source: another machine's goes to the line as it was sent, and so does
+/// a folder on this one the path policy takes, verbatim, so the preview
+/// shows what is cloned.
+#[test]
+fn a_source_a_gather_names_goes_to_its_line_as_sent_once_the_policy_takes_it() {
+    let (dir, workspace) = fixture();
+    let local = text(&dir.path().join("src").join("skills"));
+    for url in [String::from("https://github.com/acme/skills"), local] {
+        let tasks = [
+            Task::Gather {
+                url: url.clone(),
+                folder: String::from("skills"),
+                reference: Some(String::from("main")),
+            },
+            Task::ListPlugins {
+                url: url.clone(),
+                folder: String::new(),
+                reference: None,
+            },
+            Task::GatherPlugins {
+                url: url.clone(),
+                folder: String::new(),
+                reference: None,
+                plugins: vec![String::from("pdf")],
+            },
+        ];
+        for task in tasks {
+            assert_eq!(admitted(&workspace, &task).unwrap(), task, "{url}");
+        }
+    }
+}
+
+/// What the path policy refuses of a folder to link, it refuses of a source
+/// on this machine, a `file://` URL among it; and a credential in the
+/// address, the folder or the branch is refused as the gather refuses one,
+/// before a line holding it is built.
+#[test]
+fn a_source_on_this_machine_or_with_a_credential_is_refused_as_the_policy_says() {
+    let (_dir, workspace) = fixture();
+    let inside = text(&workspace.cache_dir().join("acme"));
+    let gather = |url: &str, folder: &str, reference: Option<&str>| Task::Gather {
+        url: url.to_owned(),
+        folder: folder.to_owned(),
+        reference: reference.map(str::to_owned),
+    };
+    let cases = [
+        (gather("file:///etc", "", None), "path_url"),
+        (gather("./skills", "", None), "path_relative"),
+        (gather("--upload-pack=x", "", None), "path_relative"),
+        (gather(&inside, "", None), "path_in_mindflayer"),
+        (
+            Task::ListPlugins {
+                url: String::from("file:///srv/market"),
+                folder: String::new(),
+                reference: None,
+            },
+            "path_url",
+        ),
+        (
+            Task::GatherPlugins {
+                url: String::from("../market"),
+                folder: String::new(),
+                reference: None,
+                plugins: vec![String::from("pdf")],
+            },
+            "path_relative",
+        ),
+        (
+            gather("https://u:t0ken@example.com/acme/skills", "", None),
+            "credentials_in_url",
+        ),
+        (
+            gather(
+                "https://github.com/acme/skills",
+                "",
+                Some("https://u:t0ken@example.com/x"),
+            ),
+            "credentials_in_url",
+        ),
+    ];
+    for (task, refused) in cases {
+        let error = admitted(&workspace, &task).unwrap_err();
+        assert_eq!(error.code(), refused, "{task:?}");
+        assert!(!error.to_string().contains("t0ken"), "{error}");
+    }
+}
+
 #[test]
 fn nothing_is_admitted_against_a_workspace_that_links_nothing() {
     let dir = TempDir::new().unwrap();

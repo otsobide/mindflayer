@@ -66,6 +66,79 @@ fn a_url_is_refused_as_one() {
     }
 }
 
+/// Another machine's repository is the gather's to read, whatever it is
+/// spelled as: a URL of its scheme, an scp-like one, GitHub's
+/// `owner/repo` with or without a branch, or a forge's tree URL.
+#[test]
+fn a_source_on_another_machine_is_taken_as_typed() {
+    for typed in [
+        "https://github.com/acme/skills",
+        "http://127.0.0.1:8080/skills.git",
+        "ssh://git@example.com/acme/skills",
+        "git@github.com:acme/skills.git",
+        "acme/skills",
+        "acme/skills@v1",
+        "https://github.com/acme/skills/tree/main/pdf",
+        "https://github.com/acme/skills/tree/%FF/pdf",
+    ] {
+        assert!(gathered(typed, "", None).is_ok(), "{typed:?}");
+    }
+}
+
+/// One on this machine names a folder, held as a folder to link is: by an
+/// absolute, normalized path outside every `.mindweaver`, so a `file://`
+/// URL is refused as a URL, and a relative one, which reads as wherever
+/// the line runs, as relative.
+#[test]
+fn a_source_on_this_machine_is_held_to_the_path_policy() {
+    let (dir, workspace) = fixture();
+    let source = spelled_under(dir.path(), &["src", "skills"]);
+    assert!(gathered(&source, "", None).is_ok(), "{source}");
+    assert!(gathered(&source, "skills/pdf", Some("main")).is_ok());
+
+    let cases = [
+        (format!("file://{source}"), "path_url"),
+        (String::from("file:///etc"), "path_url"),
+        (String::from("./skills"), "path_relative"),
+        (String::from("skills"), "path_relative"),
+        (String::from("-rf"), "path_relative"),
+        (String::from("../src/skills"), "path_relative"),
+        (
+            spelled_under(dir.path(), &["src", ".", "skills"]),
+            "path_unnormalized",
+        ),
+        (
+            spelled_under(&workspace.cache_dir(), &["acme"]),
+            "path_in_mindflayer",
+        ),
+    ];
+    for (typed, refused) in cases {
+        assert_eq!(code(gathered(&typed, "", None)), refused, "{typed:?}");
+    }
+}
+
+/// A credential anywhere a gather would refuse one, the address, the
+/// folder or the branch, is refused with the gather's own code, and said
+/// without it.
+#[test]
+fn a_source_named_with_a_credential_is_refused_as_a_gather_refuses_one() {
+    let (dir, _workspace) = fixture();
+    let source = spelled_under(dir.path(), &["src", "skills"]);
+    let cases = [
+        ("https://u:t0ken@example.com/acme/skills", "", None),
+        ("https://t0ken@github.com/acme/skills", "", None),
+        (source.as_str(), "https://u:t0ken@example.com/x", None),
+        (source.as_str(), "", Some("https://u:t0ken@example.com/x")),
+    ];
+    for (typed, folder, reference) in cases {
+        let refused = gathered(typed, folder, reference).unwrap_err();
+        assert_eq!(refused.code(), "credentials_in_url", "{typed:?}");
+        assert!(!refused.to_string().contains("t0ken"), "{refused}");
+    }
+    assert_eq!(PolicyError::ECHOED, ["credentials_in_url"]);
+    assert!(crate::gather::GatherError::CODES.contains(&"credentials_in_url"));
+}
+
 #[test]
 fn a_path_not_spelled_as_its_folder_is_refused() {
     let (dir, _workspace) = fixture();

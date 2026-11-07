@@ -1360,6 +1360,7 @@ impl Absence for PolicyError {
             | PolicyError::InWeaverDir { .. }
             | PolicyError::Unlisted { .. }
             | PolicyError::YesUnasked { .. }
+            | PolicyError::Credentials { .. }
             | PolicyError::Server(_) => false,
         }
     }

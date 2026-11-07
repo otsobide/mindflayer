@@ -20,6 +20,12 @@
 //!   marker, its ledger, its library and the clones it gathered, none of
 //!   which is a project to make or link. A path that leads into one through
 //!   a link is refused as one inside it.
+//! - **A source to gather is named by its address, and one on this machine
+//!   by a path that reads the same from anywhere** ([`gathered`]): a
+//!   repository another machine serves by its URL, or GitHub's
+//!   `owner/repo`, as `gather git` takes it; a folder on this one held to
+//!   [`path`], so a `file://` URL is refused as a URL, as one given to link
+//!   is; and none carrying a credential, which the line would show.
 //! - **A workspace to switch to is named by its path as a list of core's
 //!   spells it** ([`switched`]): one of the workspaces this machine knows,
 //!   or the one the front end was launched on ([`crate::known::switchable`]),
@@ -45,6 +51,7 @@ use crate::mcp::Given;
 use crate::names::Names;
 use crate::paths;
 use crate::resolve::Reason;
+use crate::url;
 use crate::value::Redacted;
 use crate::workspace::{Loaded, Member, WeaverWorkspace, WorkspaceError};
 
@@ -82,6 +89,13 @@ pub enum PolicyError {
         name: String,
         from: Option<Redacted>,
     },
+    /// A source to gather named with a credential in its address, its
+    /// branch or its folder, which `typed` holds without it: the condition
+    /// a gather refuses with (`credentials_in_url`), said before any line
+    /// is built, since the line would carry it to the preview, the panel's
+    /// stream and the transcript before the gather refused it.
+    #[error("{typed}: a password, a token or, over http(s), a user name in a source's address is refused, because the line that gathers it is shown and kept: gather it without one, and configure a git credential helper that has it")]
+    Credentials { typed: Redacted },
     /// A server's options a line cannot say as given, a name beside a
     /// value that holds `=`, refused by `add`'s own check, and by its code
     /// ([`sayable`]).
@@ -104,6 +118,8 @@ codes!(PolicyError {
 } carried {
     Self::Server(error) => error,
     Self::Workspace(error) => error,
+} echoed {
+    Self::Credentials { .. } => "credentials_in_url",
 });
 
 /// A yes a request sends with an install of `kind` `name` from `from`, as
@@ -138,6 +154,49 @@ pub fn confirmed(kind: Kind, name: &str, from: Option<&str>) -> Result<(), Polic
 /// check gives the draft, so the two say one thing.
 pub fn sayable(given: &Given) -> Result<(), PolicyError> {
     create::sayable(given).map_err(PolicyError::Server)
+}
+
+/// A source a request names for a gather to fetch: `typed`, its address as
+/// `gather git` and `gather marketplace` take it, with the folder and the
+/// branch named beside it.
+///
+/// One another machine serves, by a URL of its scheme, an scp-like
+/// `host:path` or GitHub's `owner/repo` ([`url::is_remote`] of what
+/// [`url::fetched`] makes of it), is taken as typed: the gather reads it,
+/// and refuses what it would refuse from a terminal. One on this machine,
+/// a path or a `file://` URL, names a folder, and is held to [`path`] as a
+/// folder to link is: absolute, spelled normalized, so the preview shows
+/// the folder the line clones, and outside every `.mindweaver`, whose
+/// clones and library are no source to gather from. So a `file://` URL is
+/// refused as a URL (`path_url`), as one sent to link is, rather than read
+/// as the path after it: one spelling of a folder, which the preview and
+/// the transcript show as it is cloned, and which a relative one, read
+/// from wherever the line runs, would not be. Gathering only from
+/// another machine was the other way, and is rejected: a repository on
+/// this one is what gathering from a terminal takes as readily, and the
+/// panel offers nothing a command does not.
+///
+/// A credential in any of the three is refused first (`credentials_in_url`,
+/// [`PolicyError::Credentials`]), with the gather's own code, before any
+/// line is built: the gather would refuse it too, but only once the line
+/// holding it was shown, told and kept.
+pub fn gathered(typed: &str, folder: &str, reference: Option<&str>) -> Result<(), PolicyError> {
+    if let Some(carrying) = [Some(typed), Some(folder), reference]
+        .into_iter()
+        .flatten()
+        .find(|text| url::carries_credentials(text))
+    {
+        return Err(PolicyError::Credentials {
+            typed: Redacted::new(carrying),
+        });
+    }
+    // A forge's tree URL whose branch or folder reads as no name is
+    // another machine's all the same, and the gather says why it is none.
+    let address = url::address(typed).map_or_else(|_| typed.to_owned(), |address| address.url);
+    if url::is_remote(&url::fetched(&address)) {
+        return Ok(());
+    }
+    path(&address).map(drop)
 }
 
 /// `given`, as a path a request may name: absolute, spelled exactly as

@@ -27,6 +27,10 @@
 //!   outside every `.mindweaver`, and goes to the command verbatim, so the
 //!   preview shows the folder it acts on; one marked to unlink is one an
 //!   entry points at.
+//! - **A source a gather or a marketplace names** is another machine's by
+//!   its address, or a folder on this one held as a folder to link is, a
+//!   `file://` URL refused as a URL, and none carries a credential
+//!   (`policy::gathered`); it goes to the command verbatim.
 //!
 //! The walk over the variants is here, beside `Task`; what each value may be
 //! is core's, so a second front end taking tasks from outside asks the same
@@ -68,10 +72,26 @@ impl Admission<'_> {
             | Task::Workspaces
             | Task::OpenInstall
             | Task::Refresh => {}
-            // The network, which no front end without a terminal runs
-            // (`Refusal::Unwatched`); what a URL may be is the gather's to
-            // say when #112 brings one to the server.
-            Task::Gather { .. } | Task::ListPlugins { .. } | Task::GatherPlugins { .. } => {}
+            // Another machine's repository by its address, or a folder on
+            // this one by a path held to the policy, never a credential:
+            // the gather refuses one too, but only once the line holding
+            // it was previewed, told on the stream and kept.
+            Task::Gather {
+                url,
+                folder,
+                reference,
+            }
+            | Task::ListPlugins {
+                url,
+                folder,
+                reference,
+            }
+            | Task::GatherPlugins {
+                url,
+                folder,
+                reference,
+                ..
+            } => policy::gathered(url, folder, reference.as_deref())?,
             // The MCP Registry, the network as a gather is, and refused as
             // one: a server by the name the registry gives it, and a
             // registry by its URL, name nothing on the disk.
@@ -81,9 +101,9 @@ impl Admission<'_> {
             // on the disk.
             Task::SearchSkills { .. } => {}
             // A source by its name, which names nothing on the disk: core
-            // finds it among those the ledger keeps, and deletes only the
-            // folders it records as the source's own. Gathering one again
-            // is the network, refused as a gather is.
+            // finds it among those the ledger keeps, gathers it again from
+            // where the ledger says it came from, and deletes only the
+            // folders it records as the source's own.
             Task::UpdateSource { .. } | Task::RemoveSource { .. } => {}
             Task::Link { path }
             | Task::InitAndLink { path }
