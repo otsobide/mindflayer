@@ -36,6 +36,7 @@ pub mod doctor;
 pub mod draft;
 pub mod everywhere;
 pub mod exclude;
+pub mod finder;
 pub mod frontmatter;
 pub mod gather;
 pub mod hash;

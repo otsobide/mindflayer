@@ -61,6 +61,7 @@ use crate::create::CreateError;
 use crate::doctor::{DoctorFailure, Symptom};
 use crate::everywhere::EverywhereError;
 use crate::exclude::{self, ExcludeError};
+use crate::finder::{SearchError, UnknownFinder};
 use crate::frontmatter::FrontMatterError;
 use crate::gather::{self, GatherError, Leftover, ScrubFailure};
 use crate::http::HttpError;
@@ -227,6 +228,8 @@ pub const ALL: &[(&str, &[&str])] = &[
     ("everywhere::EverywhereError", EverywhereError::CODES),
     ("exclude::ExcludeError", ExcludeError::CODES),
     ("exclude::Malformed", exclude::Malformed::CODES),
+    ("finder::SearchError", SearchError::CODES),
+    ("finder::UnknownFinder", UnknownFinder::CODES),
     ("frontmatter::FrontMatterError", FrontMatterError::CODES),
     ("gather::Failure", gather::Failure::CODES),
     ("gather::GatherError", GatherError::CODES),
