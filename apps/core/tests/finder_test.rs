@@ -248,6 +248,36 @@ fn each_finder_lists_what_it_found_once_by_its_repository_and_folder() {
     assert!(!printed.contains("hunter2"), "{printed}");
 }
 
+/// skills.sh names a skill's repository and not its folder, and lists
+/// several skills of one repository: each is listed, told apart by its
+/// name, and only one it names twice, however it spells the repository,
+/// is listed once.
+#[test]
+fn the_skills_of_one_repository_a_finder_names_no_folder_for_are_each_listed() {
+    let answer = r#"{"skills": [
+        {"name": "pdf", "source": "acme/skills", "installs": 100},
+        {"name": "docx", "source": "acme/skills", "installs": 50},
+        {"name": "xlsx", "source": "https://github.com/acme/skills", "installs": 20},
+        {"name": "pdf", "source": "Acme/Skills", "installs": 3}
+    ]}"#;
+    let fake = Fake::default().answering(SKILLS_SH, answer);
+    let client = Client::new(&fake);
+
+    let found = Search::new(&client)
+        .run(QUERY, &[Finder::SkillsSh])
+        .unwrap();
+
+    assert_eq!(
+        rows(&found),
+        [
+            "pdf https://github.com/acme/skills . Some(100) None skills.sh",
+            "docx https://github.com/acme/skills . Some(50) None skills.sh",
+            "xlsx https://github.com/acme/skills . Some(20) None skills.sh",
+        ]
+    );
+    assert!(found.failures.is_empty(), "{:?}", found.failures);
+}
+
 /// The branch a tree URL names is kept with what a finder found there, for
 /// the gather to take it.
 #[test]

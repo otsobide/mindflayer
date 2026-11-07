@@ -4726,8 +4726,11 @@ a service elsewhere naming one would have a gather put on the shelf whatever
 a folder here holds, as a marketplace's catalog may not. Every string a
 front end is handed is made printable. A result two finders name is listed
 once (`Found::add`), by its repository as `url::canonical` spells every
-spelling of it and its folder, with each finder that found it and the
-counts each gave; the results come in `Finder::ALL`'s order, GitHub's
+spelling of it and its folder, which holds one skill, with each finder that
+found it and the counts each gave. One with no folder, as skills.sh gives
+every result, is told by its name too: by its repository alone, every skill
+such a finder lists of one repository would be folded into the first,
+unsaid. The results come in `Finder::ALL`'s order, GitHub's
 first, each finder's in the order it ranked them, which is what `--take N`
 counts by (`Found::take`). What was found serializes as `finder::Found`,
 its results each a `finder::Hit`, by name ([the read types

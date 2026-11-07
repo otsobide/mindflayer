@@ -1270,10 +1270,12 @@ format version: an older Mindweaver reads past it, and keeps it, with any
 comment above it, whenever a command edits the marker.
 
 A result two finders name is listed once, by its repository, however each
-spells it, and its folder; each finder's results come in the order it ranked
-them, GitHub's first. A finder that cannot be reached, answers with what is
-not JSON, or is rate limited is a warning with its code beside the rest, a
-rate limit saying when it resets if the answer says. A result whose
+spells it, and its folder, or its name where a finder gives no folder, as
+skills.sh gives none, so each skill of one repository is listed; each
+finder's results come in the order it ranked them, GitHub's first. A finder
+that cannot be reached, answers with what is not JSON, or is rate limited is
+a warning with its code beside the rest, a rate limit saying when it resets
+if the answer says. A result whose
 repository is not one `gather git` would take is dropped with a warning: no
 address, one carrying a credential, which is never repeated, a folder that
 climbs out of the repository, or a folder on this machine, which only a

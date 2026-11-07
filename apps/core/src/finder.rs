@@ -648,14 +648,19 @@ impl Found {
 
     /// `hit`, found by `finder`, listed once however many finders name it:
     /// by its repository, as [`url::canonical`] spells every spelling of
-    /// one, and its folder in it. A second finder's is said beside the
-    /// first's, with a count the first did not give.
+    /// one, and its folder in it, which holds one skill. A second finder's
+    /// is said beside the first's, with a count the first did not give.
+    ///
+    /// One with no folder, which a finder that does not say where a skill
+    /// is gives (skills.sh), is told by its name too: a repository holds
+    /// many skills, and by its repository alone every skill such a finder
+    /// lists of one would be folded into the first, unsaid.
     fn add(&mut self, finder: Finder, hit: Hit) {
-        match self
-            .hits
-            .iter_mut()
-            .find(|each| each.repository == hit.repository && each.path == hit.path)
-        {
+        match self.hits.iter_mut().find(|each| {
+            each.repository == hit.repository
+                && each.path == hit.path
+                && (hit.path.is_some() || each.name == hit.name)
+        }) {
             Some(each) => {
                 if !each.finders.contains(&finder) {
                     each.finders.push(finder);
