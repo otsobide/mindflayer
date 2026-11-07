@@ -172,6 +172,9 @@ fn provenance(upstream: &Upstream, text: &mut String) {
             }
         }
     }
+    if let Some(status) = &upstream.status {
+        let _ = writeln!(text, "status = {}", quoted(status));
+    }
 }
 
 #[cfg(test)]

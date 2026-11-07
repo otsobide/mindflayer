@@ -63,19 +63,20 @@ fn every_value_is_quoted_so_that_it_reads_back_as_it_was() {
 }
 
 #[test]
-fn a_time_it_was_fetched_is_written_as_the_toml_date_and_time_it_reads_as() {
+fn a_time_it_was_fetched_is_written_as_the_toml_date_and_time_it_reads_as_its_status_after_it() {
     let mut definition = parsed(&McpMother::http(&random::kebab()));
     definition.provenance = Some(Upstream {
         registry: Some(Redacted::new("https://registry.example")),
         upstream_name: Some(String::from("io.github.acme/weather")),
         version: Some(String::from("1.0.2")),
         fetched_at: Some(String::from("2026-11-07T09:30:00Z")),
+        status: Some(String::from("deprecated")),
     });
 
     let written = definition.text();
 
     assert!(
-        written.contains("\nfetched_at = 2026-11-07T09:30:00Z\n"),
+        written.contains("\nfetched_at = 2026-11-07T09:30:00Z\nstatus = \"deprecated\"\n"),
         "{written}"
     );
     assert_eq!(parsed(&written), definition);

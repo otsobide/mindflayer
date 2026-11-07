@@ -860,7 +860,7 @@ this build does not know:
 | `description` | required | what it is for, its first line what a listing shows |
 | `transport` | required | `type = "stdio"` with `command`, `args`, `env` and `cwd`; or `"http"` or `"sse"` with `url` and `headers` |
 | `inputs` | optional | each a `name`, a `kind` (`env`, `header`, `arg` or `url_var`), and optionally a `description`, `required`, `secret` and the `env_var` it is read from |
-| `provenance` | optional | `registry`, `upstream_name`, `version` and `fetched_at`, as a registry said them |
+| `provenance` | optional | `registry`, `upstream_name`, `version`, `fetched_at` and `status` (`active`, `deprecated` or `deleted`), as a registry said them |
 | `extras` | optional | a table for each agent, by its name, passed through for its renderer |
 
 Neutral rather than one agent's shape, and a subset of the MCP registry's
@@ -2253,7 +2253,10 @@ server's definition declares](#what-an-mcp-servers-definition-declares)).
 Adding the kind moved no marker's version: a new `weaver.toml` and a new
 `settings.toml` name no folder for it, so they read to an older build as
 they did, and one that names `mcp` by hand names a key an older build reads
-past.
+past. Nor did #106's `status` in a definition's `provenance`, what a
+registry said of the server: a build from before it reads past it, as past
+any key format 1 does not define, misreading nothing else, and a definition
+written before it reads as it did, with none.
 
 Four lines are drawn so far, all project-marker versions, since a
 workspace's number says nothing about how a project keeps its artifacts:

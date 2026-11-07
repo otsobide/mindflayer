@@ -299,6 +299,15 @@ pub struct Upstream {
     pub version: Option<String>,
     /// When it was fetched, as written: a TOML date and time, or a string.
     pub fetched_at: Option<String>,
+    /// What the registry said of the server when it was fetched, as it said
+    /// it: `active`, or `deprecated` or `deleted`, which a definition is
+    /// still read with, and a library keeps, so what it says is carried
+    /// with it rather than lost on the way in.
+    ///
+    /// A key format 1 did not name at first, and needs no new format: a
+    /// build from before it reads past it, as it reads past every key the
+    /// format does not define, and misreads nothing else for it.
+    pub status: Option<String>,
 }
 
 impl McpDefinition {
@@ -723,6 +732,8 @@ struct RawUpstream {
     version: Option<String>,
     #[serde(default, deserialize_with = "moment")]
     fetched_at: Option<String>,
+    #[serde(default)]
+    status: Option<String>,
 }
 
 /// `fetched_at`, as a string or as the TOML date and time a registry's
@@ -893,6 +904,7 @@ impl From<Raw> for McpDefinition {
                 upstream_name: upstream.upstream_name,
                 version: upstream.version,
                 fetched_at: upstream.fetched_at,
+                status: upstream.status,
             }),
             extras: raw.extras,
         }

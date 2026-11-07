@@ -81,9 +81,42 @@ fn an_address_over_http_is_read_with_its_headers_inputs_and_where_it_came_from()
             upstream_name: Some(String::from("com.example/server")),
             version: Some(String::from("1.2.0")),
             fetched_at: Some(String::from("2026-11-04T09:30:00Z")),
+            status: None,
         })
     );
     assert_eq!(definition.issues(), []);
+}
+
+/// What a registry said of the server, kept as it said it: a word this
+/// build knows or not, it is the registry's.
+#[test]
+fn a_registrys_status_is_read_with_where_it_came_from() {
+    for status in ["active", "deprecated", "deleted", "withdrawn"] {
+        let text = McpMother::http(&random::kebab()).replace(
+            "fetched_at = 2026-11-04T09:30:00Z\n",
+            &format!("fetched_at = 2026-11-04T09:30:00Z\nstatus = \"{status}\"\n"),
+        );
+
+        let definition = parsed(&text);
+
+        let upstream = definition.provenance.as_ref().unwrap();
+        assert_eq!(upstream.status.as_deref(), Some(status));
+        assert_eq!(upstream.version.as_deref(), Some("1.2.0"));
+        assert_eq!(definition.issues(), []);
+    }
+}
+
+/// `status` came after the format's first files, and moved no version:
+/// what format 1 wrote before it reads as it did, with no status.
+#[test]
+fn provenance_written_before_its_status_was_reads_as_it_did() {
+    let text = McpMother::http(&random::kebab());
+    assert!(!text.contains("\nstatus ="));
+
+    let definition = parsed(&text);
+
+    assert_eq!(definition.provenance.unwrap().status, None);
+    assert_eq!(MCP_FORMAT, 1);
 }
 
 #[test]
