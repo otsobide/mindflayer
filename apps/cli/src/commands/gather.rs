@@ -185,6 +185,21 @@ pub(crate) fn run_gather(
             Ok(json_or_text(found.filter(|_| *json), text))
         }
         GatherCommand::Mcp(command) => super::registry::run_mcp(command, directory, lookup),
+        GatherCommand::Search {
+            query,
+            finders,
+            token_env,
+            at,
+            json,
+        } => {
+            let asked = super::search::Asked {
+                query,
+                finders,
+                token_env: token_env.as_deref(),
+                at,
+            };
+            super::search::run_search(&asked, *json, directory, lookup)
+        }
     }
 }
 

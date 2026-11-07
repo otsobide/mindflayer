@@ -15,6 +15,7 @@ pub(crate) mod migrate;
 pub(crate) mod project;
 pub(crate) mod read;
 pub(crate) mod registry;
+pub(crate) mod search;
 pub(crate) mod settings;
 pub(crate) mod status;
 #[cfg(feature = "ui")]

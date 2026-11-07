@@ -95,6 +95,12 @@ pub enum CliError {
     #[error(transparent)]
     Import(#[from] mindweaver_core::lifecycle::ImportError),
     #[error(transparent)]
+    Search(#[from] mindweaver_core::finder::SearchError),
+    /// The variable `--token-env` names is not set, or is empty: said, and
+    /// the finder that needs a token is not asked. Never what it holds.
+    #[error("${variable}, which --token-env names, is not set, so no finder that needs a token was asked")]
+    TokenUnset { variable: String },
+    #[error(transparent)]
     Ledger(#[from] LedgerError),
     #[error(transparent)]
     Install(#[from] mindweaver_core::install::InstallError),
@@ -297,6 +303,7 @@ codes!(CliError {
     Self::TokenFileFolderMissing(_) => "token_file_folder_missing",
     Self::TokenFileUnwritable { .. } => "token_file_unwritable",
     Self::TokenFileUnremoved { .. } => "token_file_unremoved",
+    Self::TokenUnset { .. } => "token_env_unset",
 } carried {
     Self::Workspace(error) => error,
     Self::Chosen { source, .. } => source,
@@ -306,6 +313,7 @@ codes!(CliError {
     Self::Marketplace(error) => error,
     Self::Http(error) => error,
     Self::Import(error) => error,
+    Self::Search(error) => error,
     Self::Ledger(error) => error,
     Self::Install(error) => error,
     Self::Create(error) => error,

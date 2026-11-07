@@ -1153,13 +1153,14 @@ pub enum Refusal {
     /// nothing anywhere else.
     #[error("prints code for a shell to run, which only a shell can")]
     Shell,
-    /// `mindweaver gather git`, `gather marketplace`, `gather update` and
-    /// `gather mcp`: the network, for as long as it takes, which only a
-    /// screen that shows how far it got and stops it on a key can watch,
-    /// until #112 brings them to the server. A marketplace's `--list`
-    /// among them, which fetches its catalog, and the MCP Registry's
-    /// search and a server written from it, each of which fetches what the
-    /// registry says.
+    /// `mindweaver gather git`, `gather marketplace`, `gather update`,
+    /// `gather mcp` and `gather search`: the network, for as long as it
+    /// takes, which only a screen that shows how far it got and stops it on
+    /// a key can watch, until #112 brings them to the server. A
+    /// marketplace's `--list` among them, which fetches its catalog, the MCP
+    /// Registry's search and a server written from it, each of which
+    /// fetches what the registry says, and a search of the skill
+    /// directories, which asks each finder.
     #[error(
         "fetches over the network for as long as that takes, which only the TUI or a shell shows, and stops"
     )]
@@ -1255,7 +1256,8 @@ impl Refusal {
                 GatherCommand::Git { .. }
                 | GatherCommand::Marketplace { .. }
                 | GatherCommand::Update { .. }
-                | GatherCommand::Mcp(McpCommand::Search { .. } | McpCommand::Add { .. }),
+                | GatherCommand::Mcp(McpCommand::Search { .. } | McpCommand::Add { .. })
+                | GatherCommand::Search { .. },
             )) => Some(Refusal::Unwatched),
             #[cfg(feature = "ui")]
             Some(WeaverCommand::Ui(_)) => Some(Refusal::Panel),

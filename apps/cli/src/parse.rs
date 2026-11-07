@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use clap::builder::{PossibleValuesParser, StringValueParser, TypedValueParser};
 use clap::error::ErrorKind;
 use clap::{ArgGroup, Args, Parser, Subcommand};
+use mindweaver_core::finder::Finder;
 use mindweaver_core::mcp::{self, Address, Program};
 use mindweaver_core::registry;
 use mindweaver_core::scan::DEFAULT_DEPTH;
@@ -1651,6 +1652,39 @@ pub enum GatherCommand {
     /// the library.
     #[command(subcommand)]
     Mcp(McpCommand),
+
+    /// Look for skills in the skill directories weaver.toml lists in
+    /// `finders`, each found by its name, its repository, its folder in it,
+    /// its installs or stars and the finders that found it.
+    ///
+    /// github is GitHub's code search, asked only with a token
+    /// (--token-env); skills.sh and claude-plugins.dev are unstable, read
+    /// from APIs nobody documents, best-effort. None is asked until it is
+    /// listed.
+    Search {
+        /// What to look for.
+        query: String,
+
+        /// Ask this finder, which weaver.toml lists, instead of every one
+        /// it lists; once for each.
+        #[arg(long = "finder", value_name = "FINDER", value_parser = finders())]
+        finders: Vec<Finder>,
+
+        /// The environment variable holding a GitHub token for its code
+        /// search, which is sent to GitHub alone and never kept.
+        #[arg(long, value_name = "VAR")]
+        token_env: Option<String>,
+
+        /// Ask a finder at another address that speaks the same API, over
+        /// https or http on this machine: `github=https://ghe.example/api/v3`.
+        #[arg(long = "finder-url", value_name = "FINDER=URL", value_parser = finder_at)]
+        at: Vec<(Finder, String)>,
+
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 /// What `gather mcp` does with the MCP Registry: a search, and a server it
@@ -1759,6 +1793,25 @@ impl TypedValueParser for Pair {
 fn shells() -> impl TypedValueParser<Value = Shell> {
     PossibleValuesParser::new(Shell::ALL.map(Shell::name))
         .map(|name| name.parse::<Shell>().expect("every listed shell parses"))
+}
+
+/// What `--finder` takes, each from core's list, for the reason `--shell`
+/// does.
+fn finders() -> impl TypedValueParser<Value = Finder> {
+    PossibleValuesParser::new(Finder::ALL.map(Finder::name))
+        .map(|name| Finder::named(&name).expect("every listed finder is one"))
+}
+
+/// `FINDER=URL`, what `--finder-url` takes: a finder of core's list, by its
+/// name, and the address it is asked at, split at the first `=`, which no
+/// finder's name holds.
+fn finder_at(text: &str) -> Result<(Finder, String), String> {
+    let names = Finder::ALL.map(Finder::name).join(", ");
+    let (name, url) = text
+        .split_once('=')
+        .ok_or_else(|| format!("give it as a finder's name, `=` and its address ({names})"))?;
+    let finder = Finder::named(name).ok_or_else(|| format!("`{name}` is no finder: {names}"))?;
+    Ok((finder, url.to_owned()))
 }
 
 /// What `--agents` takes, each from core's list, for the reason `--shell`

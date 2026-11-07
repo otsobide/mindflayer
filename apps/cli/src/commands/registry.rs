@@ -173,7 +173,7 @@ fn unimported(error: ImportError, found: &Found) -> Failure {
 /// A client sending through `http`, keeping what it is answered in the
 /// cache of `workspace` when it has one: none for one not made yet, which a
 /// read never makes.
-fn client<'a>(http: &'a Reqwest, workspace: &WeaverWorkspace) -> Client<'a> {
+pub(super) fn client<'a>(http: &'a Reqwest, workspace: &WeaverWorkspace) -> Client<'a> {
     let client = Client::new(http);
     match Cache::of(workspace) {
         Some(cache) => client.with_cache(cache),
@@ -192,7 +192,7 @@ fn failed(failed: Failed) -> Failure {
 
 /// What went wrong with the cache, or a listing cut at its bound, as a
 /// warning with its code.
-fn http_warned(error: &HttpError) -> Warning {
+pub(super) fn http_warned(error: &HttpError) -> Warning {
     Warning::coded(error.code(), format!("warning: {error}"))
 }
 
