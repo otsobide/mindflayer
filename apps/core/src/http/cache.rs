@@ -31,6 +31,7 @@ use sha2::{Digest, Sha256};
 use super::{Fetched, Headers, HttpError, Request};
 use crate::adapter::SystemClock;
 use crate::port::Clock;
+use crate::value::Redacted;
 use crate::workspace::{replace_bytes_unresolved, WeaverWorkspace};
 
 /// The format an entry is written in, the first thing it says: one this
@@ -97,9 +98,11 @@ impl Cache {
     /// to be said and taken as a miss, when there is one that cannot be read.
     pub fn read(&self, url: &str) -> Result<Option<Entry>, HttpError> {
         let path = self.path_of(url);
+        // What serde says quotes a string where it wanted another type, and
+        // a `Link` kept on that line can name a URL with a credential in it.
         let unreadable = |detail: String| HttpError::CacheUnreadable {
             path: path.clone(),
-            detail,
+            detail: Redacted::new(&detail),
         };
         let bytes = match fs::read(&path) {
             Ok(bytes) => bytes,

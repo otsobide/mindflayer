@@ -4280,15 +4280,17 @@ credentials stay behind: they were given for the server it named. reqwest
 drops `Authorization` and `Cookie` on such a hop itself, and only those,
 so a key in a header of a service's own naming would have gone along.
 
-Every failure is an `HttpError`, each with a code of its own (`http_*`), and
-every URL in one, every word a transport said among them, is a `Redacted`
-([values, ports and adapters](#values-ports-and-adapters)): a timeout
-(`http_timed_out`), a body past the cap (`http_too_large`), a connection
-not made (`http_connect_failed`), a status that is not a success
+Every failure is an `HttpError`, each with a code of its own (`http_*`): a
+timeout (`http_timed_out`), a body past the cap (`http_too_large`), a
+connection not made (`http_connect_failed`), a status that is not a success
 (`http_status_unsuccessful`), a redirect refused or one too many, a body
-that is not the JSON a caller declared (`http_json_invalid`). A catalog's
-caller collects them as failures beside what it read
-([failures are collected, not raised](#failures-are-collected-not-raised)).
+that is not the JSON a caller declared (`http_json_invalid`). Every URL in
+one, every word a transport or serde said among them, is a `Redacted`
+([values, ports and adapters](#values-ports-and-adapters)): a transport's
+words can quote the URL it failed on, and serde's a string of the body
+where it wanted another type. A catalog's caller collects them as failures
+beside what it read ([failures are collected, not
+raised](#failures-are-collected-not-raised)).
 
 ### A listing a page at a time
 

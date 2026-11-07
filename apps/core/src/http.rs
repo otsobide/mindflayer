@@ -295,11 +295,12 @@ impl Fetched {
     /// Strict JSON, not the JSONC agents' config files are read as: an API
     /// that answers with comments in it is answering with something other
     /// than its own format. What serde says is kept, which names a line and
-    /// a column and never quotes the body.
+    /// a column, redacted: it quotes a string of the body where it wanted
+    /// another type, and that string can be a URL with a credential in it.
     pub fn json<T: DeserializeOwned>(&self) -> Result<T, HttpError> {
         serde_json::from_slice(&self.body).map_err(|error| HttpError::Json {
             url: Redacted::new(&self.url),
-            detail: error.to_string(),
+            detail: Redacted::new(&error.to_string()),
         })
     }
 }
@@ -676,9 +677,9 @@ fn is_this_machine(url: &Url) -> bool {
 
 /// Why a fetch brought nothing back.
 ///
-/// Every URL in one is [`Redacted`], and so is every word a transport said,
-/// which can quote the URL it failed on: this is what a front end shows and
-/// a log keeps. A header's value is never in one, since it may be a
+/// Every URL in one is [`Redacted`], and so is every word a transport or
+/// serde said, which can quote the URL it failed on or a string of the body:
+/// this is what a front end shows and a log keeps. A header's value is never in one, since it may be a
 /// credential.
 #[derive(Debug, Error)]
 pub enum HttpError {
@@ -732,7 +733,7 @@ pub enum HttpError {
     TooManyRedirects { url: Redacted, limit: usize },
     /// A body that is not the JSON its caller declared.
     #[error("{url}: not the JSON expected: {detail}")]
-    Json { url: Redacted, detail: String },
+    Json { url: Redacted, detail: Redacted },
     /// A listing that went on past the most pages it was let run to.
     #[error("{url}: read no further than {limit} pages, the most this listing is let run to")]
     TooManyPages { url: Redacted, limit: usize },
@@ -740,7 +741,7 @@ pub enum HttpError {
     /// build does not know: a miss, said, and fetched in its place. Its
     /// path is a digest, which says nothing of the URL.
     #[error("{path}: a kept HTTP answer that cannot be read, so it is fetched again: {detail}")]
-    CacheUnreadable { path: PathBuf, detail: String },
+    CacheUnreadable { path: PathBuf, detail: Redacted },
     /// An answer that could not be kept: said, and fetched again next time.
     #[error("{path}: an HTTP answer cannot be kept: {source}")]
     CacheUnwritable {

@@ -754,6 +754,24 @@ fn an_answer_that_is_not_the_json_declared_is_said_so() {
     }
 }
 
+/// serde quotes a string where it wanted another type, and what a catalog
+/// lists can be a URL with a credential in it.
+#[test]
+fn what_is_said_of_json_it_could_not_read_names_no_credential() {
+    let fake = Fake::new().answering(
+        CATALOG,
+        Reply::ok(r#""https://me:s3cret@git.example/skills""#),
+    );
+    let fetched = Client::new(&fake).get(&Request::get(CATALOG)).unwrap();
+
+    let error = fetched.json::<Vec<Server>>().unwrap_err();
+
+    assert_eq!(error.code(), "http_json_invalid");
+    let said = error.to_string();
+    assert!(said.contains("git.example/skills"), "{said}");
+    assert!(!said.contains("s3cret"), "{said}");
+}
+
 // ---------------------------------------------------------------------------
 // Paging
 // ---------------------------------------------------------------------------
