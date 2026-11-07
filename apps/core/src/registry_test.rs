@@ -261,7 +261,7 @@ fn a_listing_serializes_what_it_could_not_read_by_code() {
         failures: vec![Unreadable {
             at: 2,
             name: Some(String::from("io.github.acme/broken")),
-            reason: String::from("missing field `version`"),
+            reason: Redacted::new("missing field `version`"),
         }],
         cut: Some(HttpError::TooManyPages {
             url: Redacted::new("https://registry.example/v0.1/servers"),

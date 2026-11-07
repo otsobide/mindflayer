@@ -4542,9 +4542,11 @@ asked for in vain. Every other string a front end is handed of it, a
 title, a description, a time, a status word this build does not know, is
 made printable first (`text::printable`, the function every row of the
 CLI is made printable by, moved into core for it), and the registry's
-address is kept as a `Redacted`. One version asked for by name that does
-not read is the answer failing (`http_json_invalid`), since there is no
-rest to list beside it.
+address is kept as a `Redacted`. So is why a server did not read, which
+quotes the string serde could not read, a URL with a credential in it as
+likely as any, and whatever a manual step quotes of the registry. One
+version asked for by name that does not read is the answer failing
+(`http_json_invalid`), since there is no rest to list beside it.
 
 What the registry says of a server of its own accord, under
 `_meta["io.modelcontextprotocol.registry/official"]`, is read beside it:

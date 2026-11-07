@@ -493,16 +493,32 @@ fn what_is_imported_serializes_under_the_names_it_is_given() {
 fn what_a_step_says_of_the_registry_is_printable_and_holds_no_credential() {
     // Marked, so it is found nowhere else in what is said by chance.
     let password = format!("password-{}", McpMother::name());
-    let server = packaged(
-        "io.github.acme/odd",
-        json!([{
-            "registryType": "mcpb",
-            "identifier": format!("https://user:{password}@downloads.acme.example/\r\x1b[2Ja.mcpb"),
-        }]),
-    );
+    let leaky = format!("https://user:{password}@downloads.acme.example/\r\x1b[2Ja.mcpb");
+    // An identifier, a registry type, a package's transport and a remote's,
+    // each a step that quotes it.
+    for server in [
+        packaged(
+            "io.github.acme/odd",
+            json!([{ "registryType": "mcpb", "identifier": leaky }]),
+        ),
+        packaged(
+            "io.github.acme/odd",
+            json!([{ "registryType": leaky, "identifier": "a" }]),
+        ),
+        packaged(
+            "io.github.acme/odd",
+            json!([{ "registryType": "npm", "identifier": "a", "transport": { "type": leaky } }]),
+        ),
+        version(json!({
+            "name": "io.github.acme/odd",
+            "version": "1",
+            "remotes": [{ "type": leaky, "url": "https://mcp.acme.example" }],
+        })),
+    ] {
+        let said = server.import(None).manual[0].to_string();
 
-    let said = server.import(None).manual[0].to_string();
-
-    assert!(!said.contains(&password), "{said}");
-    assert!(!said.contains(['\r', '\x1b']), "{said}");
+        assert!(said.contains("downloads.acme.example"), "{said}");
+        assert!(!said.contains(&password), "{said}");
+        assert!(!said.contains(['\r', '\x1b']), "{said}");
+    }
 }

@@ -192,7 +192,13 @@ impl<'a> Registry<'a> {
                 .map(printable);
             match ServerVersion::read(value, &self.base, fetched_at) {
                 Ok(server) => servers.push(server),
-                Err(reason) => failures.push(Unreadable { at, name, reason }),
+                // Serde quotes a string it could not read, and one may be
+                // a URL with a credential in it.
+                Err(reason) => failures.push(Unreadable {
+                    at,
+                    name,
+                    reason: Redacted::new(&reason),
+                }),
             }
         }
         Ok(Listing {
@@ -424,8 +430,9 @@ pub struct Unreadable {
     pub at: usize,
     /// Its name, when it has one to say, printable.
     pub name: Option<String>,
-    /// Why, printable.
-    pub reason: String,
+    /// Why, printable, and without the credential a URL it quotes of the
+    /// registry's answer carried.
+    pub reason: Redacted,
 }
 
 codes!(Unreadable => "registry_server_unreadable");

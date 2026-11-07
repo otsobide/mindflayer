@@ -313,7 +313,7 @@ fn package(at: usize, package: &Package) -> Result<Drafted, Manual> {
         other => {
             return Err(Manual::TypeUnknown {
                 at,
-                registry_type: printable(other),
+                registry_type: Redacted::new(&printable(other)),
                 identifier,
             })
         }
@@ -325,7 +325,7 @@ fn package(at: usize, package: &Package) -> Result<Drafted, Manual> {
     {
         return Err(Manual::NotStdio {
             at,
-            transport: printable(&transport.kind),
+            transport: Redacted::new(&printable(&transport.kind)),
         });
     }
     let unfit = |at: &str, what, text: &str| Manual::Unfit {
@@ -407,7 +407,7 @@ fn remote(at: usize, remote: &server::Transport) -> Result<Drafted, Manual> {
         other => {
             return Err(Manual::RemoteUnknown {
                 at,
-                transport: printable(other),
+                transport: Redacted::new(&printable(other)),
             })
         }
     };
@@ -674,13 +674,13 @@ pub enum Manual {
     #[error("{at}: a `{registry_type}` package (`{identifier}`), which this build does not know how to start: start it by hand")]
     TypeUnknown {
         at: String,
-        registry_type: String,
+        registry_type: Redacted,
         identifier: Redacted,
     },
     /// A package that serves at an address once started, which a
     /// definition, a program or an address, cannot say both of.
     #[error("{at}: a package that serves over `{transport}` once started, which one definition cannot say: start it by hand, then add the address it serves with `add mcp --url`")]
-    NotStdio { at: String, transport: String },
+    NotStdio { at: String, transport: Redacted },
     /// An identifier, a version or a variable's name a command line would
     /// read as an option or as more than one word.
     #[error("{at}: its {what} `{text}` would be read as an option, or as other than one word, so no command line is written with it")]
@@ -699,7 +699,7 @@ pub enum Manual {
     },
     /// A remote reached over a transport this build does not know.
     #[error("{at}: a remote server reached over `{transport}`, which this build does not know")]
-    RemoteUnknown { at: String, transport: String },
+    RemoteUnknown { at: String, transport: Redacted },
     /// No package and no remote at all.
     #[error("it names no package and no remote server, so there is nothing to start or reach")]
     Unrunnable,

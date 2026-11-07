@@ -270,6 +270,29 @@ fn a_cursor_that_never_runs_out_ends_at_the_bound() {
     assert_eq!(fake.sent().len(), 4);
 }
 
+/// Why a server did not read quotes the string serde could not read, which
+/// may be a URL: said without the credential in it.
+#[test]
+fn a_server_that_does_not_read_is_said_without_the_credential_it_quotes() {
+    let page = r#"{"servers":[
+        {"server":{"name":"io.github.acme/leaky","version":"1","packages":"https://u:p4ss@acme.example"}},
+        {"server":{"name":"io.github.acme/fine","version":"1"}}
+    ]}"#;
+    let fake = Fake::new().answering(&searched("leaky"), page);
+    let client = Client::new(&fake);
+
+    let listing = Registry::new(&client).at(REGISTRY).search("leaky").unwrap();
+
+    assert_eq!(names(&listing.servers), ["io.github.acme/fine"]);
+    let said = listing.failures[0].to_string();
+    assert!(
+        said.contains(r#"invalid type: string "https://acme.example""#),
+        "{said}"
+    );
+    assert!(!said.contains("p4ss"), "{said}");
+    assert!(!listing.failures[0].reason.contains("p4ss"));
+}
+
 /// A page that cannot be fetched fails the listing: what came before it is
 /// a listing cut short where nobody chose.
 #[test]
