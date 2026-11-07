@@ -540,6 +540,11 @@ mindweaver gather update <NAME>...|--all
 mindweaver gather remove <NAME> [--yes]
                            # remove a source and what it put on the shelf;
                            # without --yes, say what would go
+mindweaver gather mcp search <QUERY> [--registry URL] [--json]
+                           # the servers the MCP Registry lists for a query
+mindweaver gather mcp add <SERVER> [--version V] [--name N] [--registry URL] [--yes]
+                           # write one into the library; without --yes, say
+                           # what it would be written as
 mindweaver install         # a screen for putting skills, rules and MCP
                            # servers into its projects
 mindweaver install (-p PROJECT)...|--all-projects <NAME> [--from ORIGIN] [--force] [--yes]
@@ -1953,6 +1958,12 @@ warning: /home/you/Projects/collapse/skills/broken/SKILL.md: the file does not s
   shelf; and for a plugin of a marketplace, its `parent`, the marketplace's
   name, and its `entry`, the name its catalog lists it by, both `null` for
   a source gathered on its own. A marketplace's `kind` is `marketplace`.
+- `gather mcp search`: the registry's listing, each server in `servers`
+  by its `name`, `version`, `title`, `description`, `status`,
+  `published_at`, `updated_at`, `is_latest`, the `registry` it was read
+  from and `fetched_at`, in seconds since the Unix epoch; and what could
+  not be read, each in `failures`, the listing cut at its bound in `cut`,
+  and the cache failing in `warnings`, each with its `code` and `message`.
 - `status`, `workspaces` and `scan`: the reports shown in [what each project
   has](#what-each-project-has), [the weavers this machine
   knows](#the-weavers-this-machine-knows) and [commands](#commands).
@@ -2339,7 +2350,7 @@ Every key runs a command you could have typed, through the same parser:
 | `v` | validate everything | `mindweaver validate` |
 | `g` | gather from a git repository, showing how far it has got; `esc` stops it, until it starts placing | `mindweaver gather git <url>` |
 | `L` | load another workspace's own skills and rules; enter on a loaded one unloads it | `mindweaver load <path>`, `mindweaver unload <path>` |
-| `s` | what is on the shelf; there, `←→` picks a source, `u` gathers it again, `U` every one, and `d` removes it once you say yes; `m` lists a marketplace's plugins, the one picked or one typed, `space` ticks each and `enter` gathers the ticked ones | `mindweaver gather list`; `mindweaver gather update <source>`, `mindweaver gather update --all` and `mindweaver gather remove --yes <source>`; `mindweaver gather marketplace --list <url>` and `mindweaver gather marketplace --plugin <name>... <url>` |
+| `s` | what is on the shelf; there, `←→` picks a source, `u` gathers it again, `U` every one, and `d` removes it once you say yes; `m` lists a marketplace's plugins, the one picked or one typed, `space` ticks each and `enter` gathers the ticked ones; `r` searches the MCP Registry, `enter` on a server found says what it would be written as, and `y` writes it into the library | `mindweaver gather list`; `mindweaver gather update <source>`, `mindweaver gather update --all` and `mindweaver gather remove --yes <source>`; `mindweaver gather marketplace --list <url>` and `mindweaver gather marketplace --plugin <name>... <url>`; `mindweaver gather mcp search <query>`, `mindweaver gather mcp add --version <v> <server>` and, with `y`, `mindweaver gather mcp add --version <v> --yes <server>` |
 | `w` | the weavers this machine knows, the one in use marked | `mindweaver workspaces` |
 | `i` | install skills, rules and MCP servers from the workspace's own, a loaded workspace, or the shelf; `tab` switches between them, and `v` turns the screen round to every project for one of them | `mindweaver install` opens it; `a` runs `mindweaver install -p <project>... --from <origin> <kind:name>`, with `--yes` for an MCP server from elsewhere than the library once `a` has shown what each agent would run, and `mindweaver uninstall -p <project>... <kind:name>` |
 | `R` | read the disk again | nothing: it changes nothing |
@@ -3975,6 +3986,88 @@ A project an older Mindweaver made keeps none either: one a `mind.toml`
 marks whatever folders it has, and one a `settings.json` marks unless its
 `directories` name a folder for them, as somebody may have written there by
 hand. Adding one to either otherwise points at `mind migrate` first.
+
+### From the MCP Registry
+
+The [MCP Registry](https://registry.modelcontextprotocol.io) lists servers
+with how each is started or reached. `gather mcp search` lists what it
+finds for a query, each server by the name the registry gives it, its
+latest version, its status and what it is for:
+
+```
+$ mindweaver gather mcp search notes
+io.github.acme/notes         2.0.0  active  Your notes, searched and written
+io.github.acme/pynotes       2.0.0  active  Your notes, in Python
+io.github.acme/notes-image   2.0.0  active  Your notes, in a container
+io.github.acme/notes-dotnet  2.0.0  active  Your notes, in .NET
+io.github.acme/notes-cloud   2.0.0  active  Your notes, hosted by Acme
+io.github.acme/notes-bundle  2.0.0  active  Your notes, as an MCP bundle
+io.github.acme/notes-crate   2.0.0  active  Your notes, in Rust
+io.github.acme/notes-brew    2.0.0  active  Your notes, from a tap
+```
+
+A server the registry lists that cannot be read is a warning beside the
+rest, and so is a listing cut short at a thousand servers, each failing the
+search; a name or a version shown as other than it is, a control character
+in it, is no server's. `--json` prints the listing in the envelope. What the
+registry answers is kept in the workspace's HTTP cache, once the workspace
+is made, to ask whether it changed next time.
+
+`gather mcp add` says what one of them would be written into the library
+as, at its latest version or the one `--version` names: how an agent
+starts or reaches it and what is supplied for it, as `show` lays a server
+out, named after the last part of the registry's name for it unless
+`--name` gives another. Without `--yes` it writes nothing:
+
+```
+$ mindweaver gather mcp add io.github.acme/notes-cloud
+io.github.acme/notes-cloud 2.0.0, active, from https://registry.modelcontextprotocol.io
+as the MCP server notes-cloud: Your notes, hosted by Acme
+
+transport: http
+  url: https://{tenant}.notes.acme.example/mcp/v2
+  headers:
+    X-Notes-Key: {X-Notes-Key}
+
+inputs:
+  tenant: url_var, required, read from $TENANT
+    Your workspace at Acme
+  X-Notes-Key: header, secret, required, read from $X_NOTES_KEY
+    Your notes key
+
+would create mcp notes-cloud at /home/you/Projects/.mindweaver/library/mcp/notes-cloud.toml
+nothing written: add --yes to go ahead
+warning: remotes[0].headers[0]: the registry gives a default for a secret, which is left out: its value is read from the environment variable its input names
+```
+
+With `--yes` it says the same and writes it, as `add mcp` writes a server,
+ending `created mcp notes-cloud at ...`; its `provenance` says the registry,
+the name and the version it came from, when it was fetched and its status.
+A package is started as its registry type says, `npx -y`, `uvx`, `docker
+run -i --rm` or `dnx`, and a remote reached at its address; nothing
+is started by the command itself, the server or the program that fetches
+it. Every value somebody supplies is an input read from an environment
+variable, and nothing the registry gives for a secret, a default, an
+example or a value, is written or said: each is left out, with a warning
+that fails nothing, as is an optional argument with no value.
+
+A server nothing here can start, an MCP bundle, a Rust crate or a package
+of a type this build does not know, is refused, each package with what to
+do by hand, and nothing is written:
+
+```
+$ mindweaver gather mcp add io.github.acme/notes-bundle
+warning: packages[0]: an MCP bundle at https://downloads.acme.example/notes-2.0.0.mcpb, which no agent is given as a command: install it by hand into an agent that takes bundles
+error: `io.github.acme/notes-bundle` 2.0.0: nothing it names maps to a definition Mindweaver writes, so nothing was written; it is set up by hand instead
+```
+
+A name the library holds is refused as `add` refuses it, and what holds it
+is left as it is: `--name` gives the server another. `--registry` reads a
+registry of your own that speaks the same API, over https, or http on this
+machine, and never with a credential in its address. A front end with no
+terminal runs neither command, as it runs no gather; in the TUI, `r` on
+the shelf searches the registry, and `enter` on a server found shows its
+dry run, `y` writing it.
 
 ## Upgrading
 

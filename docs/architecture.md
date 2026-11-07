@@ -75,12 +75,15 @@ command's literal output among them, which buried all of that. The
 reference moved, whole and unchanged in substance, into
 [docs/reference.md](reference.md), how to build and test into
 [docs/development.md](development.md). No literal output is left in the
-README but one: the commands' is the reference's, where `examples_test.rs`
+README but two: the commands' is the reference's, where `examples_test.rs`
 reads its walk-through of the examples, and the HTTP API's is [its
-guide's](#the-apis-guide-runs-its-examples), written since. The one left is
-what an MCP server's install prints (#95): what each agent will run is the
+guide's](#the-apis-guide-runs-its-examples), written since. The two left
+are what an MCP server's install prints (#95), and what one the MCP
+Registry lists would be written as (#107): what each agent will run is the
 first thing somebody adding one needs to see, in the section that tells
-them how.
+them how. The second was printed against the registry's fixtures served on
+this machine, its address shown as the official registry's, which no
+example reaches.
 
 Every relative link in the README and under `docs/` is held to lead
 somewhere by `apps/cli/tests/docs_test.rs`: the file it names is there, an
@@ -2454,9 +2457,12 @@ knows](#the-workspaces-this-machine-knows)), and, since #64, `list`, `show`,
 a workspace's holders, their templates and its offers a script or an agent
 can print: not yet the whole snapshot (an open question below). `doctor
 --json` (#96) prints its report in it too ([what no agent
-says](#what-no-agent-says)), and `gather sources --json` (#100) the sources
+says](#what-no-agent-says)), `gather sources --json` (#100) the sources
 the shelf is filled from ([a source's own
-commands](#a-sources-own-commands)). One shape
+commands](#a-sources-own-commands)), and `gather mcp search --json` (#107)
+the MCP Registry's `registry::Listing` ([the MCP
+Registry](#the-mcp-registry)), a read type #106 made and pinned, so no
+name moved. One shape
 is one parser for a script, and for the panel's backend when it reads
 through the CLI.
 
@@ -2703,9 +2709,10 @@ type derives `Serialize` from the start:
   by hand where a field is an error, a server that could not be read, a
   manual step or a warning, each a `code::Said` ([the MCP
   Registry](#the-mcp-registry), [importing
-  one](#importing-one-from-the-mcp-registry)). Handed to no front end yet,
-  they have no TypeScript and no schema, and move neither
-  `ENVELOPE_VERSION` nor `view::FORMAT`.
+  one](#importing-one-from-the-mcp-registry)). `gather mcp search --json`
+  (#107) prints the `Listing` in the envelope, the one of them a command
+  prints; the panel reads none, so they have no TypeScript and no schema,
+  and move neither `ENVELOPE_VERSION` nor `view::FORMAT`.
 - **Not yet**, being older than the rule and handed to no front end so far:
   the ledger's record of an install (`InstallRecord`), and what an update or
   a change of agents would do as each plans it (`update::Plan`,
@@ -4589,6 +4596,33 @@ it was fetched at. A listing serializes as the read type it is
 by a test), what it could not read and what went wrong as `code::Said`;
 the `server.json` it was
 read from is kept beside it, for the mapping, and serialized nowhere.
+
+`mindweaver gather mcp search QUERY` (#107) prints a search, a row a
+server by the name `gather mcp add` takes, its version, its status and its
+description, `--json` the `Listing` in the envelope; a server that does not
+read, a cut and the cache failing are each a warning with its code, which
+fails it as a failure collected does. It is a read: the workspace is
+resolved without being made, the default one in home included, and a
+client keeps its answers only in the cache of one that is made
+(`Cache::of`). The command builds the one transport, reqwest's
+(`adapter::reqwest::Reqwest`), and hands it to core, reading no proxy,
+since core's adapter reads none either (an [open
+question](#open-questions)), and where the registry is is `--registry`'s,
+the official one unless it names another, held to the client's rules
+([which URL is fetched](#which-url-is-fetched-and-where-a-redirect-may-lead))
+before anything is sent, so a test serves #106's fixtures on 127.0.0.1 in
+its own process and names that. `gather mcp add SERVER` fetches one version
+(`Registry::version`, `latest` unless `--version` names one) and says what
+it maps to, as `show` lays a server out, then writes it into the library
+with `--yes` ([an imported server, written into the
+library](#an-imported-server-written-into-the-library)), and without it is
+a read that writes and makes nothing. What the mapping left out is a
+warning that fails nothing, since the definition is what was asked for;
+the manual steps of a version nothing maps are warnings before the
+refusal. Nothing the definition names is started: a test puts stand-ins
+for `npx`, `uvx`, `docker` and `dnx` on the `PATH` of the built binary and
+finds none run. A front end with no terminal runs neither, as it runs no
+gather (`Refusal::Unwatched`).
 
 A search made once can be read again from the answers the cache kept of
 it, and from them alone (`registry::kept`): a client whose transport sends
@@ -12757,8 +12791,10 @@ reads the registry's `/v0.1` API at the address its caller names, the
 official one by default, a search paged by the cursor each page carries
 (`Paging::Cursor`, added for it) as far as a bound, one server's version,
 and what changed since a time, the deleted among it; and maps a server
-version to a definition (`ServerVersion::import`), writing nothing, which
-#107's commands will.
+version to a definition (`ServerVersion::import`), writing nothing. #107's
+commands print a search (`gather mcp search`) and write what a version
+maps to into the library (`gather mcp add`, `lifecycle::import`), through
+the one reqwest transport the command builds, which reads no proxy.
 
 ### D-15: Skill search is GitHub plus opt-in finders
 
@@ -13167,8 +13203,9 @@ it once as it closes.
   cannot be reached ([fetching over HTTP](#fetching-over-http)). Handing
   one over is a front end's, as a credential is
   ([D-16](#d-16-credentials-come-from-the-front-end-never-from-a-prompt)),
-  and waits for the first catalog (#106, #108) and somebody behind one to
-  say which settings it takes.
+  and waits for somebody behind one to say which settings it takes: `gather
+  mcp` (#107), the first command that fetches over HTTP, reads none, and
+  neither will the skill directories (#108) until then.
 - **The ledger's port is shaped by the store it came from.** `LedgerStore`
   is the SQLite store's public methods as they were
   ([values, ports and adapters](#values-ports-and-adapters)), so a second
@@ -13295,7 +13332,15 @@ it once as it closes.
   agent as a reference all the same, which the renderers write as they
   write every input (#90 to #92). Each waits for a server that needs it;
   and which package or remote is taken when a server lists several is the
-  first that maps, until #107 lets whoever imports one choose.
+  first that maps, `gather mcp add` (#107) included, until an option of
+  its says which.
+- **A registry's line takes no cancel.** `gather mcp search` and `gather
+  mcp add` wait for the registry's answer, within the client's limit, and
+  watch for nothing, so the TUI, which runs them apart, cannot stop one,
+  and says so rather than promising it ([a registry search from the
+  shelf](#a-registry-search-from-the-shelf)). A client that took a cancel
+  between its reads, as a gather's watch does, would let `esc` stop a slow
+  answer; the limit bounds it meanwhile.
 
 - **A known workspace that has gone is offered nothing.** The page of
   loads and the header's switcher list it, with why it does not open, and

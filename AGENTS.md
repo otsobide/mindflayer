@@ -9,8 +9,9 @@ code; a **weaver workspace** (`.mindweaver/weaver.toml`, or the
 holds artifacts of its own, gathers skills from git onto a shelf and installs
 them into projects. `README.md` is the first page a newcomer reads: short,
 friendly and centred on the control panel (`mindweaver ui`), with screenshots
-`make docs/screenshots` takes and no command's output but one, what an MCP
-server's install prints (#95). `docs/reference.md`
+`make docs/screenshots` takes and no command's output but two, what an MCP
+server's install prints (#95) and what one the MCP Registry lists would be
+written as (#107). `docs/reference.md`
 is the user-facing reference: every command with its literal output, the
 formats, `--json`, the TUI, the panel in full and upgrading.
 `docs/api.md` is the guide to the HTTP API `mindweaver ui` serves, every
@@ -1811,7 +1812,12 @@ These are easy to break from a single file without noticing.
   recorded from it), and the default transport's own tests
   reach only a server each starts on 127.0.0.1, port 0, with std's
   `TcpListener` (`adapter/reqwest_test.rs`): no test names another host, and
-  a redirect to one is refused before it could be sent. A CLI fixture's project is a repository given
+  a redirect to one is refused before it could be sent. The CLI's suites
+  that read the registry serve those same fixtures from 127.0.0.1, port 0,
+  in their own process (`common::FixtureRegistry`), named with
+  `--registry` or a task's `registry`, so a command, the TUI's lines and a
+  spawned binary alike reach nothing else, and none names the official
+  registry. A CLI fixture's project is a repository given
   `mind init` (`common::new_project`), so a local install keeps its copies out
   of git rather than saying on stderr that nothing does, and where an install
   puts its copies is asked of core (`common::copies`). A test about what a

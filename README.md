@@ -408,6 +408,42 @@ shown you the lines. [What an MCP server
 looks like](docs/reference.md#what-an-mcp-server-looks-like) has every
 option, and the rest.
 
+### From the MCP Registry
+
+A server the [MCP Registry](https://registry.modelcontextprotocol.io)
+lists comes into the library without your typing how it starts.
+`mindweaver gather mcp search notes` lists what the registry finds, and
+`gather mcp add` says what one of them would be written as, the command an
+agent would start or the address it would reach and what to supply, each
+secret by the variable it is read from:
+
+```
+$ mindweaver gather mcp add io.github.acme/notes-cloud
+io.github.acme/notes-cloud 2.0.0, active, from https://registry.modelcontextprotocol.io
+as the MCP server notes-cloud: Your notes, hosted by Acme
+
+transport: http
+  url: https://{tenant}.notes.acme.example/mcp/v2
+  headers:
+    X-Notes-Key: {X-Notes-Key}
+
+inputs:
+  tenant: url_var, required, read from $TENANT
+    Your workspace at Acme
+  X-Notes-Key: header, secret, required, read from $X_NOTES_KEY
+    Your notes key
+
+would create mcp notes-cloud at /home/you/.mindweaver/library/mcp/notes-cloud.toml
+nothing written: add --yes to go ahead
+warning: remotes[0].headers[0]: the registry gives a default for a secret, which is left out: its value is read from the environment variable its input names
+```
+
+`--yes` writes it, and installing it is then what it is for any server.
+Nothing is started on the way, and a package nothing here can start, an
+MCP bundle or a Rust crate, is refused with what to do by hand. In the TUI,
+`r` on the shelf searches the registry. [From the MCP
+Registry](docs/reference.md#from-the-mcp-registry) has the rest.
+
 ## When an agent says nothing
 
 Some things keep an agent from what a project gives it without a word from
