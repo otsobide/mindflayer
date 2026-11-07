@@ -12681,7 +12681,7 @@ a total time and a size counted as it is read, reads JSON, pages by link or
 by number as far as a bound, and keeps answers in `.mindweaver/cache/http`;
 and `adapter::reqwest::Reqwest`, the default transport, on the reqwest
 `Cargo.lock` already held, with a connect timeout and the request's own
-total timeout. No catalog uses it yet.
+total timeout.
 
 #106 is the first catalog read through it ([the MCP
 Registry](#the-mcp-registry)): `registry::Registry`, handed the client,
