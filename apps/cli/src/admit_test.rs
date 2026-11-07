@@ -517,6 +517,10 @@ fn a_source_a_gather_names_goes_to_its_line_as_sent_once_the_policy_takes_it() {
                 reference: None,
                 plugins: vec![String::from("pdf")],
             },
+            Task::RenameSource {
+                from: String::from("acme-skills"),
+                to: String::from("--team"),
+            },
         ];
         for task in tasks {
             assert_eq!(admitted(&workspace, &task).unwrap(), task, "{url}");
@@ -582,6 +586,20 @@ fn a_source_on_this_machine_or_with_a_credential_is_refused_as_the_policy_says()
                 kind: None,
                 name: Some(String::from("https://u:t0ken@example.com/x")),
                 dry_run: false,
+            },
+            "credentials_in_url",
+        ),
+        (
+            Task::RenameSource {
+                from: String::from("acme-skills"),
+                to: String::from("https://u:t0ken@example.com/x"),
+            },
+            "credentials_in_url",
+        ),
+        (
+            Task::RenameSource {
+                from: String::from("https://u:t0ken@example.com/x"),
+                to: String::from("acme"),
             },
             "credentials_in_url",
         ),

@@ -288,6 +288,11 @@ pub enum Task {
     /// --all` when no source is named: sources gathered again, as each was
     /// gathered last, each by the name `gather sources` lists it by.
     UpdateSource { source: Option<String> },
+    /// `mindweaver gather rename <from> <to>`: a source called another
+    /// name, each by the name `gather sources` lists it by: what `gather
+    /// list` and `gather sources` show of it from then on, and what
+    /// `--from` takes for what it supplied.
+    RenameSource { from: String, to: String },
     /// `mindweaver gather remove [--yes] <source>`: a source removed, with
     /// its clone, what it put on the shelf and its rows, every copy
     /// installed from it left orphaned; without `yes`, the dry run, which
@@ -810,6 +815,9 @@ impl Task {
                 let head: Vec<&str> = head.iter().map(String::as_str).collect();
                 vec![words(&head, &[url])]
             }
+            Task::RenameSource { from, to } => {
+                vec![words(&["mindweaver", "gather", "rename"], &[from, to])]
+            }
             Task::UpdateSource { source } => match source {
                 Some(source) => vec![words(&["mindweaver", "gather", "update"], &[source])],
                 None => vec![words(&["mindweaver", "gather", "update", "--all"], &[])],
@@ -1030,6 +1038,7 @@ impl Task {
                 | Task::Rename { .. }
                 | Task::Remove { yes: true, .. }
                 | Task::Gather { dry_run: false, .. }
+                | Task::RenameSource { .. }
                 | Task::UpdateSource { .. }
                 | Task::RemoveSource { yes: true, .. }
                 | Task::ListPlugins { .. }

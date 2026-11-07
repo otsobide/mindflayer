@@ -35,7 +35,7 @@ kind: Kind | null,
  * What to call the source, as `--name` takes it; none for the name
  * the command derives, or the one it already has.
  */
-name: string | null, dry_run: boolean, } | { "type": "update_source", source: string | null, } | { "type": "remove_source", source: string, yes: boolean, } | { "type": "list_plugins", url: string, folder: string, reference: string | null, } | { "type": "gather_plugins", url: string, folder: string, reference: string | null, plugins: Array<string>, } | { "type": "search_registry", query: string, registry: string | null, } | { "type": "search_skills", query: string, at: Array<string>, } | { "type": "import_server", server: string, version: string | null, registry: string | null, yes: boolean, } | { "type": "targets", holder: Holder, kind: Kind, folders: Array<string> | null, } | { "type": "settings", holder: Holder, 
+name: string | null, dry_run: boolean, } | { "type": "update_source", source: string | null, } | { "type": "rename_source", from: string, to: string, } | { "type": "remove_source", source: string, yes: boolean, } | { "type": "list_plugins", url: string, folder: string, reference: string | null, } | { "type": "gather_plugins", url: string, folder: string, reference: string | null, plugins: Array<string>, } | { "type": "search_registry", query: string, registry: string | null, } | { "type": "search_skills", query: string, at: Array<string>, } | { "type": "import_server", server: string, version: string | null, registry: string | null, yes: boolean, } | { "type": "targets", holder: Holder, kind: Kind, folders: Array<string> | null, } | { "type": "settings", holder: Holder, 
 /**
  * The agents to name, when they change.
  */

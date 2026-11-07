@@ -12,7 +12,7 @@ use crate::{Cli, WeaverCli};
 /// Every task's name in JSON, as a front end sends it: a contract, pinned
 /// here word for word, so renaming a variant fails a test rather than every
 /// front end that sends the old name.
-const TAGS: [&str; 43] = [
+const TAGS: [&str; 44] = [
     "init_workspace",
     "init_project",
     "link",
@@ -38,6 +38,7 @@ const TAGS: [&str; 43] = [
     "workspaces",
     "gather",
     "update_source",
+    "rename_source",
     "remove_source",
     "list_plugins",
     "gather_plugins",
@@ -151,6 +152,14 @@ fn every(value: &str) -> Vec<Task> {
             kind: None,
             name: None,
             dry_run: false,
+        },
+        Task::RenameSource {
+            from: owned(),
+            to: owned(),
+        },
+        Task::RenameSource {
+            from: String::from("plain"),
+            to: owned(),
         },
         Task::UpdateSource {
             source: Some(owned()),

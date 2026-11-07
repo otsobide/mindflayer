@@ -4517,6 +4517,27 @@
             "type": "object"
           },
           {
+            "description": "`mindweaver gather rename <from> <to>`: a source called another\nname, each by the name `gather sources` lists it by: what `gather\nlist` and `gather sources` show of it from then on, and what\n`--from` takes for what it supplied.",
+            "properties": {
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              },
+              "type": {
+                "const": "rename_source",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "from",
+              "to"
+            ],
+            "type": "object"
+          },
+          {
             "description": "`mindweaver gather remove [--yes] <source>`: a source removed, with\nits clone, what it put on the shelf and its rows, every copy\ninstalled from it left orphaned; without `yes`, the dry run, which\nsays so and removes nothing.",
             "properties": {
               "source": {
@@ -5579,6 +5600,28 @@
             },
             "required": [
               "type"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "`mindweaver gather rename <from> <to>`: a source called another\nname, each by the name `gather sources` lists it by: what `gather\nlist` and `gather sources` show of it from then on, and what\n`--from` takes for what it supplied.",
+            "properties": {
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              },
+              "type": {
+                "const": "rename_source",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "from",
+              "to"
             ],
             "type": "object"
           },

@@ -108,6 +108,14 @@ impl Admission<'_> {
             // The skill directories, refused as the registry is: a query
             // and a finder's address name nothing on the disk.
             Task::SearchSkills { .. } => {}
+            // A source called another name: a name names nothing on the
+            // disk, but one carrying a credential would carry it to the
+            // preview, the stream and the transcript before the command
+            // refused it.
+            Task::RenameSource { from, to } => {
+                policy::named(from)?;
+                policy::named(to)?;
+            }
             // A source by its name, which names nothing on the disk: core
             // finds it among those the ledger keeps, gathers it again from
             // where the ledger says it came from, and deletes only the
