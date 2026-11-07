@@ -1210,7 +1210,8 @@ fn a_request_with_a_credential_goes_past_the_cache() {
 }
 
 /// An entry holds what the answer said of itself and nothing of the
-/// request: not its headers, not its URL.
+/// request: not its headers, and not its URL where the answer does not
+/// repeat it.
 #[test]
 fn an_entry_holds_nothing_of_the_request() {
     let folder = TempDir::new().unwrap();
@@ -1234,6 +1235,26 @@ fn an_entry_holds_nothing_of_the_request() {
         assert!(!written.contains(secret), "{secret} in {written}");
     }
     assert!(written.contains("\\\"v1\\\""), "{written}");
+}
+
+/// What the answer says is kept as it said it, a `Link` that repeats the
+/// URL's query included, as a paged API's does: why a key goes in a
+/// header, whose request goes past the cache, never in a query.
+#[test]
+fn an_entry_keeps_a_link_as_the_answer_said_it() {
+    let folder = TempDir::new().unwrap();
+    let clock = Set::at(NOW);
+    let url = "https://catalog.example/v0/servers?key=k3y";
+    let link = r#"<https://catalog.example/v0/servers?key=k3y&page=2>; rel="next""#;
+    let fake = Fake::new().answering(url, Reply::ok("[]").with("Link", link));
+
+    Client::new(&fake)
+        .with_cache(cache(&folder, &clock))
+        .get(&Request::get(url))
+        .unwrap();
+
+    let kept = cache(&folder, &clock).read(url).unwrap().unwrap();
+    assert_eq!(kept.headers.get("link"), Some(link));
 }
 
 /// A page kept with its `Link` is followed from the cache as from the

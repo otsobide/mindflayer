@@ -4327,10 +4327,13 @@ An entry is a file named for its URL's SHA-256: a URL with a query holds
 reach a file name, and a digest is one plain name whatever the URL was.
 The file holds a line of JSON saying its format, when it was kept and the
 answer's `Content-Type`, `ETag`, `Last-Modified` and `Link`, then the body
-as it came. Nothing of the request: not its URL, which may carry a key in
-its query that no rule of text tells from a page number, and not its
-headers, which are what a credential travels in. No other header of the
-answer either, `Set-Cookie` least of all.
+as it came. Nothing of the request: not its headers, which are what a
+credential travels in, and not its URL, but for what the answer says of it,
+as it said it. A `Link` to a listing's next page repeats the URL's query,
+as GitHub's does, and so can a body, and no rule of text tells a key there
+from a page number, so a key goes in a header (`Request::credential`),
+whose request goes past the cache, never in a query. No other header of
+the answer is kept, `Set-Cookie` least of all.
 
 It is written through a temporary file beside it and a rename, so a reader
 finds an entry whole or not at all, and two writers of one entry leave the

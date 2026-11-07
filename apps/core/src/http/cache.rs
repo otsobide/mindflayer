@@ -2,14 +2,17 @@
 //! catalog read again is asked whether it changed rather than sent whole,
 //! and one read recently is not asked at all.
 //!
-//! An entry a file, named for its URL's SHA-256: a URL with a query holds
+//! An entry is a file named for its URL's SHA-256: a URL with a query holds
 //! `?`, `&`, `/` and `..` in any order and at any length, none of which
 //! may reach a file name, and a digest is one plain name of one length
-//! whatever the URL was. The file says nothing of the URL, which may carry
-//! a key in its query no rule of text can tell from a page number, and
-//! nothing of the request, whose headers are the ones a credential travels
-//! in: only what an answer said of itself, and only the headers a later
-//! read needs.
+//! whatever the URL was. The file keeps nothing of the request, whose
+//! headers are the ones a credential travels in, and nothing of its URL but
+//! what the answer says of it: only what an answer said of itself, as it
+//! said it, and only the headers a later read needs. A `Link` to a
+//! listing's next page repeats the URL's query, as GitHub's does, and so
+//! can a body, and no rule of text tells a key there from a page number: a
+//! key goes in a header ([`Request::credential`]), whose request goes past
+//! the cache, never in a query.
 //!
 //! Read leniently, as a cache can be: an entry that cannot be read, or that
 //! another build wrote in a format of its own, is a miss and said

@@ -1290,9 +1290,11 @@ These are easy to break from a single file without noticing.
   (`Request::credential`) and never in a URL, only to the origin the
   request named, a next page's included. Every URL an `HttpError` says is a
   `Redacted`, a header by its name alone. The cache in
-  `.mindweaver/cache/http` keeps no request's URL or headers, takes no
-  answer to a request with a credential, and no source is given its folder
-  (`LedgerStore::source_for`, `gather::own_folder`).
+  `.mindweaver/cache/http` keeps no request's headers, nor its URL but
+  where the answer repeats it (a next page's `Link`), so a key goes in a
+  header and never a query; it takes no answer to a request with a
+  credential, and no source is given its folder (`LedgerStore::source_for`,
+  `gather::own_folder`).
 - **Formats are versioned.** Each marker carries its own `version`
   (`MIND_FORMAT_VERSION` for a project's, `WEAVER_FORMAT_VERSION` for
   `weaver.toml`, so bumping one never makes older builds refuse the other)
