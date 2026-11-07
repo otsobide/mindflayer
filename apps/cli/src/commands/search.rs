@@ -34,7 +34,8 @@ pub(crate) struct Asked<'a> {
     pub query: &'a str,
     pub finders: &'a [Finder],
     pub token_env: Option<&'a str>,
-    pub at: &'a [(Finder, String)],
+    /// Each `FINDER=URL` as `--finder-url` took it, which core reads.
+    pub at: &'a [String],
 }
 
 /// Run `gather search`.
@@ -162,13 +163,18 @@ fn search(
     asked: &Asked<'_>,
     token: Option<Token>,
 ) -> Result<Found, Failure> {
-    let finders = enabled.asked(asked.finders).map_err(CliError::from)?;
-    let client: Client<'_> = client(http, workspace);
-    let search = asked
+    let at = asked
         .at
         .iter()
+        .map(|at| finder::located(at))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(CliError::from)?;
+    let finders = enabled.asked(asked.finders).map_err(CliError::from)?;
+    let client: Client<'_> = client(http, workspace);
+    let search = at
+        .into_iter()
         .fold(Search::new(&client), |search, (finder, base)| {
-            search.at(*finder, base.clone())
+            search.at(finder, base)
         })
         .with_token(token);
     search

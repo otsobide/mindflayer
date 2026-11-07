@@ -124,6 +124,17 @@ impl Serialize for Finder {
     }
 }
 
+/// `FINDER=URL`, a finder by its name and the address it is asked at
+/// instead of its own, split at the first `=`, which no finder's name
+/// holds: what `--finder-url` takes, and a front end's line carries.
+pub fn located(text: &str) -> Result<(Finder, String), SearchError> {
+    text.split_once('=')
+        .and_then(|(name, url)| Some((Finder::named(name)?, url.to_owned())))
+        .ok_or_else(|| SearchError::Unlocated {
+            given: Redacted::new(text),
+        })
+}
+
 /// The finders a workspace's marker lists, and what it lists that is none.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Enabled {
@@ -210,6 +221,12 @@ pub enum SearchError {
         .config.display()
     )]
     NoneEnabled { config: PathBuf },
+    /// A finder's address that names no finder ([`located`]).
+    #[error(
+        "`{given}` is no finder's address: give a finder's name (github, skills.sh, \
+         claude-plugins.dev), `=` and the address it is asked at"
+    )]
+    Unlocated { given: Redacted },
     /// `--take` naming a result the search did not list.
     #[error("there is no result {asked} to take: {}", results(*found))]
     NoSuchResult { asked: usize, found: usize },
@@ -224,6 +241,7 @@ pub enum SearchError {
 codes!(SearchError {
     Self::Empty => "search_query_empty",
     Self::NoSuchResult { .. } => "search_result_missing",
+    Self::Unlocated { .. } => "finder_url_invalid",
     Self::NoneEnabled { .. } => "finder_none_enabled",
     Self::NotEnabled { .. } => "finder_not_enabled",
 });

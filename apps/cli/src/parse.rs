@@ -1678,8 +1678,12 @@ pub enum GatherCommand {
 
         /// Ask a finder at another address that speaks the same API, over
         /// https or http on this machine: `github=https://ghe.example/api/v3`.
-        #[arg(long = "finder-url", value_name = "FINDER=URL", value_parser = finder_at)]
-        at: Vec<(Finder, String)>,
+        //
+        // Taken as text and read by core (`finder::located`), rather than
+        // by a parser of clap's: whether it names a finder is core's to
+        // say, with a code, as the panel would be told it.
+        #[arg(long = "finder-url", value_name = "FINDER=URL")]
+        at: Vec<String>,
 
         /// Gather the result listed N, from its repository and its folder
         /// in it, as `gather git` would, instead of listing them.
@@ -1806,18 +1810,6 @@ fn shells() -> impl TypedValueParser<Value = Shell> {
 fn finders() -> impl TypedValueParser<Value = Finder> {
     PossibleValuesParser::new(Finder::ALL.map(Finder::name))
         .map(|name| Finder::named(&name).expect("every listed finder is one"))
-}
-
-/// `FINDER=URL`, what `--finder-url` takes: a finder of core's list, by its
-/// name, and the address it is asked at, split at the first `=`, which no
-/// finder's name holds.
-fn finder_at(text: &str) -> Result<(Finder, String), String> {
-    let names = Finder::ALL.map(Finder::name).join(", ");
-    let (name, url) = text
-        .split_once('=')
-        .ok_or_else(|| format!("give it as a finder's name, `=` and its address ({names})"))?;
-    let finder = Finder::named(name).ok_or_else(|| format!("`{name}` is no finder: {names}"))?;
-    Ok((finder, url.to_owned()))
 }
 
 /// What `--agents` takes, each from core's list, for the reason `--shell`

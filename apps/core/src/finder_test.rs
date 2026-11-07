@@ -307,3 +307,21 @@ fn a_result_is_taken_by_its_number_from_one() {
         );
     }
 }
+
+/// `FINDER=URL` is a finder by its name and the address after the first
+/// `=`; anything else names none, said without the credential it carried.
+#[test]
+fn a_finder_s_address_is_its_name_and_what_follows_the_first_equals() {
+    assert_eq!(
+        located("github=https://ghe.example/api/v3?a=b").unwrap(),
+        (
+            Finder::Github,
+            String::from("https://ghe.example/api/v3?a=b")
+        )
+    );
+    for given in ["skillsmp=https://x.example", "https://x.example", "github"] {
+        assert_eq!(located(given).unwrap_err().code(), "finder_url_invalid");
+    }
+    let refused = located("https://me:hunter2@x.example").unwrap_err();
+    assert!(!refused.to_string().contains("hunter2"), "{refused}");
+}

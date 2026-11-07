@@ -298,30 +298,32 @@ fn an_empty_query_is_refused() {
     assert!(finders.skills_sh.asked().is_empty());
 }
 
-/// `--finder` and `--finder-url` take a finder by its name alone.
+/// `--finder` and `--finder-url` take a finder by its name alone: the
+/// first refused by the parser, the second by core, with its code, and
+/// nothing asked; and an address with a credential in it is not repeated.
 #[test]
 fn a_finder_is_named_by_one_of_core_s_names() {
-    let dir = TempDir::new().unwrap();
-    for args in [
-        &["gather", "search", "pdf", "--finder", "skillsmp"][..],
-        &[
-            "gather",
-            "search",
-            "pdf",
-            "--finder-url",
-            "skillsmp=https://x.example",
-        ][..],
-        &[
-            "gather",
-            "search",
-            "pdf",
-            "--finder-url",
-            "https://x.example",
-        ][..],
-    ] {
-        let line = common::line("mindweaver", args, dir.path());
-        assert!(WeaverCli::try_parse_from(&line).is_err(), "{args:?}");
+    let dir = workspace(&["skills.sh"]);
+    let finders = Finders::start();
+    let line = common::line(
+        "mindweaver",
+        &["gather", "search", "pdf", "--finder", "skillsmp"],
+        dir.path(),
+    );
+    assert!(WeaverCli::try_parse_from(&line).is_err());
+
+    for at in ["skillsmp=https://x.example", "https://me:hunter2@x.example"] {
+        let refused =
+            weaver(dir.path(), &["gather", "search", "pdf", "--finder-url", at]).unwrap_err();
+
+        assert_eq!(refused.error.code(), "finder_url_invalid", "{at}");
+        assert!(
+            !refused.error.to_string().contains("hunter2"),
+            "{}",
+            refused.error
+        );
     }
+    assert!(finders.skills_sh.asked().is_empty());
 }
 
 // ---------------------------------------------------------------------------

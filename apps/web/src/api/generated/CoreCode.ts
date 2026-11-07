@@ -186,6 +186,7 @@ export type CoreCode =
   | "finder_result_dropped"
   | "search_query_empty"
   | "search_result_missing"
+  | "finder_url_invalid"
   | "finder_none_enabled"
   | "finder_not_enabled"
   | "finder_unknown"
