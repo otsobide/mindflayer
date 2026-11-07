@@ -2,7 +2,8 @@
 //! `skills` CLI reads it today, so unstable. Each skill comes with the
 //! repository it is in, as GitHub's `owner/repo`, and how many times it was
 //! installed; not the folder it is in, so it is gathered from the
-//! repository's root, which finds it wherever the common layouts keep it.
+//! repository's root, which finds it wherever the common layouts keep it,
+//! and brings every other skill the repository holds with it.
 
 use serde::Deserialize;
 

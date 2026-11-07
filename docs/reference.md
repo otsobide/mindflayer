@@ -1291,7 +1291,11 @@ the line it amounts to, `taking result 3, pdf: mindweaver gather git --path
 skills/pdf --ref main https://github.com/acme/skills`, then what that gather
 says. The number is the result's as the search lists it now, so a finder
 that answers differently can move it; a number it does not list is refused,
-and nothing is gathered. `--finder-url skills.sh=https://skills.example`
+and nothing is gathered. A result listed at `.`, at the root or where its
+finder does not say its folder, as skills.sh never does, is gathered from
+the repository's root, and brings every skill the repository holds onto the
+shelf, not only the one the search found. `--finder-url
+skills.sh=https://skills.example`
 asks a finder at another address that speaks its API, over https, or http
 on this machine, such as a GitHub Enterprise server's
 (`github=https://ghe.example/api/v3`). Directories that need a key of their

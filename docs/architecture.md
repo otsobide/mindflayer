@@ -4748,8 +4748,12 @@ first the `gather git` line it amounts to, spelled by the task module
 (`Task::Gather`), so it can be read, or run again, without searching. The
 number is the result's as this search lists it, so a finder that answers
 differently can move it; one it does not list is refused
-(`search_result_missing`) before anything is written. A front end with no
-terminal runs neither, as it runs no gather (`Refusal::Unwatched`).
+(`search_result_missing`) before anything is written. A result with no
+folder is gathered from the repository's root, as `gather git` with no
+`--path` gathers it, every skill the repository holds with it: skills.sh
+names a skill's repository and never its folder, so what it found is not
+told from the rest there (an [open question](#open-questions)). A front end
+with no terminal runs neither, as it runs no gather (`Refusal::Unwatched`).
 
 A search made once is read again from the answers the cache kept of it
 (`finder::kept`), as a registry's is: the same finders, through a client
@@ -6869,7 +6873,8 @@ registry search is read ([a registry search from the
 shelf](#a-registry-search-from-the-shelf)). Each result is listed by its
 number, name, repository, folder and finders, and enter on one runs the
 `gather git` line that names it exactly, its repository, its folder after
-`--path` and the branch a finder named after `--ref` (`Task::Gather`), the
+`--path`, none for a result with no folder, which is gathered from the root,
+and the branch a finder named after `--ref` (`Task::Gather`), the
 line `gather search --take` says it amounts to, apart, as any gather runs,
 cancellable as one is, and kept in the transcript. The line it runs names
 the result rather than its number: `gather search --take N` would search
@@ -12979,7 +12984,9 @@ asked only with a token `--token-env` names, sent to its origin alone and
 kept nowhere, and the other two marked unstable and read best-effort; a
 finder's failure, a changed shape or a rate limit a warning beside the
 rest; and a result taken (`--take`, the TUI's `enter`) gathered from its
-repository's folder as `gather git --path` gathers it. Nothing in the
+repository's folder as `gather git --path` gathers it, or from its root,
+every skill there with it, where the finder names no folder, as skills.sh
+names none. Nothing in the
 repository lists the two unstable ones, its examples and fixtures included:
 listing them is for whoever has read those services' terms.
 
@@ -13389,6 +13396,12 @@ it once as it closes.
   record once the terms are read. An answer in another shape fails that
   finder alone, with a warning, so the cost of being wrong is a search
   that says so.
+- **A skills.sh result is its whole repository.** skills.sh names the
+  repository a skill is in, and not its folder, so taking one of its
+  results gathers the repository from its root, every skill it holds with
+  it ([the skill directories](#the-skill-directories)). Gathering the one
+  skill found waits for skills.sh to say where it is, or for a gather that
+  takes one skill of a repository by its name.
 - **GitHub's code search in the TUI.** The TUI's search sends no token,
   since what a token unlocked is never kept and so could not be read back
   ([a skill search from the shelf](#a-skill-search-from-the-shelf));

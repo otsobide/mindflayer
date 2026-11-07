@@ -372,8 +372,10 @@ the rest.
 lists what they find for `pdf`, and lists each skill by its name, its
 repository and folder, its installs or stars, and the directories that found
 it; `--take 2` gathers the second, from its repository's folder, as `gather
-git --path` would. A directory only helps find a skill: what is taken comes
-from git, so one that changes or goes away breaks nothing on the shelf.
+git --path` would. skills.sh names no folder, so one of its results is
+gathered from the repository's root, with every skill the repository holds.
+A directory only helps find a skill: what is taken comes from git, so one
+that changes or goes away breaks nothing on the shelf.
 
 Each directory is off until `weaver.toml` lists it, and one not listed is
 never asked:
