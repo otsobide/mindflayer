@@ -454,7 +454,10 @@ fn first(kind: Kind) -> String {
         Kind::Skill => {
             "`mindweaver gather git <url>`, `mindweaver load <path>` or `mindweaver add skill`"
         }
-        Kind::Rule => "`mindweaver load <path>` or `mindweaver add rule`",
+        Kind::Rule => {
+            "`mindweaver gather git <url> --kind rule`, `mindweaver load <path>` or \
+             `mindweaver add rule`"
+        }
         Kind::Mcp => {
             "`mindweaver load <path>`, or a definition written into the workspace's library,"
         }

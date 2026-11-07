@@ -1204,17 +1204,23 @@ fn a_project_offered_no_rules_is_told_where_rules_come_from() {
 
     // Wrapped where the column ends.
     assert!(
-        drawn.contains("no rules to install: none of the workspace's own, and none"),
+        drawn.contains("no rules to install: none on the shelf, none of the workspace's"),
         "{drawn}"
     );
     assert!(
-        drawn.contains("loaded; `mindweaver load <path>` or `mindweaver add rule` first"),
+        drawn.contains("own, and none loaded; `mindweaver gather git <url> --kind rule`,"),
+        "{drawn}"
+    );
+    assert!(
+        drawn.contains("`mindweaver load <path>` or `mindweaver add rule` first"),
         "{drawn}"
     );
     assert_eq!(screen.focus, Focus::Projects);
     assert_eq!(
         screen.message.as_deref(),
-        Some("no rules to install: none of the workspace's own, and none loaded")
+        Some(
+            "no rules to install: none on the shelf, none of the workspace's own, and none loaded"
+        )
     );
 }
 
@@ -1546,9 +1552,16 @@ fn turned_round_with_nothing_offered_says_where_it_comes_from() {
     assert_eq!(screen.focus, Focus::Artifacts, "nothing to go into");
     assert_eq!(
         screen.message.as_deref(),
-        Some("no rules to install: none of the workspace's own, and none loaded")
+        Some(
+            "no rules to install: none on the shelf, none of the workspace's own, and none loaded"
+        )
     );
-    assert!(rendered(&screen).contains("`mindweaver add rule` first"));
+    let drawn = rendered(&screen);
+    assert!(
+        drawn.contains("`mindweaver gather git <url> --kind rule`,"),
+        "{drawn}"
+    );
+    assert!(drawn.contains("rule` first"), "{drawn}");
 }
 
 /// A workspace linking `collapse`, its library holding the server `github`,

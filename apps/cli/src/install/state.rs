@@ -713,15 +713,18 @@ impl Screen {
 }
 
 /// What to say for a project offered nothing of `kind`, though it could take
-/// it: where that kind comes from. A rule is never gathered, so the shelf
-/// is not where to look for one.
+/// it: where that kind comes from. An MCP server is never on the shelf,
+/// `gather mcp add` writing one into the library, so the shelf is not where
+/// to look for one.
 pub fn nothing(kind: Kind) -> &'static str {
     // Matched on the kind, so a third one has to say where it comes from.
     match kind {
         Kind::Skill => {
             "nothing on the shelf to install, and nothing loaded or of the workspace's own"
         }
-        Kind::Rule => "no rules to install: none of the workspace's own, and none loaded",
+        Kind::Rule => {
+            "no rules to install: none on the shelf, none of the workspace's own, and none loaded"
+        }
         Kind::Mcp => "no MCP servers to install: none of the workspace's own, and none loaded",
     }
 }
