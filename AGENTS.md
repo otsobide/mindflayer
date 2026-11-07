@@ -350,6 +350,10 @@ under `apps/` with its own `Makefile`:
   cookie and Bearer checks, `src/guard.rs` the Host, Origin and Fetch
   Metadata checks and the CSP, `src/api.rs` the JSON endpoints,
   `src/writer.rs` the thread every run and every switch goes through,
+  with the run under way a cancel reaches beside it and what waits behind
+  it, `src/running.rs` what a backend is handed of each run (`Running`),
+  where it says how far the run got (`Progress`) and what a cancel calls,
+  and what a cancel taken answers (`Cancelling`),
   `src/transcript.rs` what
   the session ran, `src/events.rs` the bus `/api/v1/events` streams,
   `src/watcher.rs` what watches the paths the backend names and tells the
@@ -357,7 +361,8 @@ under `apps/` with its own `Makefile`:
   request and for each job the writer takes, with how long it took,
   `src/panel.rs` the embedded panel (`apps/web/dist`), and under its
   `schema` feature `src/schema.rs` the roots of the API's schemas it gives
-  of its own (`Preview`, `Ran`, `Event`, `Refused`) and its part of the
+  of its own (`Preview`, `Ran`, `Cancelling`, `Event`, `Refused`) and its
+  part of the
   API's OpenAPI document, what is HTTP of each route of both tables
   (`paths`), each type a route names asked of the front end (`Describe`,
   `Carried`, `Way`).
@@ -559,7 +564,11 @@ These are easy to break from a single file without noticing.
   box's plan applied with `batchOf`), through the same runner. A gather's lines run on a
   thread of their own (`Task::runs_apart`), and so do a source's gathered
   again from the shelf's page (`Task::UpdateSource`), still through the same parsers:
-  the thread changes where they run, not what they are. The install screen applies the same way, in the TUI or
+  the thread changes where they run, not what they are. The panel's
+  backend runs them on the writer thread as any run, one at a time, with
+  one `gather::Watch` whose steps go to the server's `Running`
+  (`progress::carried`) and whose flag, for a task that takes a cancel
+  (`Task::cancellable`), the server's cancel sets (`Running::cancelled_by`). The install screen applies the same way, in the TUI or
   opened by `mindweaver install` (`install::apply`): its marks are the
   `mindweaver install` and `mindweaver uninstall` lines they amount to
   (`Screen::task`), as core plans them (`install::Plan::of`), each change
@@ -613,7 +622,9 @@ These are easy to break from a single file without noticing.
   it.
 - **A gather is watched, and stops only before it places.** Its `Request`
   carries a `gather::Watch`, core's progress callback and cancel flag; no gix
-  type reaches a front end. A cancel is honoured until the shelf starts to
+  type reaches a front end, and the panel's server streams each step as
+  `progress` and takes `POST /api/v1/commands/cancel` through the run's
+  `Running`, never through a type of core's. A cancel is honoured until the shelf starts to
   change, and leaves the shelf and the ledger as they were, so a write to
   either before that last check is undone on a cancel, as registering the
   source is, and naming it.
@@ -1152,7 +1163,11 @@ These are easy to break from a single file without noticing.
     wildcard: a project or a loaded workspace by its entry as the marker
     spells it, which the backend turns into the absolute folder it resolves
     to for the line's one `-C` or `-p` (and each project a plan's boxes
-    name, held to it by `Admission::selection` before core plans), and a
+    name, held to it by `Admission::selection` before core plans), a
+    source a gather or a marketplace names by its address, one on this
+    machine held as a folder to link is, a `file://` URL refused as a URL
+    and a credential with the gather's own code before any line is built
+    (`policy::gathered`), and a
     folder not linked yet, or one
     a scan is to look under or the explorer is to list, by an absolute,
     normalized path outside every `.mindweaver`, verbatim, each folder a
@@ -1558,7 +1573,14 @@ These are easy to break from a single file without noticing.
   can say it may make: once it is taken, the watcher asks for the paths
   again and drops those no longer named (`Watcher::again`) before every
   subscriber is told `switched`, and nothing of it is kept in the
-  transcript. Which paths it watches is core's
+  transcript. One run at a time, a gather too, each run or switch sent
+  while one runs told `busy` behind it. A run is handed its `Running`, the
+  server's, where its backend says each step (`Progress`, `progress` on
+  the stream) and what a cancel calls, which `POST
+  /api/v1/commands/cancel` calls beside the queue, refused with a 409 and
+  a code of the server's when nothing runs, the run handed none over or
+  its last step says one comes too late: what the backend said, read as
+  told, never a rule of the server's. Which paths it watches is core's
   (`watch::watched`), handed over by the backend (`watched_paths`), each
   with a scope it carries to the panel unread: the watcher knows files and
   folders, each watched on its own and never a tree, and nothing of which
