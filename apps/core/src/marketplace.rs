@@ -1571,19 +1571,10 @@ fn inside(
     let holds = holdings(entry, &clone.root.join(&folder), &clone.root, dialect);
     let mcp_files = Holding::mcp_files_at(&clone.root.join(&folder));
     let placed = (|| {
-        let checked = gather::refused(&request)?;
+        gather::refused(&request)?;
         let new = ledger.child(parent.id, &entry.name)?.is_none();
         let source = ledger.child_for(parent, &entry.name, url, reference, &folder)?;
-        let placed = gather::place(
-            workspace,
-            ledger,
-            &request,
-            url,
-            &source,
-            checked.manifest,
-            None,
-            clone,
-        );
+        let placed = gather::place(workspace, ledger, &request, url, &source, None, clone);
         if new && matches!(placed, Err(GatherError::Cancelled)) {
             ledger.forget_source(source.id)?;
         }
@@ -1653,7 +1644,6 @@ fn apart(
                         &request,
                         &url,
                         &source,
-                        checked.manifest,
                         checked.pinned.as_ref(),
                         &clone,
                     )

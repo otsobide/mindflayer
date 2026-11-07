@@ -686,12 +686,7 @@ pub fn preview(
     ledger: &Ledger,
     request: &Request,
 ) -> Result<Preview, GatherError> {
-    let (
-        Checked {
-            pinned, manifest, ..
-        },
-        _,
-    ) = checked(ledger, request)?;
+    let (Checked { pinned, .. }, _) = checked(ledger, request)?;
     let url = fetched(request.source.url());
     let made: Vec<PathBuf> = [workspace.weaver_dir(), workspace.cache_dir()]
         .into_iter()
@@ -704,7 +699,7 @@ pub fn preview(
             source,
         })
         .map_err(GatherError::from)
-        .and_then(|run| look(request, &url, manifest, pinned.as_ref(), &run.folder));
+        .and_then(|run| look(request, &url, pinned.as_ref(), &run.folder));
     // Only while each is empty, so nothing another command put there since
     // goes with it.
     for folder in made.iter().rev() {
@@ -727,11 +722,11 @@ pub fn preview(
 fn look(
     request: &Request,
     url: &str,
-    manifest: &str,
     pin: Option<&Revision>,
     into: &Path,
 ) -> Result<Preview, GatherError> {
     let watch = &request.watch;
+    let manifest = manifest_of(request.kind)?;
     let clone = fetch(request, url, pin, &into.join("clone"))?;
     let mut failures = Vec::new();
     let Offered { taken, .. } = offered(&clone.root, request, url, manifest, &mut failures)?;
@@ -970,11 +965,10 @@ codes!(ScrubFailure => "clone_unscrubbed");
 
 /// What a request is refused for before anything is registered or
 /// fetched, and what it is when it is not: the name it gives its source,
-/// the commit it is pinned to, and the manifest a folder of its kind holds.
+/// and the commit it is pinned to.
 pub(crate) struct Checked {
     pub(crate) name: Option<SourceName>,
     pub(crate) pinned: Option<Revision>,
-    pub(crate) manifest: &'static str,
 }
 
 /// Hold `request` to what a gather refuses before it registers or fetches
@@ -1084,20 +1078,23 @@ pub(crate) fn refused(request: &Request) -> Result<Checked, GatherError> {
         Kind::Skill => {}
         Kind::Rule | Kind::Mcp => return Err(GatherError::NotGatherable { kind: request.kind }),
     }
-    let Layout::Directory { manifest } = request.kind.layout() else {
-        return Err(GatherError::NotGatherable { kind: request.kind });
-    };
 
     // Before the source is registered, so a gather cancelled before it began
     // has nothing to undo.
     if request.watch.is_cancelled() {
         return Err(GatherError::Cancelled);
     }
-    Ok(Checked {
-        name,
-        pinned,
-        manifest,
-    })
+    Ok(Checked { name, pinned })
+}
+
+/// The manifest a folder of `kind` holds, which a gather looks for: a
+/// skill's `SKILL.md`. Refused for a kind kept another way, which no gather
+/// takes ([`refused`]).
+fn manifest_of(kind: Kind) -> Result<&'static str, GatherError> {
+    match kind.layout() {
+        Layout::Directory { manifest } => Ok(manifest),
+        Layout::Files { .. } | Layout::Flat { .. } => Err(GatherError::NotGatherable { kind }),
+    }
 }
 
 /// Whether `subdirectory`, a folder of a repository as somebody typed it
@@ -1118,14 +1115,7 @@ fn harvest(
     ledger: &Ledger,
     request: &Request,
 ) -> Result<Report, GatherError> {
-    let (
-        Checked {
-            name,
-            pinned,
-            manifest,
-        },
-        found,
-    ) = checked(ledger, request)?;
+    let (Checked { name, pinned }, found) = checked(ledger, request)?;
     let url = fetched(request.source.url());
     let new = found.is_none();
     let mut source = ledger.source_for(
@@ -1141,15 +1131,7 @@ fn harvest(
         source.name = name;
     }
 
-    let outcome = take(
-        workspace,
-        ledger,
-        request,
-        &url,
-        &source,
-        manifest,
-        pinned.as_ref(),
-    );
+    let outcome = take(workspace, ledger, request, &url, &source, pinned.as_ref());
     if !new && source.name != was && matches!(outcome, Err(GatherError::Cancelled)) {
         // Called what it was again, as a cancel leaves the ledger.
         ledger.rename_source(source.id, &was)?;
@@ -1185,15 +1167,12 @@ fn take(
     request: &Request,
     url: &str,
     source: &ledger::Source,
-    manifest: &str,
     pin: Option<&Revision>,
 ) -> Result<Report, GatherError> {
     sweep_dry_runs(&workspace.cache_dir());
     let cache = workspace.cache_dir().join(own_folder(source)?);
     let clone = fetch(request, url, pin, &cache)?;
-    place(
-        workspace, ledger, request, url, source, manifest, pin, &clone,
-    )
+    place(workspace, ledger, request, url, source, pin, &clone)
 }
 
 /// The folder name the ledger records for `source`, which its clone is a
@@ -1248,18 +1227,17 @@ pub(crate) fn fetch(
 /// `request` searches it, and put that on the shelf of `source`, which is
 /// registered: what a gather does once it has a clone, whichever fetched
 /// it.
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn place(
     workspace: &WeaverWorkspace,
     ledger: &Ledger,
     request: &Request,
     url: &str,
     source: &ledger::Source,
-    manifest: &str,
     pin: Option<&Revision>,
     clone: &Cloned,
 ) -> Result<Report, GatherError> {
     let watch = &request.watch;
+    let manifest = manifest_of(request.kind)?;
     let shelf = workspace
         .gathered_dir(request.kind)
         .join(own_folder(source)?);
@@ -1595,11 +1573,12 @@ fn offered(
 }
 
 /// Take off the shelf what `source` supplied before (`supplied`) and does
-/// not hold at the commit this gather took, which found skills to file
-/// under the folders `held` there and put what it could take of them on
-/// `shelf`: each said in `report` as removed.
+/// not hold at the commit this gather took, which found artifacts to file
+/// under the names `held` there, a skill's folder or a rule's route, and put
+/// what it could take of them on `shelf`: each said in `report` as removed.
 ///
-/// By its folder, as the shelf files it: one the commit has neither the
+/// By its folder, as the shelf files it, or a rule by its file, the same
+/// way ([`filed_on_shelf`]): one the commit has neither the
 /// folder nor the name of any more goes, its copy and its record, and one
 /// whose folder another name now holds, a skill that renamed itself, loses
 /// its record and keeps the folder, which holds that other name. One taken
@@ -1645,19 +1624,18 @@ fn take_off(
             .iter()
             .any(|(name, _)| *name == gathered.name.as_str());
         let at = workspace.root().join(&gathered.path);
-        let folder = at
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or_default()
-            .to_owned();
+        let folder = filed_on_shelf(gathered.kind, shelf, &at);
         let placed = taken.iter().any(|(_, path)| *path == gathered.path);
         if (again && placed) || (!placed && held.contains(&folder)) {
             continue;
         }
-        let shelved = crate::install::is_folder_name(&folder)
-            && relative(workspace, &shelf.join(&folder)) == gathered.path;
+        let shelved = crate::install::is_installable_name(gathered.kind, &folder)
+            && relative(
+                workspace,
+                &crate::install::copy_at(shelf, gathered.kind, &folder),
+            ) == gathered.path;
         if shelved && !placed {
-            match fs::remove_dir_all(&at) {
+            match take_away(gathered.kind, shelf, &at) {
                 Ok(()) => {}
                 Err(error) if error.kind() == io::ErrorKind::NotFound => {}
                 Err(error) => {
@@ -1675,12 +1653,65 @@ fn take_off(
         ledger.ungathered(source.id, gathered.kind, &gathered.name)?;
         report.removed.push(Harvested {
             name: gathered.name,
-            directory: folder,
+            directory: kept_as(gathered.kind, &folder),
             summary: gathered.summary,
             path: at,
         });
     }
     Ok(())
+}
+
+/// What the shelf filed the artifact of `kind` at `at` under, in a source's
+/// folder `shelf`: a skill's folder's name, and a rule's route from there
+/// without its extension, as a rule's name is its route
+/// ([`crate::catalog::route`]). Empty when it is no folder or file the
+/// shelf names, which no gather writes.
+fn filed_on_shelf(kind: Kind, shelf: &Path, at: &Path) -> String {
+    let filed = match kind.layout() {
+        Layout::Directory { .. } => at
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(str::to_owned),
+        Layout::Files { .. } | Layout::Flat { .. } => crate::catalog::route(shelf, at),
+    };
+    filed.unwrap_or_default()
+}
+
+/// What a report says an artifact of `kind` filed under `filed` is kept as
+/// in its source's folder on the shelf ([`Harvested::directory`]): a
+/// skill's folder, and a rule's file, by its route.
+fn kept_as(kind: Kind, filed: &str) -> String {
+    match kind.layout() {
+        Layout::Directory { .. } => filed.to_owned(),
+        Layout::Files { extension } | Layout::Flat { extension } => {
+            format!("{filed}.{extension}")
+        }
+    }
+}
+
+/// Take the artifact of `kind` at `at` off a source's folder `shelf`: a
+/// skill's folder whole, and a rule's file, with each folder above it its
+/// route made that is left empty, up to `shelf` and not including it.
+///
+/// Through `remove_dir_all` for a folder, which takes a link away rather
+/// than follow it, and `remove_file` for a file, which does the same.
+fn take_away(kind: Kind, shelf: &Path, at: &Path) -> io::Result<()> {
+    match kind.layout() {
+        Layout::Directory { .. } => fs::remove_dir_all(at),
+        Layout::Files { .. } | Layout::Flat { .. } => {
+            fs::remove_file(at)?;
+            let mut folder = at.parent();
+            while let Some(above) =
+                folder.filter(|above| above.starts_with(shelf) && *above != shelf)
+            {
+                if fs::remove_dir(above).is_err() {
+                    break;
+                }
+                folder = above.parent();
+            }
+            Ok(())
+        }
+    }
 }
 
 /// One candidate folder, loaded to learn its name and its summary: the

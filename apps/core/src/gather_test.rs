@@ -1737,3 +1737,49 @@ fn removing_the_folders_of_a_source_that_has_none_is_no_failure() {
 
     assert!(leftovers.is_empty(), "{leftovers:?}");
 }
+
+#[test]
+fn the_shelf_files_a_skill_by_its_folder_and_a_rule_by_its_route() {
+    let shelf = Path::new("/w/.mindweaver/rules/acme-rules");
+
+    assert_eq!(
+        filed_on_shelf(
+            Kind::Skill,
+            Path::new("/w/s/acme/deploy"),
+            &shelf.join("deploy")
+        ),
+        "deploy"
+    );
+    assert_eq!(
+        filed_on_shelf(Kind::Rule, shelf, &shelf.join("git/commits.md")),
+        "git/commits"
+    );
+    assert_eq!(kept_as(Kind::Skill, "deploy"), "deploy");
+    assert_eq!(kept_as(Kind::Rule, "git/commits"), "git/commits.md");
+    // A path no folder of the source's names is filed under nothing.
+    assert_eq!(
+        filed_on_shelf(Kind::Rule, shelf, Path::new("/elsewhere/commits.md")),
+        ""
+    );
+}
+
+#[test]
+fn a_rule_taken_off_the_shelf_takes_the_folders_its_route_made_and_no_more() {
+    let dir = TempDir::new().unwrap();
+    let shelf = dir.path().join("acme-rules");
+    write(&shelf.join("git/commits/style.md"), "x");
+    write(&shelf.join("git/review.md"), "x");
+
+    take_away(Kind::Rule, &shelf, &shelf.join("git/commits/style.md")).unwrap();
+
+    assert!(!shelf.join("git/commits").exists());
+    assert!(
+        shelf.join("git/review.md").is_file(),
+        "a folder holding another stays"
+    );
+
+    take_away(Kind::Rule, &shelf, &shelf.join("git/review.md")).unwrap();
+
+    assert!(!shelf.join("git").exists());
+    assert!(shelf.is_dir(), "the source's own folder stays");
+}

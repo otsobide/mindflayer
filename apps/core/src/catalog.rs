@@ -949,8 +949,10 @@ fn readers(project: &MindProject, kind: Kind, folder: &Path, agents: &[Agent]) -
     readers
 }
 
-/// A file's route below `root`, without its extension, `/` separated.
-fn route(root: &Path, file: &Path) -> Option<String> {
+/// A file's route below `root`, without its extension, `/` separated: the
+/// name a rule is given, inside a project and on a workspace's shelf alike,
+/// and of one a gather finds in a folder of a repository.
+pub(crate) fn route(root: &Path, file: &Path) -> Option<String> {
     let relative = file.strip_prefix(root).ok()?;
     let without_extension = relative.with_extension("");
     paths::to_config_string(&without_extension)
