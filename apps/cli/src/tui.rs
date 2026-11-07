@@ -24,7 +24,9 @@ use std::time::Duration;
 use mindweaver_core::code::Said;
 use mindweaver_core::doctor::Examined;
 use mindweaver_core::gather::{Request, Watch};
+use mindweaver_core::http::Cache;
 use mindweaver_core::marketplace::{self, Plugin};
+use mindweaver_core::registry;
 use mindweaver_core::resolve::{self, resolve, Intent, Resolved};
 use mindweaver_core::status::{EntryStatus, State};
 use mindweaver_core::url::redacted;
@@ -46,7 +48,7 @@ use crate::task::{shell, Refusal, Task};
 use crate::{install, CliError, Failure, Lookup, Outcome};
 use state::{
     App, Choice, Done, Holdings, Item, LoadedSource, Marketplace, Member, Mode, Performed, Plugins,
-    Runner, Running, Scope, Step, Unlinked, Update, View, Workspace,
+    Runner, Running, Scope, Servers, Step, Unlinked, Update, View, Workspace,
 };
 
 /// How long the loop waits for a key before drawing again, so a resize
@@ -273,7 +275,9 @@ fn start(app: &mut App, task: Task) {
 ///
 /// A marketplace's catalog listed goes on to its plugins, read from the
 /// clone the line left, as core reads what it recorded
-/// ([`marketplace::recorded`]): the screen reads, and the line wrote.
+/// ([`marketplace::recorded`]): the screen reads, and the line wrote. A
+/// search of the MCP Registry goes on to what it found, read from what the
+/// line kept in the workspace's cache ([`registry::kept`]), the same way.
 fn conclude(app: &mut App, task: &Task, performed: Performed) {
     let performed = match (task, performed) {
         (
@@ -285,6 +289,11 @@ fn conclude(app: &mut App, task: &Task, performed: Performed) {
             Performed::Ran(dones),
         ) if dones.iter().all(|done| done.error.is_none()) => {
             listed(app.base(), url, folder, reference.as_deref(), dones)
+        }
+        (Task::SearchRegistry { query, registry }, Performed::Ran(dones))
+            if dones.iter().all(|done| done.error.is_none()) =>
+        {
+            found(app.base(), query, registry.as_deref(), dones)
         }
         (_, performed) => performed,
     };
@@ -355,6 +364,42 @@ fn listed(
             Performed::Ran(dones)
         }
     }
+}
+
+/// What the search for `query` of `registry`, the official one when it
+/// names none, found, as its line kept it in the cache of the workspace at
+/// `base`, to pick one from, with what the line warned of: or what the line
+/// said, to read in full, when the cache keeps none of it, as in a
+/// workspace not made yet, which has none.
+fn found(base: &Path, query: &str, registry: Option<&str>, dones: Vec<Done>) -> Performed {
+    let kept = WeaverWorkspace::open(base)
+        .ok()
+        .and_then(|workspace| Cache::of(&workspace))
+        .and_then(|cache| registry::kept(cache, registry.unwrap_or(registry::OFFICIAL), query));
+    let Some(listing) = kept else {
+        return Performed::Ran(dones);
+    };
+    Performed::Servers(Servers {
+        query: query.to_owned(),
+        registry: registry.map(str::to_owned),
+        entries: listing
+            .servers
+            .iter()
+            .map(|server| {
+                (
+                    server.name.clone(),
+                    server.version.clone(),
+                    server
+                        .status
+                        .as_ref()
+                        .map_or_else(String::new, |status| status.slug().to_owned()),
+                    server.description.clone(),
+                )
+            })
+            .collect(),
+        cursor: 0,
+        warnings: dones.iter().flat_map(|done| done.stderr.clone()).collect(),
+    })
 }
 
 /// Where a plugin is, as `gather marketplace --list` says it.

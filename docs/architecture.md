@@ -4594,8 +4594,9 @@ A search made once can be read again from the answers the cache kept of
 it, and from them alone (`registry::kept`): a client whose transport sends
 nothing, told every entry is fresh, so a page the cache does not keep is
 no listing at all rather than a fetch. It is how a front end that ran the
-search as a command line reads what the line found, as the TUI does: the
-line fetched, and the screen reads what it kept, rather than reading
+search as a command line reads what the line found, as the TUI does
+([a registry search from the shelf](#a-registry-search-from-the-shelf)):
+the line fetched, and the screen reads what it kept, rather than reading
 the line's text back or asking the registry again on the thread that
 draws. A workspace not made yet has no cache, so nothing is kept to read.
 
@@ -6621,10 +6622,11 @@ editors.
 ### A gather runs apart
 
 A gather is the network, and with a source gathered again from the
-shelf's page (`Task::UpdateSource`, `gather update`), and a marketplace's
+shelf's page (`Task::UpdateSource`, `gather update`), a marketplace's
 catalog listed or the plugins ticked of it gathered (`Task::ListPlugins`,
-`Task::GatherPlugins`, `gather marketplace`), the one task that runs apart
-(`Task::runs_apart`). `step` starts its lines on a thread of their own and
+`Task::GatherPlugins`, `gather marketplace`), and the MCP Registry searched
+or a server of it written (`Task::SearchRegistry`, `Task::ImportServer`,
+`gather mcp`), the one task that runs apart (`Task::runs_apart`). `step` starts its lines on a thread of their own and
 returns at once, with a [watch](#following-a-gather-and-stopping-it) whose
 steps come back over a channel. Before each frame the loop calls `settle`,
 which takes in the last step and, once the task is over, shows what came of it
@@ -6665,6 +6667,34 @@ left, through core (`marketplace::recorded`), as the install screen is
 read when it opens, and shows each to tick; enter runs `gather marketplace
 --plugin <name>...` with the ticked ones, apart too. The listing is the
 line's; the screen reads what the line wrote, and writes nothing itself.
+
+### A registry search from the shelf
+
+The MCP Registry is searched from the shelf's page too (#107): `r` opens a
+form for what to look for, and enter runs `gather mcp search <query>`
+(`Task::SearchRegistry`), apart, since it is the network. Once it is over,
+`conclude` reads what the search found through core, from the answers its
+line kept in the workspace's cache (`registry::kept`): the line fetched,
+and the screen reads what it kept, as it reads a marketplace's plugins from
+the clone the line left, rather than reading the line's text back or
+asking the registry a second time on the thread that draws. Each server
+found is listed by its name, version, status and description. Enter on one
+runs the dry run of writing it into the library, `gather mcp add --version
+<v> <server>` at the version listed (`Task::ImportServer`), apart too, and
+shows what it says on a page, the command an agent would start or the
+address it would reach and its inputs among it; `y` there runs exactly
+that line with `--yes`, and `esc` goes back to the servers found, having
+written nothing. A workspace not made yet has no cache, and its search is
+shown as the line's text to read, with nothing to pick. Neither line takes
+a cancel, since the client waits for the registry's answer, within its
+limit, and watches for nothing, so the box drawn while one runs says `esc`
+cannot stop it rather than promising a stop (`Task::cancellable`).
+
+Both tasks carry the registry their lines name (`--registry`), none for the
+official one, which is all the form sends: the screen has no option for
+another, and a test names the one it serves on 127.0.0.1, so the whole
+path, the search, what it kept, the dry run and the write, runs offline
+through the lines the screen runs.
 
 ### What it asks before it writes
 

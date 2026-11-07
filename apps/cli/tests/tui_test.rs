@@ -9,7 +9,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use common::*;
-use mindweaver_cli::{GatherCommand, WeaverCommand};
+use mindweaver_cli::{GatherCommand, McpCommand, WeaverCommand};
 use mindweaver_core::{Agent, Share};
 use tui::state::Step as TuiStep;
 
@@ -4523,4 +4523,201 @@ fn a_projects_rows_show_its_mcp_servers_installed_and_somebodys() {
     ] {
         assert!(drawn.contains(row), "{row}\n{drawn}");
     }
+}
+
+/// The `gather mcp` command a task's one line is, read back through the
+/// real parser.
+fn mcp_line(task: &Task) -> McpCommand {
+    match gather_line(task) {
+        GatherCommand::Mcp(command) => command,
+        other => panic!("{:?} is {other:?}", task.commands()),
+    }
+}
+
+/// `r` on the shelf searches the official registry for what is typed, a
+/// line run apart that parses back as `gather mcp search`; nothing typed is
+/// no search. The line is not run here, since it would reach the network.
+#[test]
+fn the_shelf_opens_a_registry_search_whose_line_parses_back() {
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+    let mut app = tui_in(dir.path());
+    press_and_run(&mut app, KeyCode::Char('s'));
+    assert!(tui_drawn(&app).contains("r MCP"));
+
+    press_key(&mut app, KeyCode::Char('r'));
+    assert!(matches!(app.mode, Mode::Searching(_)), "{:?}", app.mode);
+    assert_eq!(press_key(&mut app, KeyCode::Enter), TuiStep::Stay);
+    assert!(tui_drawn(&app).contains("type what to look for"));
+    type_text(&mut app, "weather");
+    let TuiStep::Run(task) = press_key(&mut app, KeyCode::Enter) else {
+        panic!("{:?}", app.mode);
+    };
+
+    assert_eq!(
+        task,
+        Task::SearchRegistry {
+            query: String::from("weather"),
+            registry: None,
+        }
+    );
+    assert!(task.runs_apart() && !task.writes());
+    assert!(matches!(
+        mcp_line(&task),
+        McpCommand::Search { query, registry, json: false }
+            if query == "weather" && registry == mindweaver_core::registry::OFFICIAL
+    ));
+}
+
+/// What the search found is read through core from what its line kept in
+/// the workspace's cache, to pick from; enter on one runs the dry run of
+/// writing it, at the version found, apart, and shows what it would write;
+/// `y` then runs exactly that line with `--yes`, which writes it. Each line
+/// parses back through the real parser, and runs against a registry this
+/// process serves.
+#[test]
+fn a_server_the_search_found_is_shown_as_its_dry_run_and_written_on_yes() {
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+    let registry = FixtureRegistry::start();
+    let mut app = tui_in(dir.path());
+    press_and_run(&mut app, KeyCode::Char('s'));
+    press_key(&mut app, KeyCode::Char('r'));
+
+    tui::step(
+        &mut app,
+        Task::SearchRegistry {
+            query: String::from("acme"),
+            registry: Some(registry.url.clone()),
+        },
+    );
+    tui::wait(&mut app);
+
+    let Mode::Servers(servers) = &app.mode else {
+        panic!("{:?}", app.mode);
+    };
+    let names: Vec<&str> = servers
+        .entries
+        .iter()
+        .map(|(name, _, _, _)| name.as_str())
+        .collect();
+    assert_eq!(
+        names,
+        [
+            "io.github.acme/weather",
+            "io.github.acme/pyweather",
+            "io.github.acme/dotnet-weather",
+            "io.github.acme/weather-docker",
+            "io.github.acme/weather-remote",
+            "io.github.acme/weather-events",
+        ]
+    );
+    assert_eq!(servers.warnings.len(), 1);
+    let drawn = tui_drawn_at(&app, 120, 30);
+    assert!(
+        drawn.contains("What the MCP Registry lists for acme"),
+        "{drawn}"
+    );
+    assert!(
+        drawn.contains("Forecasts and alerts for any city"),
+        "{drawn}"
+    );
+
+    let TuiStep::Run(dry) = press_key(&mut app, KeyCode::Enter) else {
+        panic!("{:?}", app.mode);
+    };
+    assert_eq!(
+        dry,
+        Task::ImportServer {
+            server: String::from("io.github.acme/weather"),
+            version: Some(String::from("1.0.2")),
+            registry: Some(registry.url.clone()),
+            yes: false,
+        }
+    );
+    assert!(dry.runs_apart() && !dry.writes());
+    assert!(matches!(
+        mcp_line(&dry),
+        McpCommand::Add { server, version: Some(version), name: None, registry: url, yes: false }
+            if server == "io.github.acme/weather" && version == "1.0.2" && url == registry.url
+    ));
+    tui::step(&mut app, dry.clone());
+    tui::wait(&mut app);
+
+    let file = own_directory_for(dir.path(), Kind::Mcp).join("weather.toml");
+    let Mode::Importing(importing) = &app.mode else {
+        panic!("{:?}", app.mode);
+    };
+    let said: Vec<&str> = importing
+        .reader
+        .lines
+        .iter()
+        .map(|(_, line)| line.as_str())
+        .collect();
+    assert!(said.contains(&"  command: npx"), "{said:?}");
+    assert!(
+        said.contains(&"nothing written: add --yes to go ahead"),
+        "{said:?}"
+    );
+    assert!(!file.exists());
+    assert!(tui_drawn(&app).contains("y write it into the library"));
+
+    let TuiStep::Run(write) = press_key(&mut app, KeyCode::Char('y')) else {
+        panic!("{:?}", app.mode);
+    };
+    assert_eq!(
+        write,
+        Task::ImportServer {
+            server: String::from("io.github.acme/weather"),
+            version: Some(String::from("1.0.2")),
+            registry: Some(registry.url.clone()),
+            yes: true,
+        }
+    );
+    assert!(write.runs_apart() && write.writes());
+    assert!(matches!(
+        mcp_line(&write),
+        McpCommand::Add { yes: true, .. }
+    ));
+    tui::step(&mut app, write.clone());
+    tui::wait(&mut app);
+
+    assert!(file.is_file());
+    assert!(matches!(app.mode, Mode::Reading(_)), "{:?}", app.mode);
+    assert!(app.transcript().contains(&format!(
+        "$ mindweaver gather mcp add --version 1.0.2 --registry {} --yes io.github.acme/weather\n",
+        registry.url
+    )));
+}
+
+/// No to what the dry run says goes back to the servers found, and writes
+/// nothing.
+#[test]
+fn no_to_the_dry_run_goes_back_to_the_servers_found() {
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+    let registry = FixtureRegistry::start();
+    let mut app = tui_in(dir.path());
+    press_and_run(&mut app, KeyCode::Char('s'));
+    press_key(&mut app, KeyCode::Char('r'));
+    tui::step(
+        &mut app,
+        Task::SearchRegistry {
+            query: String::from("acme"),
+            registry: Some(registry.url.clone()),
+        },
+    );
+    tui::wait(&mut app);
+    press_key(&mut app, KeyCode::Down);
+    press_and_run(&mut app, KeyCode::Enter);
+    assert!(matches!(app.mode, Mode::Importing(_)), "{:?}", app.mode);
+
+    assert_eq!(press_key(&mut app, KeyCode::Esc), TuiStep::Stay);
+
+    let Mode::Servers(servers) = &app.mode else {
+        panic!("{:?}", app.mode);
+    };
+    assert_eq!(servers.cursor, 1);
+    assert!(!own_directory_for(dir.path(), Kind::Mcp).exists());
+    assert_eq!(app.transcript(), "");
 }

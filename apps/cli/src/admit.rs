@@ -72,6 +72,10 @@ impl Admission<'_> {
             // (`Refusal::Unwatched`); what a URL may be is the gather's to
             // say when #112 brings one to the server.
             Task::Gather { .. } | Task::ListPlugins { .. } | Task::GatherPlugins { .. } => {}
+            // The MCP Registry, the network as a gather is, and refused as
+            // one: a server by the name the registry gives it, and a
+            // registry by its URL, name nothing on the disk.
+            Task::SearchRegistry { .. } | Task::ImportServer { .. } => {}
             // A source by its name, which names nothing on the disk: core
             // finds it among those the ledger keeps, and deletes only the
             // folders it records as the source's own. Gathering one again

@@ -490,6 +490,9 @@ pub enum Performed {
     /// A marketplace's catalog listed, what its line said, and the plugins
     /// it lists, to tick.
     Plugins { dones: Vec<Done>, plugins: Plugins },
+    /// The MCP Registry searched, and what the search found, read through
+    /// core from what its line kept, to pick one from.
+    Servers(Servers),
 }
 
 // ---------------------------------------------------------------------------
@@ -570,6 +573,14 @@ pub enum Mode {
     /// A marketplace's plugins, as its catalog lists them, ticked, to
     /// gather in one pass.
     Plugins(Plugins),
+    /// What to look for in the MCP Registry, typed.
+    Searching(SearchForm),
+    /// What a search of the MCP Registry found, to pick one to write into
+    /// the library.
+    Servers(Servers),
+    /// What writing a server into the library would write, as its dry run
+    /// said, until somebody says yes.
+    Importing(Importing),
     /// The install screen, embedded as it is.
     Installing(InstallScreen),
     /// Which minds the workspace manages, ticked, to change in one pass.
@@ -813,6 +824,9 @@ impl App {
             Mode::Reading(reader) => reading(reader, key),
             Mode::Shelf(shelf) => shelving(shelf, key, self.workspace()),
             Mode::Plugins(plugins) => picking(plugins, key),
+            Mode::Searching(form) => searching(form, key),
+            Mode::Servers(servers) => looking(servers, key),
+            Mode::Importing(importing) => importing_keys(importing, key),
             Mode::Installing(screen) => self.installing(screen, key),
             Mode::Minds(screen) => self.in_minds(screen, key),
             Mode::Settings(form) => self.setting(form, key),
@@ -1721,6 +1735,12 @@ impl App {
                 self.mode = Mode::Plugins(plugins);
                 return;
             }
+            // A read, which the transcript keeps nothing of: what was found
+            // is on screen to pick from.
+            Performed::Servers(servers) => {
+                self.mode = Mode::Servers(servers);
+                return;
+            }
             Performed::Ran(dones) => dones,
         };
 
@@ -1744,11 +1764,37 @@ impl App {
                     picked: 0,
                 });
             }
+            // What writing a server would write, said in full, with the
+            // line that writes it once somebody says yes, and the servers
+            // found to go back to otherwise.
+            (
+                Task::ImportServer {
+                    server,
+                    version,
+                    registry,
+                    yes: false,
+                },
+                None,
+            ) => {
+                let back = std::mem::replace(&mut self.mode, Mode::Browse);
+                self.mode = Mode::Importing(Importing {
+                    reader: Reader::of(&dones),
+                    task: Task::ImportServer {
+                        server: server.clone(),
+                        version: version.clone(),
+                        registry: registry.clone(),
+                        yes: true,
+                    },
+                    back: Box::new(back),
+                });
+            }
             // Output worth reading in full, whether or not it went well.
             (
                 Task::Show { .. }
                 | Task::Validate { .. }
                 | Task::Workspaces
+                | Task::SearchRegistry { .. }
+                | Task::ImportServer { .. }
                 | Task::UpdateSource { .. }
                 | Task::RemoveSource { .. }
                 | Task::ApplyInstall { .. }
@@ -2014,11 +2060,15 @@ fn reading(mut reader: Reader, key: KeyEvent) -> (Mode, Step) {
 /// every one gathered again, or removed once somebody says yes, each the
 /// line `gather update` or `gather remove` is; a marketplace's plugins
 /// listed to pick from, the one picked, or one typed, which `gather
-/// marketplace --list` lists; and the page's keys for the rest. Nothing to
-/// pick leaves the first three nothing to do.
+/// marketplace --list` lists; the MCP Registry searched, `gather mcp
+/// search`; and the page's keys for the rest. Nothing to pick leaves the
+/// first three nothing to do.
 fn shelving(mut shelf: Shelf, key: KeyEvent, workspace: Option<&Workspace>) -> (Mode, Step) {
     let count = shelf.sources.len();
     let picked = shelf.sources.get(shelf.picked).cloned();
+    if key.code == KeyCode::Char('r') {
+        return (Mode::Searching(SearchForm::default()), Step::Stay);
+    }
     if key.code == KeyCode::Char('m') {
         let marketplace = workspace.and_then(|workspace| {
             workspace
@@ -2431,6 +2481,132 @@ fn picking(mut plugins: Plugins, key: KeyEvent) -> (Mode, Step) {
     (Mode::Plugins(plugins), Step::Stay)
 }
 
+/// What to look for in the MCP Registry: what `r` on the shelf's page
+/// opens, for `gather mcp search` to list what the registry finds.
+#[derive(Debug, Clone, Default)]
+pub struct SearchForm {
+    pub query: Input,
+    pub error: Option<String>,
+}
+
+impl SearchForm {
+    /// What it would run, if it were submitted now: a search of the
+    /// official registry for what is typed. Nothing while nothing is, since
+    /// a search for nothing lists every server the registry has.
+    pub fn task(&self) -> Option<Task> {
+        let query = self.query.text().trim();
+        (!query.is_empty()).then(|| Task::SearchRegistry {
+            query: query.to_owned(),
+            registry: None,
+        })
+    }
+}
+
+/// The search form's keys: typing, and enter to search, the line run
+/// apart, as a gather's is.
+fn searching(mut form: SearchForm, key: KeyEvent) -> (Mode, Step) {
+    form.error = None;
+    match key.code {
+        KeyCode::Esc => return (Mode::Browse, Step::Stay),
+        KeyCode::Enter => {
+            return match form.task() {
+                Some(task) => (Mode::Searching(form), Step::Run(task)),
+                None => {
+                    form.error = Some(String::from("type what to look for"));
+                    (Mode::Searching(form), Step::Stay)
+                }
+            };
+        }
+        _ => {
+            form.query.press(key);
+        }
+    }
+    (Mode::Searching(form), Step::Stay)
+}
+
+/// What a search of the MCP Registry found, read through core from what
+/// its line kept (`registry::kept`), to pick one to write into the library.
+#[derive(Debug, Clone)]
+pub struct Servers {
+    /// What was looked for.
+    pub query: String,
+    /// The registry it was read from, as the search's line named it: none
+    /// for the official one.
+    pub registry: Option<String>,
+    /// Each server found, in the registry's order: its name, its version,
+    /// its status and what it is for, as `gather mcp search` says them.
+    pub entries: Vec<(String, String, String, String)>,
+    /// Which one the keyboard is on.
+    pub cursor: usize,
+    /// What the search warned of, as its line said it.
+    pub warnings: Vec<String>,
+}
+
+impl Servers {
+    /// What enter runs: the dry run of writing the server the keyboard is
+    /// on into the library, at the version found, which writes nothing and
+    /// says what the write would. None while nothing was found.
+    pub fn task(&self) -> Option<Task> {
+        let (server, version, _, _) = self.entries.get(self.cursor)?;
+        Some(Task::ImportServer {
+            server: server.clone(),
+            version: Some(version.clone()),
+            registry: self.registry.clone(),
+            yes: false,
+        })
+    }
+}
+
+/// The servers found's keys: the cursor moved, and enter to see what the
+/// one it is on would be written as.
+fn looking(mut servers: Servers, key: KeyEvent) -> (Mode, Step) {
+    let count = servers.entries.len();
+    match key.code {
+        KeyCode::Esc | KeyCode::Char('q') => return (Mode::Browse, Step::Stay),
+        KeyCode::Down | KeyCode::Char('j') if count > 0 => {
+            servers.cursor = (servers.cursor + 1) % count;
+        }
+        KeyCode::Up | KeyCode::Char('k') if count > 0 => {
+            servers.cursor = (servers.cursor + count - 1) % count;
+        }
+        KeyCode::Enter => {
+            if let Some(task) = servers.task() {
+                return (Mode::Servers(servers), Step::Run(task));
+            }
+        }
+        _ => {}
+    }
+    (Mode::Servers(servers), Step::Stay)
+}
+
+/// What writing a server into the library would write, as the dry run of
+/// its line said it, read as any page is, and the line with `--yes` that
+/// writes it once somebody says yes.
+#[derive(Debug)]
+pub struct Importing {
+    pub reader: Reader,
+    /// What yes runs: the dry run's line, with `--yes`.
+    pub task: Task,
+    /// Where any answer goes back to: the servers found.
+    pub back: Box<Mode>,
+}
+
+/// The dry run's page's keys: yes writes it, no or esc goes back to the
+/// servers found, and the page's keys scroll.
+fn importing_keys(mut importing: Importing, key: KeyEvent) -> (Mode, Step) {
+    match key.code {
+        KeyCode::Char('y') => (*importing.back, Step::Run(importing.task)),
+        KeyCode::Char('n') | KeyCode::Char('q') | KeyCode::Esc => (*importing.back, Step::Stay),
+        _ => match reading(importing.reader, key) {
+            (Mode::Reading(reader), step) => {
+                importing.reader = reader;
+                (Mode::Importing(importing), step)
+            }
+            closed => closed,
+        },
+    }
+}
+
 /// A project's agents and share mode, toggled: what `t` opens.
 #[derive(Debug, Clone)]
 pub struct SettingsForm {
@@ -2672,7 +2848,7 @@ impl Reader {
 
     /// Every key, and the command it runs.
     pub fn help() -> Self {
-        let rows: [(&str, &str, &[&str]); 23] = [
+        let rows: [(&str, &str, &[&str]); 24] = [
             (
                 "a",
                 "add a skill or a rule",
@@ -2782,6 +2958,16 @@ impl Reader {
                 &[
                     "mindweaver gather marketplace --list <url>",
                     "mindweaver gather marketplace --plugin <name>... <url>",
+                ],
+            ),
+            (
+                "s r",
+                "search the MCP Registry: enter on a server says what it would be written as, and \
+                 y writes it into the library",
+                &[
+                    "mindweaver gather mcp search <query>",
+                    "mindweaver gather mcp add --version <v> <server>",
+                    "mindweaver gather mcp add --version <v> --yes <server>, with y",
                 ],
             ),
             (

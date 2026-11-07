@@ -649,6 +649,64 @@
       ]
     },
     {
+      "description": "`mindweaver gather mcp search [--registry <url>] <query>`: the\nservers the MCP Registry finds for `query` listed, the official\nregistry's unless `registry` names another, for one to pick from\n(#107).",
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string"
+        },
+        "registry": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "type": {
+          "type": "string",
+          "const": "search_registry"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "query"
+      ]
+    },
+    {
+      "description": "`mindweaver gather mcp add [--version <v>] [--registry <url>]\n[--yes] <server>`: the server the MCP Registry gives that name\nwritten into the library, at `version` or its latest; without\n`yes`, the dry run, which says what it would write, the command an\nagent would start among it, and writes nothing.",
+      "type": "object",
+      "properties": {
+        "registry": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "server": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "import_server"
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "yes": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "server",
+        "yes"
+      ]
+    },
+    {
       "description": "`… targets set --yes <kind> <dir>...`, or `… targets reset --yes\n<kind>` when no folder is named: what the targets form amounts to.",
       "type": "object",
       "properties": {

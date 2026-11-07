@@ -12,7 +12,7 @@ use crate::{Cli, WeaverCli};
 /// Every task's name in JSON, as a front end sends it: a contract, pinned
 /// here word for word, so renaming a variant fails a test rather than every
 /// front end that sends the old name.
-const TAGS: [&str; 40] = [
+const TAGS: [&str; 42] = [
     "init_workspace",
     "init_project",
     "link",
@@ -41,6 +41,8 @@ const TAGS: [&str; 40] = [
     "remove_source",
     "list_plugins",
     "gather_plugins",
+    "search_registry",
+    "import_server",
     "targets",
     "settings",
     "toggled",
@@ -168,6 +170,26 @@ fn every(value: &str) -> Vec<Task> {
             folder: String::from(DEFAULT_SUBDIRECTORY),
             reference: None,
             plugins: vec![owned()],
+        },
+        Task::SearchRegistry {
+            query: owned(),
+            registry: Some(owned()),
+        },
+        Task::SearchRegistry {
+            query: owned(),
+            registry: None,
+        },
+        Task::ImportServer {
+            server: owned(),
+            version: Some(owned()),
+            registry: Some(owned()),
+            yes: false,
+        },
+        Task::ImportServer {
+            server: owned(),
+            version: None,
+            registry: None,
+            yes: true,
         },
         Task::Install {
             projects: vec![owned(), String::from("plain")],
@@ -1137,6 +1159,20 @@ fn holding(read: &Read, value: &str) -> Read {
         .collect()
 }
 
+/// What runs apart takes a cancel when it is a gather, which watches for
+/// one, and none when it is the registry's, whose client watches for none.
+#[test]
+fn a_task_running_apart_is_cancellable_only_when_it_gathers() {
+    for task in every("plain").iter().filter(|task| task.runs_apart()) {
+        let registry = matches!(
+            task,
+            Task::SearchRegistry { .. } | Task::ImportServer { .. }
+        );
+        assert_eq!(task.cancellable(), !registry, "{task:?}");
+    }
+    assert!(!Task::Refresh.cancellable());
+}
+
 #[test]
 fn every_variant_s_lines_parse_with_cli_or_weaver_cli() {
     // Not the empty value: the parser refuses an empty path for what it is,
@@ -1465,7 +1501,10 @@ fn a_front_end_with_no_terminal_refuses_what_draws_edits_activates_gathers_or_sh
             "mind weaver gather mcp search --json --registry https://registry.example weather",
             Refusal::Unwatched,
         ),
-        ("mindweaver gather mcp add io.github.acme/weather", Refusal::Unwatched),
+        (
+            "mindweaver gather mcp add io.github.acme/weather",
+            Refusal::Unwatched,
+        ),
         (
             "mindweaver gather mcp add --yes --version 1.0.2 io.github.acme/weather",
             Refusal::Unwatched,
@@ -1557,7 +1596,9 @@ fn a_task_is_refused_for_the_first_of_its_lines_that_is() {
             Task::Gather { .. }
             | Task::UpdateSource { .. }
             | Task::ListPlugins { .. }
-            | Task::GatherPlugins { .. } => Some(Refusal::Unwatched),
+            | Task::GatherPlugins { .. }
+            | Task::SearchRegistry { .. }
+            | Task::ImportServer { .. } => Some(Refusal::Unwatched),
             Task::Show { .. } => Some(Refusal::Unheld),
             _ => None,
         };

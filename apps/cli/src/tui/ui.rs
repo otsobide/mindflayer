@@ -17,8 +17,8 @@ use ratatui::Frame;
 use super::minds::{self, Minds};
 use super::state::{
     AddField, AddForm, App, Confirm, Focus, GatherForm, Input, Item, LinkForm, LoadForm, Member,
-    Mode, Plugins, Reader, RenameForm, Running, Scope, SettingsForm, Shelf, TargetsForm, Task,
-    Tone, View, Workspace, GATHER_FIELDS,
+    Mode, Plugins, Reader, RenameForm, Running, Scope, SearchForm, Servers, SettingsForm, Shelf,
+    TargetsForm, Task, Tone, View, Workspace, GATHER_FIELDS,
 };
 use crate::commands::project::worth_linking;
 use crate::install::ui::{centred, pane, selected};
@@ -49,6 +49,14 @@ pub fn draw(app: &App, frame: &mut Frame) {
             Mode::Reading(reader) => reading(reader, frame, area),
             Mode::Shelf(shelf) => page(&shelf.reader, &shelving(shelf), frame, area),
             Mode::Plugins(plugins) => picking(plugins, frame, area),
+            Mode::Searching(form) => searching(form, frame, area),
+            Mode::Servers(servers) => looking(servers, frame, area),
+            Mode::Importing(importing) => page(
+                &importing.reader,
+                " y write it into the library   ↑↓ scroll   esc back ",
+                frame,
+                area,
+            ),
             Mode::Minds(screen) => minds_screen(app, screen, frame, area),
             Mode::Settings(form) => setting(app, form, frame, area),
             Mode::Targets(form) => targeting(app, form, frame, area),
@@ -1152,6 +1160,86 @@ fn picking(plugins: &Plugins, frame: &mut Frame, area: Rect) {
     );
 }
 
+/// What to look for in the MCP Registry, and the search it runs.
+fn searching(form: &SearchForm, frame: &mut Frame, area: Rect) {
+    let inner = popup(frame, area, "Search the MCP Registry", 78, 6);
+    let rows = lines(inner, 4);
+    input(frame, rows[0], "query", &form.query, true);
+    runs(frame, rows[1], form.task().as_ref());
+    error(frame, rows[2], form.error.as_deref());
+    keys(frame, rows[3], "enter search   esc cancel");
+}
+
+/// How many of the servers a search found are drawn at once: a screen's
+/// worth, the rest scrolled to.
+const SERVERS_SHOWN: usize = 12;
+
+/// The servers a search of the MCP Registry found, a screen's worth around
+/// the one the keyboard is on, each by its name, version and status and
+/// what it is for, and the dry run enter runs.
+fn looking(servers: &Servers, frame: &mut Frame, area: Rect) {
+    let shown = servers.entries.len().clamp(1, SERVERS_SHOWN);
+    let height = u16::try_from(shown).unwrap_or(1) + 6;
+    let inner = popup(
+        frame,
+        area,
+        &format!(
+            "What the MCP Registry lists for {}",
+            printable(&servers.query)
+        ),
+        110,
+        height,
+    );
+    let rows = lines(inner, shown + 4);
+    let first = servers.cursor.saturating_sub(shown - 1);
+    let width = |column: fn(&(String, String, String, String)) -> &String| {
+        servers
+            .entries
+            .iter()
+            .map(|entry| column(entry).chars().count())
+            .max()
+            .unwrap_or(0)
+    };
+    let (named, versioned, said) = (
+        width(|entry| &entry.0),
+        width(|entry| &entry.1),
+        width(|entry| &entry.2),
+    );
+    if servers.entries.is_empty() {
+        frame.render_widget(
+            Paragraph::new(Span::styled("it lists no server for that", dim())),
+            rows[0],
+        );
+    }
+    for (row, at) in (first..servers.entries.len()).take(shown).enumerate() {
+        let (name, version, status, description) = &servers.entries[at];
+        let style = if at == servers.cursor {
+            bold().fg(Color::Cyan)
+        } else {
+            Style::default()
+        };
+        let line = Line::from(vec![
+            Span::styled(format!("{name:<named$}"), style),
+            Span::styled(format!("  {version:<versioned$}  {status:<said$}  "), dim()),
+            Span::styled(description.clone(), dim()),
+        ]);
+        frame.render_widget(Paragraph::new(line), rows[row]);
+    }
+    if !servers.warnings.is_empty() {
+        let said = format!(
+            "{} beside it, which `mindweaver gather mcp search` says in full",
+            plural(servers.warnings.len(), "warning")
+        );
+        frame.render_widget(Paragraph::new(Span::styled(said, warn())), rows[shown + 1]);
+    }
+    runs(frame, rows[shown], servers.task().as_ref());
+    keys(
+        frame,
+        rows[shown + 3],
+        "enter say what it would be written as   ↑↓ move   esc close",
+    );
+}
+
 fn confirming(confirm: &Confirm, frame: &mut Frame, area: Rect) {
     const WIDTH: u16 = 76;
 
@@ -1222,10 +1310,10 @@ fn reading(reader: &Reader, frame: &mut Frame, area: Rect) {
 fn shelving(shelf: &Shelf) -> String {
     match shelf.sources.get(shelf.picked) {
         Some(source) => format!(
-            " ←→ source: {}   u update it   U update all   d remove it   m marketplace   ↑↓ scroll   esc close ",
+            " ←→ source: {}   u update it   U update all   d remove it   m marketplace   r MCP   ↑↓ scroll   esc close ",
             printable(source)
         ),
-        None => String::from(" m marketplace   ↑↓ scroll   esc close "),
+        None => String::from(" m marketplace   r MCP   ↑↓ scroll   esc close "),
     }
 }
 
@@ -1512,6 +1600,12 @@ fn watching(running: &Running, frame: &mut Frame, area: Rect) {
         .progress
         .map_or_else(|| String::from("starting"), said);
     let (stop, style) = match running.progress {
+        // Nothing it runs takes a cancel, so none is promised: it is over
+        // once the registry answers, or the client stops waiting.
+        _ if !running.task.cancellable() => (
+            "esc cannot stop it: it is over once the registry answers",
+            dim(),
+        ),
         // Past the gather's last check, where `esc` changes nothing: said, so
         // that neither the key nor a cancel already asked for promises a stop
         // the gather will not make. Loud only for whoever asked for one.

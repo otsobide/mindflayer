@@ -295,6 +295,25 @@ pub enum Task {
         reference: Option<String>,
         plugins: Vec<String>,
     },
+    /// `mindweaver gather mcp search [--registry <url>] <query>`: the
+    /// servers the MCP Registry finds for `query` listed, the official
+    /// registry's unless `registry` names another, for one to pick from
+    /// (#107).
+    SearchRegistry {
+        query: String,
+        registry: Option<String>,
+    },
+    /// `mindweaver gather mcp add [--version <v>] [--registry <url>]
+    /// [--yes] <server>`: the server the MCP Registry gives that name
+    /// written into the library, at `version` or its latest; without
+    /// `yes`, the dry run, which says what it would write, the command an
+    /// agent would start among it, and writes nothing.
+    ImportServer {
+        server: String,
+        version: Option<String>,
+        registry: Option<String>,
+        yes: bool,
+    },
     /// `… targets set --yes <kind> <dir>...`, or `… targets reset --yes
     /// <kind>` when no folder is named: what the targets form amounts to.
     Targets {
@@ -783,6 +802,34 @@ impl Task {
                 head.extend(at.iter().map(String::as_str));
                 vec![words(&head, &[url])]
             }
+            Task::SearchRegistry { query, registry } => {
+                let mut head = owned(&["mindweaver", "gather", "mcp", "search"]);
+                if let Some(registry) = registry {
+                    head.extend(option("--registry", registry));
+                }
+                let head: Vec<&str> = head.iter().map(String::as_str).collect();
+                vec![words(&head, &[query])]
+            }
+            // `--yes` before the name, as `remove` has it.
+            Task::ImportServer {
+                server,
+                version,
+                registry,
+                yes,
+            } => {
+                let mut head = owned(&["mindweaver", "gather", "mcp", "add"]);
+                if let Some(version) = version {
+                    head.extend(option("--version", version));
+                }
+                if let Some(registry) = registry {
+                    head.extend(option("--registry", registry));
+                }
+                if *yes {
+                    head.push(String::from("--yes"));
+                }
+                let head: Vec<&str> = head.iter().map(String::as_str).collect();
+                vec![words(&head, &[server])]
+            }
             // `--yes` before the name, as `remove` has it, so a name a `--`
             // has to keep from being read as a flag leaves it a flag.
             Task::RemoveSource { source, yes } => {
@@ -947,6 +994,7 @@ impl Task {
                 | Task::RemoveSource { yes: true, .. }
                 | Task::ListPlugins { .. }
                 | Task::GatherPlugins { .. }
+                | Task::ImportServer { yes: true, .. }
                 | Task::Minds { .. }
                 | Task::Marks { .. }
                 | Task::Settings { .. }
@@ -984,11 +1032,28 @@ impl Task {
     }
 
     /// Whether it runs on a thread of its own while the screen goes on
-    /// drawing what it reports: a gather, a source gathered again, or a
-    /// marketplace's catalog listed or its plugins gathered, which is the
-    /// network, and can take long enough to want watching. Everything else
-    /// is the local disk, over before anybody could read a count.
+    /// drawing what it reports: a gather, a source gathered again, a
+    /// marketplace's catalog listed or its plugins gathered, or the MCP
+    /// Registry searched or a server of it written, which is the network,
+    /// and can take long enough to want watching. Everything else is the
+    /// local disk, over before anybody could read a count.
     pub fn runs_apart(&self) -> bool {
+        matches!(
+            self,
+            Task::Gather { .. }
+                | Task::UpdateSource { .. }
+                | Task::ListPlugins { .. }
+                | Task::GatherPlugins { .. }
+                | Task::SearchRegistry { .. }
+                | Task::ImportServer { .. }
+        )
+    }
+
+    /// Whether a cancel stops it once it runs apart: a gather's, which
+    /// watches for one until it starts placing, and not the MCP Registry's,
+    /// whose client waits for an answer, within its limit, and watches for
+    /// nothing.
+    pub fn cancellable(&self) -> bool {
         matches!(
             self,
             Task::Gather { .. }

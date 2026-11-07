@@ -4429,6 +4429,65 @@
             "type": "object"
           },
           {
+            "description": "`mindweaver gather mcp search [--registry <url>] <query>`: the\nservers the MCP Registry finds for `query` listed, the official\nregistry's unless `registry` names another, for one to pick from\n(#107).",
+            "properties": {
+              "query": {
+                "type": "string"
+              },
+              "registry": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "type": {
+                "const": "search_registry",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "query",
+              "registry"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "`mindweaver gather mcp add [--version <v>] [--registry <url>]\n[--yes] <server>`: the server the MCP Registry gives that name\nwritten into the library, at `version` or its latest; without\n`yes`, the dry run, which says what it would write, the command an\nagent would start among it, and writes nothing.",
+            "properties": {
+              "registry": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "server": {
+                "type": "string"
+              },
+              "type": {
+                "const": "import_server",
+                "type": "string"
+              },
+              "version": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "yes": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "type",
+              "server",
+              "version",
+              "registry",
+              "yes"
+            ],
+            "type": "object"
+          },
+          {
             "description": "`… targets set --yes <kind> <dir>...`, or `… targets reset --yes\n<kind>` when no folder is named: what the targets form amounts to.",
             "properties": {
               "folders": {
@@ -5385,6 +5444,64 @@
               "url",
               "folder",
               "plugins"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "`mindweaver gather mcp search [--registry <url>] <query>`: the\nservers the MCP Registry finds for `query` listed, the official\nregistry's unless `registry` names another, for one to pick from\n(#107).",
+            "properties": {
+              "query": {
+                "type": "string"
+              },
+              "registry": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "type": {
+                "const": "search_registry",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "query"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "`mindweaver gather mcp add [--version <v>] [--registry <url>]\n[--yes] <server>`: the server the MCP Registry gives that name\nwritten into the library, at `version` or its latest; without\n`yes`, the dry run, which says what it would write, the command an\nagent would start among it, and writes nothing.",
+            "properties": {
+              "registry": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "server": {
+                "type": "string"
+              },
+              "type": {
+                "const": "import_server",
+                "type": "string"
+              },
+              "version": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "yes": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "type",
+              "server",
+              "yes"
             ],
             "type": "object"
           },
