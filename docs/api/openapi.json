@@ -3328,11 +3328,18 @@
         "type": "string"
       },
       "ShelfSource": {
-        "description": "A source the shelf is filled from, with what `--from` takes for what it\nsupplied.",
+        "description": "A source the shelf is filled from, with what `--from` takes for what it\nsupplied, and for a plugin of a marketplace, which marketplace and which\nof its entries it is.\n\n`parent` and `entry` were added after the rest (#113), which moved no\n[`FORMAT`]: what a front end needs to draw a marketplace's plugins under\nit, as `gather sources` lists them, rather than tell them apart by a\nrow id no front end is given.",
         "properties": {
           "directory": {
             "description": "The folder this source owns under `.mindweaver/<kind folder>/`.\n\nStored rather than derived: two URLs can reduce to the same readable\nname, and where a source's files went is a fact about the past that\nmust not move when the naming rule changes.",
             "type": "string"
+          },
+          "entry": {
+            "description": "The name its marketplace's catalog lists its plugin by, which\n`gather marketplace --plugin` took: `None` for a source gathered on\nits own.",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "gathers": {
             "$ref": "#/components/schemas/Kind",
@@ -3348,6 +3355,13 @@
           "origin": {
             "description": "[`Source::origin`], which every artifact it supplied is installed\nfrom.",
             "type": "string"
+          },
+          "parent": {
+            "description": "The marketplace it is a plugin of, by the name that source is\ncalled, as [`sources`](Snapshot::sources) lists it: `None` for a\nsource gathered on its own.",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "pin": {
             "description": "The commit its last gather was pinned to (`gather git --pin`), its\nfull id, beside the branch or tag it is on: `None` when that gather\ntook whatever the branch was at. Not part of what makes the source:\ngathered at another pin, or none, it is the same source, moved.",
@@ -3389,7 +3403,9 @@
           "name",
           "pin",
           "gathers",
-          "origin"
+          "origin",
+          "parent",
+          "entry"
         ],
         "type": "object"
       },
@@ -3564,7 +3580,7 @@
             "type": "array"
           },
           "sources": {
-            "description": "Every source the shelf is filled from, by URL.",
+            "description": "Every source the shelf is filled from, by URL, but each plugin of a\nmarketplace right after its marketplace: the order `gather sources`\nlists them in, so a marketplace reads with what it holds under it.",
             "items": {
               "$ref": "#/components/schemas/ShelfSource"
             },

@@ -4,14 +4,32 @@ import type { SourceKind } from "./SourceKind";
 
 /**
  * A source the shelf is filled from, with what `--from` takes for what it
- * supplied.
+ * supplied, and for a plugin of a marketplace, which marketplace and which
+ * of its entries it is.
+ *
+ * `parent` and `entry` were added after the rest (#113), which moved no
+ * [`FORMAT`]: what a front end needs to draw a marketplace's plugins under
+ * it, as `gather sources` lists them, rather than tell them apart by a
+ * row id no front end is given.
  */
 export type ShelfSource = { 
 /**
  * [`Source::origin`], which every artifact it supplied is installed
  * from.
  */
-origin: string, kind: SourceKind, 
+origin: string, 
+/**
+ * The marketplace it is a plugin of, by the name that source is
+ * called, as [`sources`](Snapshot::sources) lists it: `None` for a
+ * source gathered on its own.
+ */
+parent: string | null, 
+/**
+ * The name its marketplace's catalog lists its plugin by, which
+ * `gather marketplace --plugin` took: `None` for a source gathered on
+ * its own.
+ */
+entry: string | null, kind: SourceKind, 
 /**
  * The URL as the user typed it, without the credentials [`redacted`]
  * takes out.

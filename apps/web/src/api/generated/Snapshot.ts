@@ -78,7 +78,9 @@ loaded: Array<LoadedWorkspace>,
  */
 shelf: Array<Shelved>, 
 /**
- * Every source the shelf is filled from, by URL.
+ * Every source the shelf is filled from, by URL, but each plugin of a
+ * marketplace right after its marketplace: the order `gather sources`
+ * lists them in, so a marketplace reads with what it holds under it.
  */
 sources: Array<ShelfSource>, 
 /**

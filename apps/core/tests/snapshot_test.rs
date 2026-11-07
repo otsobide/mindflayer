@@ -750,7 +750,9 @@ const EXPECTED: &str = r#"{
       "name": "acme-skills",
       "pin": null,
       "gathers": "skill",
-      "origin": "https://github.com/acme/skills"
+      "origin": "https://github.com/acme/skills",
+      "parent": null,
+      "entry": null
     }
   ],
   "offers": [
@@ -1384,6 +1386,68 @@ fn every_origin_a_snapshot_lists_names_its_offer_to_from() {
         panic!("{:?}", snapshot.loaded)
     };
     assert_eq!(offered("notes", &team.origin), team.origin);
+}
+
+/// A marketplace's plugin is listed right after its marketplace, though its
+/// URL sorts before it, naming it by what it is called and the entry its
+/// catalog lists the plugin by: what a front end draws it under its
+/// marketplace by, with no row id to match.
+#[test]
+fn a_marketplace_s_plugin_is_listed_under_it_by_its_name() {
+    let fixture = fixture();
+    let workspace = WeaverWorkspace::open(&fixture.hub).unwrap();
+    let ledger = workspace.ledger().unwrap();
+    let marketplace = ledger
+        .source_for(
+            SourceKind::Marketplace,
+            "https://github.com/acme/plugins",
+            None,
+            "",
+            Kind::Skill,
+        )
+        .unwrap();
+    ledger
+        .source_for(
+            SourceKind::Git,
+            "https://github.com/acme/rules",
+            None,
+            "",
+            Kind::Rule,
+        )
+        .unwrap();
+    ledger
+        .child_for(&marketplace, "ops", "https://github.com/acme/ops", None, "")
+        .unwrap();
+    drop(ledger);
+
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None), &Machine::default())
+        .unwrap()
+        .unwrap();
+
+    let listed: Vec<(&str, Option<&str>, Option<&str>)> = snapshot
+        .sources
+        .iter()
+        .map(|source| {
+            (
+                source.source.name.as_str(),
+                source.parent.as_ref().map(|parent| parent.as_str()),
+                source.entry.as_deref(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        listed,
+        [
+            (marketplace.name.as_str(), None, None),
+            (
+                "acme-plugins.ops",
+                Some(marketplace.name.as_str()),
+                Some("ops")
+            ),
+            ("acme-rules", None, None),
+            ("acme-skills", None, None),
+        ]
+    );
 }
 
 /// A second spelling of one loaded workspace offers what the first does,

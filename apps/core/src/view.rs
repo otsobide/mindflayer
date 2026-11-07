@@ -41,7 +41,7 @@ use crate::doctor::{Examined, Machine};
 use crate::install::{self, LoadFailure, Offer, Place};
 use crate::kind::Kind;
 use crate::known::{self, KnownWorkspace};
-use crate::ledger::{Entry, Gathered, InstallRecord, Ledger, LedgerError, Source};
+use crate::ledger::{Entry, Gathered, InstallRecord, Ledger, LedgerError, Source, SourceListing};
 use crate::lifecycle;
 use crate::mcp::{self, McpDefinition, Running};
 use crate::paths;
@@ -50,7 +50,7 @@ use crate::resolve::{self, Inputs, Intent, Reason, ResolveError, Resolved};
 use crate::settings::{ProjectId, Settings, Share};
 use crate::status::{ArtifactStatus, EntryStatus, Missed, ProjectStatus, State, Unreached};
 use crate::template::{self, Template};
-use crate::value::{ArtifactName, Origin, Redacted};
+use crate::value::{ArtifactName, Origin, Redacted, SourceName};
 use crate::workspace::{
     same_directory, MarkerFile, Member, MindProject, WeaverWorkspace, WorkspaceError,
 };
@@ -107,7 +107,9 @@ pub struct Snapshot {
     pub loaded: Vec<LoadedWorkspace>,
     /// Everything gathered onto its shelf, by kind, then name, then source.
     pub shelf: Vec<Shelved>,
-    /// Every source the shelf is filled from, by URL.
+    /// Every source the shelf is filled from, by URL, but each plugin of a
+    /// marketplace right after its marketplace: the order `gather sources`
+    /// lists them in, so a marketplace reads with what it holds under it.
     pub sources: Vec<ShelfSource>,
     /// Everything there is to install, from wherever it is offered: what
     /// a front end that assigns lays its offers out by.
@@ -777,7 +779,13 @@ impl Shelved {
 }
 
 /// A source the shelf is filled from, with what `--from` takes for what it
-/// supplied.
+/// supplied, and for a plugin of a marketplace, which marketplace and which
+/// of its entries it is.
+///
+/// `parent` and `entry` were added after the rest (#113), which moved no
+/// [`FORMAT`]: what a front end needs to draw a marketplace's plugins under
+/// it, as `gather sources` lists them, rather than tell them apart by a
+/// row id no front end is given.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -788,13 +796,23 @@ pub struct ShelfSource {
     /// [`Source::origin`], which every artifact it supplied is installed
     /// from.
     pub origin: Origin,
+    /// The marketplace it is a plugin of, by the name that source is
+    /// called, as [`sources`](Snapshot::sources) lists it: `None` for a
+    /// source gathered on its own.
+    pub parent: Option<SourceName>,
+    /// The name its marketplace's catalog lists its plugin by, which
+    /// `gather marketplace --plugin` took: `None` for a source gathered on
+    /// its own.
+    pub entry: Option<String>,
 }
 
 impl ShelfSource {
-    fn of(source: Source) -> ShelfSource {
+    fn of(listed: SourceListing) -> ShelfSource {
         ShelfSource {
-            origin: source.origin(),
-            source,
+            origin: listed.source.origin(),
+            parent: listed.parent,
+            entry: listed.entry,
+            source: listed.source,
         }
     }
 }
@@ -1116,7 +1134,7 @@ impl Snapshot {
                         .into_iter()
                         .map(Shelved::of)
                         .collect(),
-                    answered(ledger.sources(), &mut warnings)
+                    answered(ledger.source_listing(), &mut warnings)
                         .into_iter()
                         .map(ShelfSource::of)
                         .collect(),

@@ -2738,6 +2738,14 @@ type derives `Serialize` from the start:
   snapshot's `sources` and in what `gather sources --json` and `gather list
   --json` print: a name added, which moves neither `ENVELOPE_VERSION` nor
   `view::FORMAT` ([gathering rules](#gathering-rules)).
+- **Named by #113**: for each of the snapshot's `sources`, the marketplace
+  it is a plugin of, by its name, and the entry its catalog lists it by,
+  as `parent` and `entry` on a `view::ShelfSource`, each `null` for a
+  source gathered on its own, read from what `gather sources` lists
+  (`ledger::SourceListing`) and in its order, each plugin right after its
+  marketplace, so the panel draws a marketplace's plugins under it by
+  names rather than by a row id it is never given: names added, which
+  move neither `ENVELOPE_VERSION` nor `view::FORMAT`.
 - **Not yet**, being older than the rule and handed to no front end so far:
   the ledger's record of an install (`InstallRecord`), and what an update or
   a change of agents would do as each plans it (`update::Plan`,
@@ -2959,7 +2967,8 @@ read, built and ordered in core from the read types the commands print:
   offers what `mindweaver load` takes; the latest actions, newest first
   (`view::HISTORY`); and the warnings that belong to none of those. Each
   load, each thing on the shelf (`view::Shelved`) and each source
-  (`view::ShelfSource`) says its
+  (`view::ShelfSource`, a marketplace's plugin with the marketplace it is
+  under by name, `parent`) says its
   `origin`, what `--from` takes for what it offers and what an install of
   that records, each spelled by the one function that spells it for an
   install (`ledger::Source::origin`, `install::loaded_origin`): a second

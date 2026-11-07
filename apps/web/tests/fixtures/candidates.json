@@ -1221,10 +1221,12 @@
   "sources": [
     {
       "directory": "github.com-acme-skills",
+      "entry": null,
       "gathers": "skill",
       "kind": "git",
       "name": "acme-skills",
       "origin": "https://github.com/acme/skills",
+      "parent": null,
       "pin": null,
       "reference": null,
       "revision": "8d1c3f0a2b4e6d8f0a1c3e5b7d9f1a3c5e7b9d2f",
