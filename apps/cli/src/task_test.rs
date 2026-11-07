@@ -1507,9 +1507,32 @@ fn a_front_end_with_no_terminal_refuses_what_draws_edits_activates_gathers_or_sh
         ),
         // The registry's answers are the network too, a read among them.
         ("mindweaver gather mcp search weather", Refusal::Unwatched),
+        // The one Mindweaver knows, named as it is, is no other.
+        (
+            "mindweaver gather mcp search --registry https://registry.modelcontextprotocol.io weather",
+            Refusal::Unwatched,
+        ),
+        // What a browser may never pick, whatever is lifted: an address
+        // the line fetches from, and the environment it reads.
         (
             "mind weaver gather mcp search --json --registry https://registry.example weather",
-            Refusal::Unwatched,
+            Refusal::Addressed,
+        ),
+        (
+            "mindweaver gather mcp add --registry=http://127.0.0.1:9/ io.github.acme/weather",
+            Refusal::Addressed,
+        ),
+        (
+            "mindweaver gather search --finder-url skills.sh=https://skills.example pdf",
+            Refusal::Addressed,
+        ),
+        (
+            "mindweaver gather search --token-env GH_TOKEN pdf",
+            Refusal::Environment,
+        ),
+        (
+            "mind weaver gather search --finder-url skills.sh=https://x --token-env T pdf",
+            Refusal::Environment,
         ),
         (
             "mindweaver gather mcp add io.github.acme/weather",
@@ -1609,6 +1632,13 @@ fn a_task_is_refused_for_the_first_of_its_lines_that_is() {
         let expected = match &task {
             Task::OpenInstall => Some(Refusal::Screen),
             Task::Edit { .. } => Some(Refusal::Editor),
+            Task::SearchRegistry {
+                registry: Some(_), ..
+            }
+            | Task::ImportServer {
+                registry: Some(_), ..
+            } => Some(Refusal::Addressed),
+            Task::SearchSkills { at, .. } if !at.is_empty() => Some(Refusal::Addressed),
             Task::Gather { .. }
             | Task::UpdateSource { .. }
             | Task::ListPlugins { .. }
@@ -1684,6 +1714,8 @@ fn a_refusal_says_why_by_a_code_of_its_own() {
         Refusal::Input,
         Refusal::Shell,
         Refusal::Unwatched,
+        Refusal::Environment,
+        Refusal::Addressed,
         Refusal::Unheld,
         Refusal::Panel,
     ]

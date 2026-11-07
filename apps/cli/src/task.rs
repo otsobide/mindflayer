@@ -28,11 +28,11 @@
 
 use clap::Parser as _;
 use mindweaver_core::install::Change;
-use mindweaver_core::mcp;
 use mindweaver_core::url::redacted;
 use mindweaver_core::{
     codes, hash, Agent, Kind, Names, Share, WeaverWorkspace, DEFAULT_SUBDIRECTORY, QUALIFIER,
 };
+use mindweaver_core::{mcp, registry};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -1182,6 +1182,27 @@ pub enum Refusal {
         "fetches over the network for as long as that takes, which only the TUI or a shell shows, and stops"
     )]
     Unwatched,
+    /// `gather search --token-env`, which reads a token from the
+    /// environment of the process that runs the line: a shell's, which its
+    /// user set on purpose, or the server's, which a browser would have it
+    /// hand to whatever the line sends it to. Refused whether or not the
+    /// command beside it is, since a browser is no shell, whatever is
+    /// lifted later.
+    #[error(
+        "reads a token from the environment of whatever runs it, which only a shell hands it on purpose"
+    )]
+    Environment,
+    /// `gather search --finder-url`, `gather mcp search --registry` and
+    /// `gather mcp add --registry`, which fetch from an address the line
+    /// names in place of the one Mindweaver knows: from a shell, one its
+    /// user chose, from a browser one a page picked, to which the server
+    /// would send what it asks and take what it is answered for a source.
+    /// Refused whether or not the command beside it is, as
+    /// [`Environment`](Refusal::Environment) is.
+    #[error(
+        "fetches from an address the line names in place of the one Mindweaver knows, which only a shell picks"
+    )]
+    Addressed,
     /// `show`, which prints an artifact whole, read through every link on
     /// the way (a rule shared by a link is still a rule): at a terminal, to
     /// the person whose disk it is, but anywhere else to somebody who may
@@ -1206,6 +1227,8 @@ codes!(Refusal {
     Self::Input => "reads_stdin",
     Self::Shell => "prints_shell_code",
     Self::Unwatched => "gather_unwatched",
+    Self::Environment => "reads_environment",
+    Self::Addressed => "fetch_address_named",
     Self::Unheld => "show_unheld",
     Self::Panel => "serves_panel",
 });
@@ -1269,6 +1292,17 @@ impl Refusal {
             Some(WeaverCommand::Edit { editing, .. }) => Refusal::of_edit(editing),
             Some(WeaverCommand::Activate { .. }) => Some(Refusal::Shell),
             Some(WeaverCommand::Show { .. }) => Some(Refusal::Unheld),
+            // Before what refuses the command beside them, so what a
+            // browser may never ask for is said for itself.
+            Some(WeaverCommand::Gather(GatherCommand::Search {
+                token_env: Some(_), ..
+            })) => Some(Refusal::Environment),
+            Some(WeaverCommand::Gather(GatherCommand::Search { at, .. })) if !at.is_empty() => {
+                Some(Refusal::Addressed)
+            }
+            Some(WeaverCommand::Gather(GatherCommand::Mcp(
+                McpCommand::Search { registry, .. } | McpCommand::Add { registry, .. },
+            ))) if registry != registry::OFFICIAL => Some(Refusal::Addressed),
             Some(WeaverCommand::Gather(
                 GatherCommand::Git { .. }
                 | GatherCommand::Marketplace { .. }

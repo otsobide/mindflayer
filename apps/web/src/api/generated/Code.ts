@@ -44,6 +44,8 @@ export type Code =
   | "reads_stdin"
   | "prints_shell_code"
   | "gather_unwatched"
+  | "reads_environment"
+  | "fetch_address_named"
   | "show_unheld"
   | "serves_panel"
   | "token_required"
