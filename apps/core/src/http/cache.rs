@@ -57,9 +57,14 @@ pub struct Cache {
 }
 
 impl Cache {
-    /// The cache `workspace` keeps ([`WeaverWorkspace::http_cache_dir`]).
-    pub fn of(workspace: &WeaverWorkspace) -> Self {
-        Self::at(workspace.http_cache_dir())
+    /// The cache `workspace` keeps ([`WeaverWorkspace::http_cache_dir`]),
+    /// none for one not made yet ([`WeaverWorkspace::unmade`]): a read falls
+    /// back to the default workspace without making it, and keeping an
+    /// answer there would make its `.mindweaver` on that read.
+    pub fn of(workspace: &WeaverWorkspace) -> Option<Self> {
+        workspace
+            .is_made()
+            .then(|| Self::at(workspace.http_cache_dir()))
     }
 
     /// A cache in `folder`, made when the first answer is kept. Every entry

@@ -18,7 +18,7 @@ use mindweaver_core::http::{
 };
 use mindweaver_core::mother::WorkspaceMother;
 use mindweaver_core::value::Redacted;
-use mindweaver_core::{Clock, Http};
+use mindweaver_core::{Clock, Http, WeaverWorkspace};
 use serde::Deserialize;
 use tempfile::TempDir;
 
@@ -1047,10 +1047,21 @@ fn cache(folder: &TempDir, clock: &Arc<Set>) -> Cache {
 fn a_workspaces_cache_is_beside_its_clones() {
     let (_dir, workspace) = WorkspaceMother::empty();
 
-    let cache = Cache::of(&workspace);
+    let cache = Cache::of(&workspace).expect("a workspace made has a cache");
 
     assert_eq!(cache.folder(), workspace.cache_dir().join("http"));
     assert_eq!(cache.folder(), workspace.http_cache_dir());
+}
+
+/// A read falls back to the default workspace without making it, so one not
+/// made yet keeps no answer, which would make its `.mindweaver`.
+#[test]
+fn a_workspace_not_made_has_no_cache() {
+    let home = TempDir::new().unwrap();
+    let workspace = WeaverWorkspace::unmade(home.path()).unwrap();
+
+    assert!(Cache::of(&workspace).is_none());
+    assert!(!workspace.weaver_dir().exists());
 }
 
 /// A miss is fetched and kept; the same URL asked again while it is fresh
