@@ -4690,6 +4690,140 @@ fn a_server_the_search_found_is_shown_as_its_dry_run_and_written_on_yes() {
     )));
 }
 
+/// `f` on the shelf searches the skill directories the marker lists for
+/// what is typed, a line run apart that parses back as `gather search`,
+/// sending no token; nothing typed is no search. The line is not run here.
+#[test]
+fn the_shelf_opens_a_skill_search_whose_line_parses_back() {
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+    let mut app = tui_in(dir.path());
+    press_and_run(&mut app, KeyCode::Char('s'));
+    assert!(tui_drawn_at(&app, 130, 30).contains("f skills"));
+
+    press_key(&mut app, KeyCode::Char('f'));
+    assert!(matches!(app.mode, Mode::Searching(_)), "{:?}", app.mode);
+    assert!(tui_drawn(&app).contains("Look for skills"));
+    assert_eq!(press_key(&mut app, KeyCode::Enter), TuiStep::Stay);
+    type_text(&mut app, "pdf");
+    let TuiStep::Run(task) = press_key(&mut app, KeyCode::Enter) else {
+        panic!("{:?}", app.mode);
+    };
+
+    assert_eq!(
+        task,
+        Task::SearchSkills {
+            query: String::from("pdf"),
+            at: Vec::new(),
+        }
+    );
+    assert!(task.runs_apart() && !task.cancellable() && !task.writes());
+    assert!(matches!(
+        gather_line(&task),
+        GatherCommand::Search { query, finders, token_env: None, at, take: None, json: false }
+            if query == "pdf" && finders.is_empty() && at.is_empty()
+    ));
+}
+
+/// What the search found is read through core from what its line kept in
+/// the workspace's cache, to take from; enter on one runs the `gather git`
+/// line naming it exactly, its repository and its folder, apart, as any
+/// gather runs, which parses back through the real parser and gathers
+/// that skill alone. Every line runs against a finder this process serves
+/// and a repository it made.
+#[test]
+fn a_skill_the_search_found_is_taken_as_the_gather_line_naming_it() {
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+    common::finders::list_finders(dir.path(), &["claude-plugins.dev"]);
+    let repository = repository(&[
+        (
+            "skills/pdf/SKILL.md",
+            &skill_file("pdf", "Read and write PDF files"),
+        ),
+        (
+            "skills/docx/SKILL.md",
+            &skill_file("docx", "Read and write Word files"),
+        ),
+    ]);
+    let finders = Finders::naming(repository.path());
+    let mut app = tui_in(dir.path());
+    press_and_run(&mut app, KeyCode::Char('s'));
+    press_key(&mut app, KeyCode::Char('f'));
+
+    let search = Task::SearchSkills {
+        query: String::from("pdf"),
+        at: finders.at(),
+    };
+    assert!(matches!(gather_line(&search), GatherCommand::Search { at, .. } if at == finders.at()));
+    tui::step(&mut app, search);
+    tui::wait(&mut app);
+
+    let Mode::Skills(skills) = &app.mode else {
+        panic!("{:?}", app.mode);
+    };
+    let names: Vec<&str> = skills.hits.iter().map(|hit| hit.name.as_str()).collect();
+    assert_eq!(names, ["pdf", "docx"]);
+    let drawn = tui_drawn_at(&app, 120, 30);
+    assert!(drawn.contains("What the finders found for pdf"), "{drawn}");
+    assert!(drawn.contains("skills/docx"), "{drawn}");
+
+    press_key(&mut app, KeyCode::Down);
+    let TuiStep::Run(take) = press_key(&mut app, KeyCode::Enter) else {
+        panic!("{:?}", app.mode);
+    };
+    let url = repository.path().to_string_lossy().into_owned();
+    assert_eq!(
+        take,
+        Task::Gather {
+            url: url.clone(),
+            folder: String::from("skills/docx"),
+            reference: None,
+        }
+    );
+    assert!(take.runs_apart() && take.cancellable() && take.writes());
+    assert!(matches!(
+        gather_line(&take),
+        GatherCommand::Git { url: given, path: Some(path), reference: None, name: None, pin: None, dry_run: false }
+            if given == url && path == "skills/docx"
+    ));
+    tui::step(&mut app, take);
+    tui::wait(&mut app);
+
+    let shelf = weaver(dir.path(), &["gather", "list"]).unwrap();
+    assert!(shelf.stdout.contains("docx"), "{}", shelf.stdout);
+    assert!(!shelf.stdout.contains("pdf "), "{}", shelf.stdout);
+    assert!(app.transcript().contains(&format!(
+        "$ mindweaver gather git --path skills/docx {url}\n"
+    )));
+}
+
+/// A search whose answers no cache keeps, as in a workspace whose marker
+/// lists no finder, is the line's text to read, with nothing to take.
+#[test]
+fn a_skill_search_nothing_was_kept_of_is_shown_as_its_line_said_it() {
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+    let mut app = tui_in(dir.path());
+    press_and_run(&mut app, KeyCode::Char('s'));
+
+    tui::step(
+        &mut app,
+        Task::SearchSkills {
+            query: String::from("pdf"),
+            at: Vec::new(),
+        },
+    );
+    tui::wait(&mut app);
+
+    assert!(!matches!(app.mode, Mode::Skills(_)), "{:?}", app.mode);
+    assert!(
+        tui_drawn_at(&app, 160, 30).contains("no finder is enabled"),
+        "{}",
+        tui_drawn_at(&app, 160, 30)
+    );
+}
+
 /// No to what the dry run says goes back to the servers found, and writes
 /// nothing.
 #[test]

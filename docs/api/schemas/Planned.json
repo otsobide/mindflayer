@@ -1116,6 +1116,30 @@
           ]
         },
         {
+          "description": "`mindweaver gather search [--finder-url <finder>=<url>]... <query>`:\nthe skill directories the workspace's marker lists asked what they\nfind for `query`, each at its own address unless `at` names another,\nas `--finder-url` takes it, for one to take (#108). No token: what\nGitHub's code search answers a token is never kept, so a front end\nthat reads the line's results back could not read it, and the line\nskips GitHub, saying so.",
+          "type": "object",
+          "properties": {
+            "at": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "query": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "search_skills"
+            }
+          },
+          "required": [
+            "type",
+            "query",
+            "at"
+          ]
+        },
+        {
           "description": "`mindweaver gather mcp add [--version <v>] [--registry <url>]\n[--yes] <server>`: the server the MCP Registry gives that name\nwritten into the library, at `version` or its latest; without\n`yes`, the dry run, which says what it would write, the command an\nagent would start among it, and writes nothing.",
           "type": "object",
           "properties": {

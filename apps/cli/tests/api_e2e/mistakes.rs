@@ -132,9 +132,9 @@ fn a_task_nobody_knows_is_refused_with_every_one_there_is() {
              `unload_here`, `add`, `show`, `edit`, `save`, `edit_server`, `rename`, `remove`, \
              `validate`, `minds`, `marks`, `shelf`, `workspaces`, `gather`, `update_source`, \
              `remove_source`, `list_plugins`, `gather_plugins`, `search_registry`, \
-             `import_server`, `targets`, `settings`, `toggled`, `update`, `install`, \
-             `uninstall`, `uninstall_orphaned`, `adopt`, `migrate`, `open_install`, \
-             `apply_install`, `refresh` at line 1 column 16",
+             `search_skills`, `import_server`, `targets`, `settings`, `toggled`, `update`, \
+             `install`, `uninstall`, `uninstall_orphaned`, `adopt`, `migrate`, \
+             `open_install`, `apply_install`, `refresh` at line 1 column 16",
         );
 }
 

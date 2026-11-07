@@ -12,7 +12,7 @@ use crate::{Cli, WeaverCli};
 /// Every task's name in JSON, as a front end sends it: a contract, pinned
 /// here word for word, so renaming a variant fails a test rather than every
 /// front end that sends the old name.
-const TAGS: [&str; 42] = [
+const TAGS: [&str; 43] = [
     "init_workspace",
     "init_project",
     "link",
@@ -42,6 +42,7 @@ const TAGS: [&str; 42] = [
     "list_plugins",
     "gather_plugins",
     "search_registry",
+    "search_skills",
     "import_server",
     "targets",
     "settings",
@@ -178,6 +179,14 @@ fn every(value: &str) -> Vec<Task> {
         Task::SearchRegistry {
             query: owned(),
             registry: None,
+        },
+        Task::SearchSkills {
+            query: owned(),
+            at: vec![owned(), String::from("skills.sh=https://skills.example")],
+        },
+        Task::SearchSkills {
+            query: owned(),
+            at: Vec::new(),
         },
         Task::ImportServer {
             server: owned(),
@@ -1160,15 +1169,16 @@ fn holding(read: &Read, value: &str) -> Read {
 }
 
 /// What runs apart takes a cancel when it is a gather, which watches for
-/// one, and none when it is the registry's, whose client watches for none.
+/// one, and none when it is a search or the registry's, whose client
+/// watches for none.
 #[test]
 fn a_task_running_apart_is_cancellable_only_when_it_gathers() {
     for task in every("plain").iter().filter(|task| task.runs_apart()) {
-        let registry = matches!(
+        let asked = matches!(
             task,
-            Task::SearchRegistry { .. } | Task::ImportServer { .. }
+            Task::SearchRegistry { .. } | Task::SearchSkills { .. } | Task::ImportServer { .. }
         );
-        assert_eq!(task.cancellable(), !registry, "{task:?}");
+        assert_eq!(task.cancellable(), !asked, "{task:?}");
     }
     assert!(!Task::Refresh.cancellable());
 }
@@ -1604,6 +1614,7 @@ fn a_task_is_refused_for_the_first_of_its_lines_that_is() {
             | Task::ListPlugins { .. }
             | Task::GatherPlugins { .. }
             | Task::SearchRegistry { .. }
+            | Task::SearchSkills { .. }
             | Task::ImportServer { .. } => Some(Refusal::Unwatched),
             Task::Show { .. } => Some(Refusal::Unheld),
             _ => None,

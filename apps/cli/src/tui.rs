@@ -23,6 +23,7 @@ use std::time::Duration;
 
 use mindweaver_core::code::Said;
 use mindweaver_core::doctor::Examined;
+use mindweaver_core::finder;
 use mindweaver_core::gather::{Request, Watch};
 use mindweaver_core::http::Cache;
 use mindweaver_core::marketplace::{self, Plugin};
@@ -48,7 +49,7 @@ use crate::task::{shell, Refusal, Task};
 use crate::{install, CliError, Failure, Lookup, Outcome};
 use state::{
     App, Choice, Done, Holdings, Item, LoadedSource, Marketplace, Member, Mode, Performed, Plugins,
-    Runner, Running, Scope, Servers, Step, Unlinked, Update, View, Workspace,
+    Runner, Running, Scope, Servers, Skills, Step, Unlinked, Update, View, Workspace,
 };
 
 /// How long the loop waits for a key before drawing again, so a resize
@@ -277,7 +278,8 @@ fn start(app: &mut App, task: Task) {
 /// clone the line left, as core reads what it recorded
 /// ([`marketplace::recorded`]): the screen reads, and the line wrote. A
 /// search of the MCP Registry goes on to what it found, read from what the
-/// line kept in the workspace's cache ([`registry::kept`]), the same way.
+/// line kept in the workspace's cache ([`registry::kept`]), the same way,
+/// and so does a search of the skill directories ([`finder::kept`]).
 fn conclude(app: &mut App, task: &Task, performed: Performed) {
     let performed = match (task, performed) {
         (
@@ -294,6 +296,11 @@ fn conclude(app: &mut App, task: &Task, performed: Performed) {
             if dones.iter().all(|done| done.error.is_none()) =>
         {
             found(app.base(), query, registry.as_deref(), dones)
+        }
+        (Task::SearchSkills { query, at }, Performed::Ran(dones))
+            if dones.iter().all(|done| done.error.is_none()) =>
+        {
+            skills(app.base(), query, at, dones)
         }
         (_, performed) => performed,
     };
@@ -397,6 +404,36 @@ fn found(base: &Path, query: &str, registry: Option<&str>, dones: Vec<Done>) -> 
                 )
             })
             .collect(),
+        cursor: 0,
+        warnings: dones.iter().flat_map(|done| done.stderr.clone()).collect(),
+    })
+}
+
+/// What the search for `query` of the finders the workspace at `base`
+/// lists, each at the address `at` names or its own, found, as its line
+/// kept it in that workspace's cache, to take one from, with what the line
+/// warned of: or what the line said, to read in full, when the cache keeps
+/// none of it, as in a workspace not made yet, which has none.
+///
+/// The finders read again are those the line asked, every one the marker
+/// lists, read through core as the line read them; an address `at` names
+/// that core does not read is none the line could have asked either.
+fn skills(base: &Path, query: &str, at: &[String], dones: Vec<Done>) -> Performed {
+    let kept = WeaverWorkspace::open(base).ok().and_then(|workspace| {
+        let finders = finder::enabled(&workspace).asked(&[]).ok()?;
+        let at = at
+            .iter()
+            .map(|at| finder::located(at))
+            .collect::<Result<Vec<_>, _>>()
+            .ok()?;
+        finder::kept(Cache::of(&workspace)?, query, &finders, &at)
+    });
+    let Some(found) = kept else {
+        return Performed::Ran(dones);
+    };
+    Performed::Skills(Skills {
+        query: query.to_owned(),
+        hits: found.hits,
         cursor: 0,
         warnings: dones.iter().flat_map(|done| done.stderr.clone()).collect(),
     })

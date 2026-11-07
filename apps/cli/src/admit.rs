@@ -76,6 +76,10 @@ impl Admission<'_> {
             // one: a server by the name the registry gives it, and a
             // registry by its URL, name nothing on the disk.
             Task::SearchRegistry { .. } | Task::ImportServer { .. } => {}
+            // The skill directories, the network as a gather is, and
+            // refused as one: a query and a finder's address name nothing
+            // on the disk.
+            Task::SearchSkills { .. } => {}
             // A source by its name, which names nothing on the disk: core
             // finds it among those the ledger keeps, and deletes only the
             // folders it records as the source's own. Gathering one again

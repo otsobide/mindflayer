@@ -7,7 +7,9 @@
 
 mod common;
 
-use common::finders::{finder_fixture, CLAUDE_PLUGINS_PDF, GITHUB_PDF, SKILLS_SH_PDF};
+use common::finders::{
+    finder_fixture, list_finders, CLAUDE_PLUGINS_PDF, GITHUB_PDF, SKILLS_SH_PDF,
+};
 use common::*;
 
 /// A token made up for the tests, which no service would take.
@@ -18,14 +20,7 @@ const TOKEN: &str = "made-up-token-0123456789";
 fn workspace(finders: &[&str]) -> TempDir {
     let dir = TempDir::new().unwrap();
     weaver(dir.path(), &["init"]).unwrap();
-    let marker = dir.path().join(WEAVER_DIR).join(WEAVER_CONFIG);
-    let listed: Vec<String> = finders.iter().map(|name| format!("\"{name}\"")).collect();
-    let text = fs::read_to_string(&marker).unwrap().replacen(
-        "loaded = []\n",
-        &format!("loaded = []\nfinders = [{}]\n", listed.join(", ")),
-        1,
-    );
-    fs::write(&marker, text).unwrap();
+    list_finders(dir.path(), finders);
     dir
 }
 
@@ -414,30 +409,6 @@ fn files_holding(dir: &Path, needle: &str) -> Vec<String> {
 // Taking a result
 // ---------------------------------------------------------------------------
 
-/// A finder on this machine naming a repository made in this process, two
-/// skills in it, and the folder of one: what a take can gather offline.
-fn finding_here(repository: &Path) -> Finders {
-    let answer = serde_json::json!({
-        "skills": [
-            {
-                "name": "pdf",
-                "sourceUrl": repository.to_string_lossy(),
-                "stars": 4,
-                "metadata": {"directoryPath": "skills/pdf"},
-            },
-            {
-                "name": "docx",
-                "sourceUrl": repository.to_string_lossy(),
-                "metadata": {"directoryPath": "skills/docx"},
-            },
-        ],
-    });
-    Finders {
-        claude_plugins: FixtureFinder::answering(CLAUDE_PLUGINS_PDF, &answer.to_string()),
-        ..Finders::start()
-    }
-}
-
 /// `--take N` gathers the result listed N, from its repository and its
 /// folder, as `gather git --path` gathers it, saying first the line it
 /// amounts to: the one skill in that folder, and not its neighbour.
@@ -454,7 +425,7 @@ fn take_gathers_the_result_listed_from_its_folder() {
             &skill_file("docx", "Read and write Word files"),
         ),
     ]);
-    let finders = finding_here(repository.path());
+    let finders = Finders::naming(repository.path());
 
     let listed = search(dir.path(), &finders, &["pdf"]).unwrap();
     let outcome = search(dir.path(), &finders, &["pdf", "--take", "1"]).unwrap();
@@ -493,7 +464,7 @@ fn take_gathers_the_result_listed_from_its_folder() {
 fn take_of_a_result_not_listed_gathers_nothing() {
     let dir = workspace(&["claude-plugins.dev"]);
     let repository = repository(&[("skills/pdf/SKILL.md", &skill_file("pdf", "Read PDF files"))]);
-    let finders = finding_here(repository.path());
+    let finders = Finders::naming(repository.path());
 
     let refused = search(dir.path(), &finders, &["pdf", "--take", "3"]).unwrap_err();
 

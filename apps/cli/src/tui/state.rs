@@ -13,6 +13,7 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 use std::sync::Arc;
 
 use mindweaver_core::create;
+use mindweaver_core::finder::Hit;
 use mindweaver_core::gather::{Progress, Watch};
 use mindweaver_core::scan;
 use mindweaver_core::{
@@ -493,6 +494,9 @@ pub enum Performed {
     /// The MCP Registry searched, and what the search found, read through
     /// core from what its line kept, to pick one from.
     Servers(Servers),
+    /// The skill directories searched, and what the search found, read
+    /// through core from what its line kept, to take one from.
+    Skills(Skills),
 }
 
 // ---------------------------------------------------------------------------
@@ -573,11 +577,15 @@ pub enum Mode {
     /// A marketplace's plugins, as its catalog lists them, ticked, to
     /// gather in one pass.
     Plugins(Plugins),
-    /// What to look for in the MCP Registry, typed.
+    /// What to look for in the MCP Registry or the skill directories,
+    /// typed.
     Searching(SearchForm),
     /// What a search of the MCP Registry found, to pick one to write into
     /// the library.
     Servers(Servers),
+    /// What a search of the skill directories found, to take one onto the
+    /// shelf.
+    Skills(Skills),
     /// What writing a server into the library would write, as its dry run
     /// said, until somebody says yes.
     Importing(Importing),
@@ -826,6 +834,7 @@ impl App {
             Mode::Plugins(plugins) => picking(plugins, key),
             Mode::Searching(form) => searching(form, key),
             Mode::Servers(servers) => looking(servers, key),
+            Mode::Skills(skills) => finding(skills, key),
             Mode::Importing(importing) => importing_keys(importing, key),
             Mode::Installing(screen) => self.installing(screen, key),
             Mode::Minds(screen) => self.in_minds(screen, key),
@@ -1741,6 +1750,10 @@ impl App {
                 self.mode = Mode::Servers(servers);
                 return;
             }
+            Performed::Skills(skills) => {
+                self.mode = Mode::Skills(skills);
+                return;
+            }
             Performed::Ran(dones) => dones,
         };
 
@@ -1794,6 +1807,7 @@ impl App {
                 | Task::Validate { .. }
                 | Task::Workspaces
                 | Task::SearchRegistry { .. }
+                | Task::SearchSkills { .. }
                 | Task::ImportServer { .. }
                 | Task::UpdateSource { .. }
                 | Task::RemoveSource { .. }
@@ -2061,13 +2075,17 @@ fn reading(mut reader: Reader, key: KeyEvent) -> (Mode, Step) {
 /// line `gather update` or `gather remove` is; a marketplace's plugins
 /// listed to pick from, the one picked, or one typed, which `gather
 /// marketplace --list` lists; the MCP Registry searched, `gather mcp
-/// search`; and the page's keys for the rest. Nothing to pick leaves the
-/// first three nothing to do.
+/// search`; the skill directories searched, `gather search`; and the
+/// page's keys for the rest. Nothing to pick leaves the first three
+/// nothing to do.
 fn shelving(mut shelf: Shelf, key: KeyEvent, workspace: Option<&Workspace>) -> (Mode, Step) {
     let count = shelf.sources.len();
     let picked = shelf.sources.get(shelf.picked).cloned();
     if key.code == KeyCode::Char('r') {
         return (Mode::Searching(SearchForm::default()), Step::Stay);
+    }
+    if key.code == KeyCode::Char('f') {
+        return (Mode::Searching(SearchForm::skills()), Step::Stay);
     }
     if key.code == KeyCode::Char('m') {
         let marketplace = workspace.and_then(|workspace| {
@@ -2481,23 +2499,55 @@ fn picking(mut plugins: Plugins, key: KeyEvent) -> (Mode, Step) {
     (Mode::Plugins(plugins), Step::Stay)
 }
 
-/// What to look for in the MCP Registry: what `r` on the shelf's page
-/// opens, for `gather mcp search` to list what the registry finds.
+/// What to look for in the MCP Registry, what `r` on the shelf's page
+/// opens, for `gather mcp search` to list what the registry finds; or in
+/// the skill directories, what `f` opens, for `gather search`.
 #[derive(Debug, Clone, Default)]
 pub struct SearchForm {
     pub query: Input,
     pub error: Option<String>,
+    /// What is searched.
+    pub searched: Searched,
+}
+
+/// What a search form searches.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Searched {
+    /// The official MCP Registry, for servers.
+    #[default]
+    Registry,
+    /// The skill directories the workspace's marker lists, for skills.
+    Skills,
 }
 
 impl SearchForm {
+    /// A search of the skill directories.
+    pub fn skills() -> Self {
+        Self {
+            searched: Searched::Skills,
+            ..Self::default()
+        }
+    }
+
     /// What it would run, if it were submitted now: a search of the
-    /// official registry for what is typed. Nothing while nothing is, since
-    /// a search for nothing lists every server the registry has.
+    /// official registry, or of every finder the marker lists, at its own
+    /// address, for what is typed. Nothing while nothing is, since a search
+    /// for nothing lists every server the registry has, and no finder
+    /// answers one.
     pub fn task(&self) -> Option<Task> {
         let query = self.query.text().trim();
-        (!query.is_empty()).then(|| Task::SearchRegistry {
-            query: query.to_owned(),
-            registry: None,
+        if query.is_empty() {
+            return None;
+        }
+        Some(match self.searched {
+            Searched::Registry => Task::SearchRegistry {
+                query: query.to_owned(),
+                registry: None,
+            },
+            Searched::Skills => Task::SearchSkills {
+                query: query.to_owned(),
+                at: Vec::new(),
+            },
         })
     }
 }
@@ -2577,6 +2627,60 @@ fn looking(mut servers: Servers, key: KeyEvent) -> (Mode, Step) {
         _ => {}
     }
     (Mode::Servers(servers), Step::Stay)
+}
+
+/// What a search of the skill directories found, read through core from
+/// what its line kept (`finder::kept`), to take one onto the shelf.
+#[derive(Debug, Clone)]
+pub struct Skills {
+    /// What was looked for.
+    pub query: String,
+    /// Each result found, in the order `gather search` numbers them.
+    pub hits: Vec<Hit>,
+    /// Which one the keyboard is on.
+    pub cursor: usize,
+    /// What the search warned of, as its line said it.
+    pub warnings: Vec<String>,
+}
+
+impl Skills {
+    /// What enter runs: the gather of the result the keyboard is on, the
+    /// `gather git` line that names it exactly, from its repository, its
+    /// folder in it and the branch a finder named, as `gather search
+    /// --take` gathers it. None while nothing was found.
+    pub fn task(&self) -> Option<Task> {
+        let hit = self.hits.get(self.cursor)?;
+        Some(Task::Gather {
+            url: hit.repository.to_string(),
+            folder: hit
+                .path
+                .clone()
+                .unwrap_or_else(|| String::from(DEFAULT_SUBDIRECTORY)),
+            reference: hit.reference.clone(),
+        })
+    }
+}
+
+/// The skills found's keys: the cursor moved, and enter to take the one it
+/// is on, its gather run apart, as any gather is.
+fn finding(mut skills: Skills, key: KeyEvent) -> (Mode, Step) {
+    let count = skills.hits.len();
+    match key.code {
+        KeyCode::Esc | KeyCode::Char('q') => return (Mode::Browse, Step::Stay),
+        KeyCode::Down | KeyCode::Char('j') if count > 0 => {
+            skills.cursor = (skills.cursor + 1) % count;
+        }
+        KeyCode::Up | KeyCode::Char('k') if count > 0 => {
+            skills.cursor = (skills.cursor + count - 1) % count;
+        }
+        KeyCode::Enter => {
+            if let Some(task) = skills.task() {
+                return (Mode::Skills(skills), Step::Run(task));
+            }
+        }
+        _ => {}
+    }
+    (Mode::Skills(skills), Step::Stay)
 }
 
 /// What writing a server into the library would write, as the dry run of
@@ -2848,7 +2952,7 @@ impl Reader {
 
     /// Every key, and the command it runs.
     pub fn help() -> Self {
-        let rows: [(&str, &str, &[&str]); 24] = [
+        let rows: [(&str, &str, &[&str]); 25] = [
             (
                 "a",
                 "add a skill or a rule",
@@ -2968,6 +3072,15 @@ impl Reader {
                     "mindweaver gather mcp search <query>",
                     "mindweaver gather mcp add --version <v> <server>",
                     "mindweaver gather mcp add --version <v> --yes <server>, with y",
+                ],
+            ),
+            (
+                "s f",
+                "look for skills in the directories weaver.toml lists: enter on one gathers it \
+                 from its folder",
+                &[
+                    "mindweaver gather search <query>",
+                    "mindweaver gather git --path <folder> <url>, with enter",
                 ],
             ),
             (

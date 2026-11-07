@@ -17,8 +17,8 @@ use ratatui::Frame;
 use super::minds::{self, Minds};
 use super::state::{
     AddField, AddForm, App, Confirm, Focus, GatherForm, Input, Item, LinkForm, LoadForm, Member,
-    Mode, Plugins, Reader, RenameForm, Running, Scope, SearchForm, Servers, SettingsForm, Shelf,
-    TargetsForm, Task, Tone, View, Workspace, GATHER_FIELDS,
+    Mode, Plugins, Reader, RenameForm, Running, Scope, SearchForm, Searched, Servers, SettingsForm,
+    Shelf, Skills, TargetsForm, Task, Tone, View, Workspace, GATHER_FIELDS,
 };
 use crate::commands::project::worth_linking;
 use crate::install::ui::{centred, pane, selected};
@@ -51,6 +51,7 @@ pub fn draw(app: &App, frame: &mut Frame) {
             Mode::Plugins(plugins) => picking(plugins, frame, area),
             Mode::Searching(form) => searching(form, frame, area),
             Mode::Servers(servers) => looking(servers, frame, area),
+            Mode::Skills(skills) => finding(skills, frame, area),
             Mode::Importing(importing) => page(
                 &importing.reader,
                 " y write it into the library   ↑↓ scroll   esc back ",
@@ -1160,9 +1161,14 @@ fn picking(plugins: &Plugins, frame: &mut Frame, area: Rect) {
     );
 }
 
-/// What to look for in the MCP Registry, and the search it runs.
+/// What to look for in the MCP Registry or the skill directories, and the
+/// search it runs.
 fn searching(form: &SearchForm, frame: &mut Frame, area: Rect) {
-    let inner = popup(frame, area, "Search the MCP Registry", 78, 6);
+    let title = match form.searched {
+        Searched::Registry => "Search the MCP Registry",
+        Searched::Skills => "Look for skills in the directories weaver.toml lists",
+    };
+    let inner = popup(frame, area, title, 78, 6);
     let rows = lines(inner, 4);
     input(frame, rows[0], "query", &form.query, true);
     runs(frame, rows[1], form.task().as_ref());
@@ -1240,6 +1246,72 @@ fn looking(servers: &Servers, frame: &mut Frame, area: Rect) {
     );
 }
 
+/// The skills a search of the skill directories found, a screen's worth
+/// around the one the keyboard is on, each numbered as `gather search`
+/// numbers it, by its name, repository, folder and the finders that found
+/// it, and the gather enter runs.
+fn finding(skills: &Skills, frame: &mut Frame, area: Rect) {
+    let shown = skills.hits.len().clamp(1, SERVERS_SHOWN);
+    let height = u16::try_from(shown).unwrap_or(1) + 6;
+    let inner = popup(
+        frame,
+        area,
+        &format!("What the finders found for {}", printable(&skills.query)),
+        110,
+        height,
+    );
+    let rows = lines(inner, shown + 4);
+    let first = skills.cursor.saturating_sub(shown - 1);
+    let width = skills
+        .hits
+        .iter()
+        .map(|hit| hit.name.chars().count())
+        .max()
+        .unwrap_or(0);
+    if skills.hits.is_empty() {
+        frame.render_widget(
+            Paragraph::new(Span::styled("no finder found a skill for that", dim())),
+            rows[0],
+        );
+    }
+    for (row, at) in (first..skills.hits.len()).take(shown).enumerate() {
+        let hit = &skills.hits[at];
+        let style = if at == skills.cursor {
+            bold().fg(Color::Cyan)
+        } else {
+            Style::default()
+        };
+        let finders: Vec<&str> = hit.finders.iter().map(|finder| finder.name()).collect();
+        let line = Line::from(vec![
+            Span::styled(format!("{:>2}  ", at + 1), dim()),
+            Span::styled(format!("{:<width$}", printable(&hit.name)), style),
+            Span::styled(
+                format!(
+                    "  {}  {}  {}",
+                    printable(&hit.repository),
+                    printable(hit.path.as_deref().unwrap_or(".")),
+                    finders.join(", ")
+                ),
+                dim(),
+            ),
+        ]);
+        frame.render_widget(Paragraph::new(line), rows[row]);
+    }
+    if !skills.warnings.is_empty() {
+        let said = format!(
+            "{} beside it, which `mindweaver gather search` says in full",
+            plural(skills.warnings.len(), "line")
+        );
+        frame.render_widget(Paragraph::new(Span::styled(said, warn())), rows[shown + 1]);
+    }
+    runs(frame, rows[shown], skills.task().as_ref());
+    keys(
+        frame,
+        rows[shown + 3],
+        "enter gather it from its folder   ↑↓ move   esc close",
+    );
+}
+
 fn confirming(confirm: &Confirm, frame: &mut Frame, area: Rect) {
     const WIDTH: u16 = 76;
 
@@ -1306,14 +1378,16 @@ fn reading(reader: &Reader, frame: &mut Frame, area: Rect) {
 }
 
 /// The keys of the shelf's page, with the source they act on: none to say
-/// while nothing is gathered, which leaves them nothing to do.
+/// while nothing is gathered, which leaves them nothing to do. Each said in
+/// a word or two, so a short source's line fits a terminal 110 columns wide
+/// with the skill search among them; the help page says each in full.
 fn shelving(shelf: &Shelf) -> String {
     match shelf.sources.get(shelf.picked) {
         Some(source) => format!(
-            " ←→ source: {}   u update it   U update all   d remove it   m marketplace   r MCP   ↑↓ scroll   esc close ",
+            " ←→ source: {}   u update   U all   d remove   m plugins   f skills   r MCP   ↑↓ scroll   esc close ",
             printable(source)
         ),
-        None => String::from(" m marketplace   r MCP   ↑↓ scroll   esc close "),
+        None => String::from(" m plugins   f skills   r MCP   ↑↓ scroll   esc close "),
     }
 }
 

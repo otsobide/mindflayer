@@ -113,6 +113,32 @@ impl Finders {
         }
     }
 
+    /// The three, claude-plugins.dev answering a search for `pdf` with two
+    /// skills of `repository`, a repository on this machine, `pdf` and
+    /// `docx`, each in its folder under `skills`: what a take can gather
+    /// offline, from a finder on this machine, which may name one here.
+    pub fn naming(repository: &Path) -> Self {
+        let answer = serde_json::json!({
+            "skills": [
+                {
+                    "name": "pdf",
+                    "sourceUrl": repository.to_string_lossy(),
+                    "stars": 4,
+                    "metadata": {"directoryPath": "skills/pdf"},
+                },
+                {
+                    "name": "docx",
+                    "sourceUrl": repository.to_string_lossy(),
+                    "metadata": {"directoryPath": "skills/docx"},
+                },
+            ],
+        });
+        Self {
+            claude_plugins: FixtureFinder::answering(CLAUDE_PLUGINS_PDF, &answer.to_string()),
+            ..Self::start()
+        }
+    }
+
     /// `--finder-url` for each, as a line takes it.
     pub fn options(&self) -> Vec<String> {
         [
@@ -137,6 +163,21 @@ impl Finders {
             .filter(|word| word != "--finder-url")
             .collect()
     }
+}
+
+/// List `finders` in the marker of the workspace at `root`, as somebody
+/// would by hand: no command writes the key.
+pub fn list_finders(root: &Path, finders: &[&str]) {
+    let marker = root
+        .join(mindweaver_core::WEAVER_DIR)
+        .join(mindweaver_core::WEAVER_CONFIG);
+    let listed: Vec<String> = finders.iter().map(|name| format!("\"{name}\"")).collect();
+    let text = std::fs::read_to_string(&marker).unwrap().replacen(
+        "loaded = []\n",
+        &format!("loaded = []\nfinders = [{}]\n", listed.join(", ")),
+        1,
+    );
+    std::fs::write(&marker, text).unwrap();
 }
 
 /// What the fixture `name` in core's suite holds.

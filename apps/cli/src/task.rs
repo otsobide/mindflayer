@@ -303,6 +303,14 @@ pub enum Task {
         query: String,
         registry: Option<String>,
     },
+    /// `mindweaver gather search [--finder-url <finder>=<url>]... <query>`:
+    /// the skill directories the workspace's marker lists asked what they
+    /// find for `query`, each at its own address unless `at` names another,
+    /// as `--finder-url` takes it, for one to take (#108). No token: what
+    /// GitHub's code search answers a token is never kept, so a front end
+    /// that reads the line's results back could not read it, and the line
+    /// skips GitHub, saying so.
+    SearchSkills { query: String, at: Vec<String> },
     /// `mindweaver gather mcp add [--version <v>] [--registry <url>]
     /// [--yes] <server>`: the server the MCP Registry gives that name
     /// written into the library, at `version` or its latest; without
@@ -810,6 +818,12 @@ impl Task {
                 let head: Vec<&str> = head.iter().map(String::as_str).collect();
                 vec![words(&head, &[query])]
             }
+            Task::SearchSkills { query, at } => {
+                let mut head = owned(&["mindweaver", "gather", "search"]);
+                head.extend(at.iter().flat_map(|at| option("--finder-url", at)));
+                let head: Vec<&str> = head.iter().map(String::as_str).collect();
+                vec![words(&head, &[query])]
+            }
             // `--yes` before the name, as `remove` has it.
             Task::ImportServer {
                 server,
@@ -1033,10 +1047,11 @@ impl Task {
 
     /// Whether it runs on a thread of its own while the screen goes on
     /// drawing what it reports: a gather, a source gathered again, a
-    /// marketplace's catalog listed or its plugins gathered, or the MCP
-    /// Registry searched or a server of it written, which is the network,
-    /// and can take long enough to want watching. Everything else is the
-    /// local disk, over before anybody could read a count.
+    /// marketplace's catalog listed or its plugins gathered, the MCP
+    /// Registry searched or a server of it written, or the skill
+    /// directories searched, which is the network, and can take long
+    /// enough to want watching. Everything else is the local disk, over
+    /// before anybody could read a count.
     pub fn runs_apart(&self) -> bool {
         matches!(
             self,
@@ -1045,14 +1060,16 @@ impl Task {
                 | Task::ListPlugins { .. }
                 | Task::GatherPlugins { .. }
                 | Task::SearchRegistry { .. }
+                | Task::SearchSkills { .. }
                 | Task::ImportServer { .. }
         )
     }
 
     /// Whether a cancel stops it once it runs apart: a gather's, which
-    /// watches for one until it starts placing, and not the MCP Registry's,
-    /// whose client waits for an answer, within its limit, and watches for
-    /// nothing.
+    /// watches for one until it starts placing, and not a search's, of the
+    /// MCP Registry or the skill directories, nor a server written from the
+    /// registry, whose client waits for an answer, within its limit, and
+    /// watches for nothing.
     pub fn cancellable(&self) -> bool {
         matches!(
             self,
