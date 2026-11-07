@@ -190,6 +190,7 @@ pub(crate) fn run_gather(
             finders,
             token_env,
             at,
+            take,
             json,
         } => {
             let asked = super::search::Asked {
@@ -198,7 +199,10 @@ pub(crate) fn run_gather(
                 token_env: token_env.as_deref(),
                 at,
             };
-            super::search::run_search(&asked, *json, directory, lookup)
+            match take {
+                Some(number) => super::search::run_take(&asked, *number, directory, lookup, watch),
+                None => super::search::run_search(&asked, *json, directory, lookup),
+            }
         }
     }
 }
@@ -605,7 +609,7 @@ pub(crate) fn scrubbed(scrub: &Scrub) -> Scrubbed {
 /// A gather that got this far was given none, since core refuses them, so
 /// this costs nothing today and still holds if that ever changes. In
 /// printable text, as its name is: a plugin's URL is its catalog's.
-fn gathered(url: &str, report: &Report) -> Outcome {
+pub(super) fn gathered(url: &str, report: &Report) -> Outcome {
     let url = printable(&redacted(url));
     let mut stdout = String::new();
     let at = report

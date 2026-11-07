@@ -46,22 +46,23 @@ struct Metadata {
 }
 
 /// Each skill listed, at its tree URL, or, when it gives none, in the
-/// repository and the folder its metadata names.
+/// repository its metadata names; in the folder its metadata names, or the
+/// one its tree URL does.
 pub(super) fn read(answer: serde_json::Value) -> Result<Vec<Entry>, String> {
     let answer: Answer =
         serde_json::from_value(answer).map_err(|error| printable(&error.to_string()))?;
     Ok(entries(answer.skills, "name", |skill: Skill| {
-        let (address, path) = match (skill.source_url, skill.metadata) {
-            (Some(url), _) => (Some(url), None),
-            (None, Some(metadata)) => (
+        let (repository, path) = match skill.metadata {
+            Some(metadata) => (
                 metadata
                     .repo_owner
                     .zip(metadata.repo_name)
                     .map(|(owner, repo)| format!("{owner}/{repo}")),
                 metadata.directory_path,
             ),
-            (None, None) => (None, None),
+            None => (None, None),
         };
+        let address = skill.source_url.or(repository);
         Ok(Listed {
             name: skill.name,
             address,

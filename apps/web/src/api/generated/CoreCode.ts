@@ -185,6 +185,7 @@ export type CoreCode =
   | "finder_answer_unreadable"
   | "finder_result_dropped"
   | "search_query_empty"
+  | "search_result_missing"
   | "finder_none_enabled"
   | "finder_not_enabled"
   | "finder_unknown"

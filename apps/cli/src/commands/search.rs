@@ -15,13 +15,16 @@ use std::path::Path;
 
 use mindweaver_core::adapter::reqwest::Reqwest;
 use mindweaver_core::finder::{self, Enabled, Finder, Found, Search, Token};
+use mindweaver_core::gather::{self, Request, Watch};
 use mindweaver_core::http::Client;
-use mindweaver_core::WeaverWorkspace;
+use mindweaver_core::{WeaverWorkspace, DEFAULT_SUBDIRECTORY};
 
-use super::reading_workspace;
+use super::gather::{gathered, scrubbed};
 use super::registry::{client, http_warned};
+use super::{reading_workspace, workspace_here};
 use crate::homes::variable;
 use crate::render::{json_or_text, plural, printable, table};
+use crate::task::{shell, Task};
 use crate::{CliError, Failure, Lookup, Outcome, Warning};
 
 /// What `gather search` was asked: the query, the finders named, the
@@ -52,6 +55,80 @@ pub(crate) fn run_search(
         Ok(outcome)
     })?;
     Ok(json_or_text(found.filter(|_| json), text))
+}
+
+/// Run `gather search --take N`: the search, and the result listed `number`
+/// gathered from its repository and its folder, through what `gather git`
+/// does, reporting as it does.
+///
+/// A write, so the workspace is made where it is not yet, as a gather
+/// makes it. The line it amounts to is said first, spelled as the TUI's
+/// take spells it ([`Task::Gather`]), so what was taken can be gathered
+/// again, or read, without searching. What the search said, a finder that
+/// failed among it, is said beside the gather's report: the result taken
+/// is the one listed `number` by what did answer.
+pub(crate) fn run_take(
+    asked: &Asked<'_>,
+    number: u32,
+    directory: &Path,
+    lookup: &Lookup,
+    watch: &Watch,
+) -> Result<Outcome, Failure> {
+    let http = Reqwest::new().map_err(CliError::from)?;
+    let (token, unset) = token(asked.token_env);
+    let workspace = workspace_here(directory, lookup)?;
+    let enabled = finder::enabled(&workspace);
+    let found = search(&http, &workspace, &enabled, asked, token)?;
+    let said = listed(&found, asked.query, &enabled, unset.as_ref()).stderr;
+    let refused = |error: CliError, said: Vec<Warning>| Failure {
+        error: Box::new(error),
+        warnings: said,
+    };
+    let hit = match found.take(number as usize) {
+        Ok(hit) => hit,
+        Err(error) => return Err(refused(error.into(), said)),
+    };
+    let line = Task::Gather {
+        url: hit.repository.to_string(),
+        folder: hit
+            .path
+            .clone()
+            .unwrap_or_else(|| String::from(DEFAULT_SUBDIRECTORY)),
+        reference: hit.reference.clone(),
+    }
+    .commands();
+    let request = match Request::addressed(&hit.repository, hit.reference.clone(), hit.path.clone())
+    {
+        Ok(request) => request.watched_by(watch.clone()),
+        Err(error) => return Err(refused(error.into(), said)),
+    };
+    let (ledger, scrub) = match workspace.ledger_to_write() {
+        Ok(opened) => opened,
+        Err(error) => return Err(refused(error.into(), said)),
+    };
+    let scrubbed = scrubbed(&scrub);
+    match gather::gather(&workspace, &ledger, &request) {
+        Ok(report) => {
+            let mut outcome = gathered(request.source.url(), &report);
+            let taken: Vec<String> = line.iter().map(|words| shell(words)).collect();
+            outcome.stdout.insert_str(
+                0,
+                &format!(
+                    "taking result {number}, {}: {}\n",
+                    printable(&hit.name),
+                    printable(&taken.join(" && "))
+                ),
+            );
+            outcome.ok = outcome.ok && said.iter().all(|line| line.code.is_none());
+            outcome.stderr.splice(0..0, said);
+            Ok(scrubbed.before(outcome))
+        }
+        Err(error) => {
+            let mut warnings = scrubbed.lines();
+            warnings.extend(said);
+            Err(refused(error.into(), warnings))
+        }
+    }
 }
 
 /// The token in the variable `token_env` names, if one is named; and, when

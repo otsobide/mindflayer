@@ -210,6 +210,9 @@ pub enum SearchError {
         .config.display()
     )]
     NoneEnabled { config: PathBuf },
+    /// `--take` naming a result the search did not list.
+    #[error("there is no result {asked} to take: {}", results(*found))]
+    NoSuchResult { asked: usize, found: usize },
     /// A finder named that the marker does not list.
     #[error(
         "{finder} is not enabled, so it was not asked: list it in `finders` in {} to search it",
@@ -220,9 +223,19 @@ pub enum SearchError {
 
 codes!(SearchError {
     Self::Empty => "search_query_empty",
+    Self::NoSuchResult { .. } => "search_result_missing",
     Self::NoneEnabled { .. } => "finder_none_enabled",
     Self::NotEnabled { .. } => "finder_not_enabled",
 });
+
+/// How many results a search found, as a refusal to take another says it.
+fn results(found: usize) -> String {
+    match found {
+        0 => String::from("the search found none"),
+        1 => String::from("the search found 1"),
+        found => format!("the search found {found}"),
+    }
+}
 
 /// A name the marker lists among its finders that this build knows no
 /// finder by: passed over, and said.
@@ -602,6 +615,19 @@ pub struct Found {
 }
 
 impl Found {
+    /// The result listed `number`, counting from 1, as a search lists them
+    /// and `--take` names one: the one a front end gathers, by its
+    /// repository and its folder.
+    pub fn take(&self, number: usize) -> Result<&Hit, SearchError> {
+        number
+            .checked_sub(1)
+            .and_then(|at| self.hits.get(at))
+            .ok_or(SearchError::NoSuchResult {
+                asked: number,
+                found: self.hits.len(),
+            })
+    }
+
     /// `hit`, found by `finder`, listed once however many finders name it:
     /// by its repository, as [`url::canonical`] spells every spelling of
     /// one, and its folder in it. A second finder's is said beside the

@@ -1655,7 +1655,8 @@ pub enum GatherCommand {
 
     /// Look for skills in the skill directories weaver.toml lists in
     /// `finders`, each found by its name, its repository, its folder in it,
-    /// its installs or stars and the finders that found it.
+    /// its installs or stars and the finders that found it; --take gathers
+    /// one, as `gather git` would.
     ///
     /// github is GitHub's code search, asked only with a token
     /// (--token-env); skills.sh and claude-plugins.dev are unstable, read
@@ -1679,6 +1680,11 @@ pub enum GatherCommand {
         /// https or http on this machine: `github=https://ghe.example/api/v3`.
         #[arg(long = "finder-url", value_name = "FINDER=URL", value_parser = finder_at)]
         at: Vec<(Finder, String)>,
+
+        /// Gather the result listed N, from its repository and its folder
+        /// in it, as `gather git` would, instead of listing them.
+        #[arg(long, value_name = "N", value_parser = clap::value_parser!(u32).range(1..), conflicts_with = "json")]
+        take: Option<u32>,
 
         /// Print it as JSON, in the envelope every reading command's --json
         /// shares.

@@ -276,3 +276,34 @@ fn a_result_resolves_only_to_a_git_source_a_gather_would_take() {
         "it names no repository"
     );
 }
+
+/// `--take` names a result by where it is listed, from 1.
+#[test]
+fn a_result_is_taken_by_its_number_from_one() {
+    let hit = |name: &str| Hit {
+        name: name.to_owned(),
+        repository: Redacted::new("https://github.com/acme/skills"),
+        path: Some(name.to_owned()),
+        reference: None,
+        installs: None,
+        stars: None,
+        finders: vec![Finder::SkillsSh],
+    };
+    let found = Found {
+        hits: vec![hit("pdf"), hit("docx")],
+        skipped: Vec::new(),
+        failures: Vec::new(),
+        warnings: Vec::new(),
+    };
+
+    assert_eq!(found.take(1).unwrap().name, "pdf");
+    assert_eq!(found.take(2).unwrap().name, "docx");
+    for asked in [0, 3] {
+        let refused = found.take(asked).unwrap_err();
+        assert_eq!(refused.code(), "search_result_missing");
+        assert_eq!(
+            refused.to_string(),
+            format!("there is no result {asked} to take: the search found 2")
+        );
+    }
+}

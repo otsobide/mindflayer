@@ -407,3 +407,104 @@ fn files_holding(dir: &Path, needle: &str) -> Vec<String> {
     }
     holding
 }
+
+// ---------------------------------------------------------------------------
+// Taking a result
+// ---------------------------------------------------------------------------
+
+/// A finder on this machine naming a repository made in this process, two
+/// skills in it, and the folder of one: what a take can gather offline.
+fn finding_here(repository: &Path) -> Finders {
+    let answer = serde_json::json!({
+        "skills": [
+            {
+                "name": "pdf",
+                "sourceUrl": repository.to_string_lossy(),
+                "stars": 4,
+                "metadata": {"directoryPath": "skills/pdf"},
+            },
+            {
+                "name": "docx",
+                "sourceUrl": repository.to_string_lossy(),
+                "metadata": {"directoryPath": "skills/docx"},
+            },
+        ],
+    });
+    Finders {
+        claude_plugins: FixtureFinder::answering(CLAUDE_PLUGINS_PDF, &answer.to_string()),
+        ..Finders::start()
+    }
+}
+
+/// `--take N` gathers the result listed N, from its repository and its
+/// folder, as `gather git --path` gathers it, saying first the line it
+/// amounts to: the one skill in that folder, and not its neighbour.
+#[test]
+fn take_gathers_the_result_listed_from_its_folder() {
+    let dir = workspace(&["claude-plugins.dev"]);
+    let repository = repository(&[
+        (
+            "skills/pdf/SKILL.md",
+            &skill_file("pdf", "Read and write PDF files"),
+        ),
+        (
+            "skills/docx/SKILL.md",
+            &skill_file("docx", "Read and write Word files"),
+        ),
+    ]);
+    let finders = finding_here(repository.path());
+
+    let listed = search(dir.path(), &finders, &["pdf"]).unwrap();
+    let outcome = search(dir.path(), &finders, &["pdf", "--take", "1"]).unwrap();
+
+    let url = repository.path().display();
+    assert!(
+        listed.stdout.starts_with(&format!(
+            "1  pdf   {url}  skills/pdf   4 stars  claude-plugins.dev\n"
+        )),
+        "{}",
+        listed.stdout
+    );
+    let mut lines = outcome.stdout.lines();
+    assert_eq!(
+        lines.next(),
+        Some(
+            format!("taking result 1, pdf: mindweaver gather git --path skills/pdf {url}").as_str()
+        )
+    );
+    assert!(
+        outcome
+            .stdout
+            .contains("  added  pdf  Read and write PDF files"),
+        "{}",
+        outcome.stdout
+    );
+    assert!(!outcome.stdout.contains("docx"), "{}", outcome.stdout);
+    assert!(outcome.ok, "{:?}", outcome.stderr);
+    let shelf = weaver(dir.path(), &["gather", "list"]).unwrap();
+    assert!(shelf.stdout.contains("pdf"), "{}", shelf.stdout);
+    assert!(!shelf.stdout.contains("docx"), "{}", shelf.stdout);
+}
+
+/// A number the search did not list is refused, and nothing is gathered.
+#[test]
+fn take_of_a_result_not_listed_gathers_nothing() {
+    let dir = workspace(&["claude-plugins.dev"]);
+    let repository = repository(&[("skills/pdf/SKILL.md", &skill_file("pdf", "Read PDF files"))]);
+    let finders = finding_here(repository.path());
+
+    let refused = search(dir.path(), &finders, &["pdf", "--take", "3"]).unwrap_err();
+
+    assert_eq!(refused.error.code(), "search_result_missing");
+    assert_eq!(
+        refused.error.to_string(),
+        "there is no result 3 to take: the search found 2"
+    );
+    assert!(!dir.path().join(WEAVER_DIR).join("mindweaver.db").exists());
+    let line = common::line(
+        "mindweaver",
+        &["gather", "search", "pdf", "--take", "1", "--json"],
+        dir.path(),
+    );
+    assert!(WeaverCli::try_parse_from(&line).is_err());
+}
