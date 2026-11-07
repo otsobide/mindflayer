@@ -4004,6 +4004,7 @@ io.github.acme/notes-cloud   2.0.0  active  Your notes, hosted by Acme
 io.github.acme/notes-bundle  2.0.0  active  Your notes, as an MCP bundle
 io.github.acme/notes-crate   2.0.0  active  Your notes, in Rust
 io.github.acme/notes-brew    2.0.0  active  Your notes, from a tap
+warning: servers[8] (`io.github.acme/notes  io.github.acme/trusted`): its name has a control character or a space at either end, which no list shows as it is, so it is not listed
 ```
 
 A server the registry lists that cannot be read is a warning beside the
