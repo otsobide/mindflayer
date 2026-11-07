@@ -544,3 +544,104 @@ fn a_finder_on_this_machine_may_name_a_folder_here() {
 
     assert_eq!(rows(&found), ["docx /srv/skills . Some(3) None skills.sh"]);
 }
+
+// ---------------------------------------------------------------------------
+// A search read again
+// ---------------------------------------------------------------------------
+
+/// What a search found is read again from the answers the cache kept of
+/// it, sending nothing: what a front end that ran the search as a line
+/// reads once the line is over.
+#[test]
+fn a_search_is_read_again_from_what_the_cache_kept() {
+    let (_dir, workspace) = WorkspaceMother::empty();
+    let fake = every_finder();
+    let client = Client::new(&fake).with_cache(Cache::of(&workspace).unwrap());
+    let searched = Search::new(&client).run(QUERY, &Finder::ALL).unwrap();
+
+    let kept = finder::kept(Cache::of(&workspace).unwrap(), QUERY, &Finder::ALL, &[]).unwrap();
+
+    assert_eq!(kept.hits, searched.hits);
+    assert_eq!(kept.skipped, [Finder::Github]);
+    assert_eq!(said(&kept), said(&searched));
+    assert_eq!(fake.urls().len(), 2, "nothing more was sent");
+}
+
+/// What GitHub's code search answered a token was never kept, so reading a
+/// search again lists what the other finders found, and nothing it alone
+/// did.
+#[test]
+fn what_a_token_unlocked_is_not_read_again() {
+    let (_dir, workspace) = WorkspaceMother::empty();
+    let fake = every_finder();
+    let client = Client::new(&fake).with_cache(Cache::of(&workspace).unwrap());
+    Search::new(&client)
+        .with_token(token())
+        .run(QUERY, &Finder::ALL)
+        .unwrap();
+
+    let kept = finder::kept(Cache::of(&workspace).unwrap(), QUERY, &Finder::ALL, &[]).unwrap();
+
+    assert_eq!(
+        rows(&kept),
+        [
+            "pdf-skill https://github.com/acme/pdf-skill . Some(1234) None skills.sh",
+            "commit-style https://github.com/beta/house-rules . Some(56) None skills.sh",
+            "pdf https://github.com/acme/skills skills/pdf Some(12) Some(321) claude-plugins.dev",
+            "slides https://github.com/beta/decks skills/slides None Some(7) claude-plugins.dev",
+        ]
+    );
+}
+
+/// A search whose answers the cache does not keep, as one never made, is
+/// no listing at all; one a finder's answer is kept of lists what it
+/// found, the finder whose answer is not kept left out.
+#[test]
+fn a_search_the_cache_keeps_nothing_of_is_no_listing() {
+    let (_dir, workspace) = WorkspaceMother::empty();
+
+    assert!(finder::kept(Cache::of(&workspace).unwrap(), QUERY, &Finder::ALL, &[]).is_none());
+
+    let fake = every_finder();
+    let client = Client::new(&fake).with_cache(Cache::of(&workspace).unwrap());
+    Search::new(&client)
+        .run(QUERY, &[Finder::SkillsSh])
+        .unwrap();
+    let kept = finder::kept(Cache::of(&workspace).unwrap(), QUERY, &Finder::ALL, &[]).unwrap();
+
+    assert!(kept
+        .hits
+        .iter()
+        .all(|hit| hit.finders == [Finder::SkillsSh]));
+    assert!(kept
+        .failures
+        .iter()
+        .all(|failure| failure.finder() == Finder::SkillsSh));
+}
+
+/// A finder asked at another address is read again at that address, whose
+/// answers are the ones kept.
+#[test]
+fn a_search_at_another_address_is_read_again_there() {
+    let (_dir, workspace) = WorkspaceMother::empty();
+    let here = "http://127.0.0.1:9";
+    let fake = Fake::default().answering(
+        "http://127.0.0.1:9/api/search?q=pdf&limit=20",
+        r#"{"skills": [{"name": "docx", "source": "acme/docs"}]}"#,
+    );
+    let client = Client::new(&fake).with_cache(Cache::of(&workspace).unwrap());
+    Search::new(&client)
+        .at(Finder::SkillsSh, here)
+        .run(QUERY, &[Finder::SkillsSh])
+        .unwrap();
+    let cache = || Cache::of(&workspace).unwrap();
+
+    let at = [(Finder::SkillsSh, String::from(here))];
+    let kept = finder::kept(cache(), QUERY, &[Finder::SkillsSh], &at).unwrap();
+
+    assert_eq!(
+        rows(&kept),
+        ["docx https://github.com/acme/docs . None None skills.sh"]
+    );
+    assert!(finder::kept(cache(), QUERY, &[Finder::SkillsSh], &[]).is_none());
+}

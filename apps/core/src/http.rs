@@ -634,6 +634,21 @@ impl<'a> Client<'a> {
     }
 }
 
+/// A transport that sends nothing, for a client that reads its cache
+/// alone: whatever the cache does not keep fails as no transport to send
+/// with. What a front end reads a search again through, from what the line
+/// that made it kept ([`crate::registry::kept`], [`crate::finder::kept`]).
+#[derive(Debug)]
+pub(crate) struct Unsent;
+
+impl Http for Unsent {
+    fn send(&self, _: &Request, _: Duration) -> Result<Answer, HttpError> {
+        Err(HttpError::Unavailable {
+            detail: Redacted::new("only what is kept is read"),
+        })
+    }
+}
+
 /// `url` parsed, if it is one a fetch may name: https, or http to this
 /// machine.
 ///

@@ -36,8 +36,8 @@ use thiserror::Error;
 
 use crate::adapter::SystemClock;
 use crate::code::{codes, Said};
-use crate::http::{fetchable, Answer, Cache, Client, Failed, HttpError, Paging, Request};
-use crate::port::{Clock, Http};
+use crate::http::{fetchable, Cache, Client, Failed, HttpError, Paging, Request, Unsent};
+use crate::port::Clock;
 use crate::text::{printable, Utc};
 use crate::value::Redacted;
 
@@ -252,20 +252,6 @@ fn request(url: &str) -> Request {
 pub fn kept(cache: Cache, base: &str, query: &str) -> Option<Listing> {
     let client = Client::new(&Unsent).with_cache(cache.fresh_for(Duration::MAX));
     Registry::new(&client).at(base).search(query).ok()
-}
-
-/// A transport that sends nothing, for a client that reads its cache
-/// alone: whatever the cache does not keep fails as no transport to send
-/// with.
-#[derive(Debug)]
-struct Unsent;
-
-impl Http for Unsent {
-    fn send(&self, _: &Request, _: Duration) -> Result<Answer, HttpError> {
-        Err(HttpError::Unavailable {
-            detail: Redacted::new("only what is kept is read"),
-        })
-    }
 }
 
 /// The servers a listing read, and what it could not.

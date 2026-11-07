@@ -24,6 +24,7 @@
 use std::borrow::Cow;
 use std::fmt;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
@@ -31,7 +32,7 @@ use thiserror::Error;
 
 use crate::code::{codes, Said};
 use crate::gather::outside;
-use crate::http::{fetchable, on_this_machine, Client, HttpError, Request};
+use crate::http::{fetchable, on_this_machine, Cache, Client, HttpError, Request, Unsent};
 use crate::text::printable;
 use crate::url::{self, carries_credentials};
 use crate::value::Redacted;
@@ -384,6 +385,55 @@ impl<'a> Search<'a> {
     }
 }
 
+/// What a search for `query` of `finders`, each at the address `at`
+/// names or its own, found the last time it was made through a client
+/// keeping its answers in `cache`, read from the cache alone: nothing is
+/// sent, however long ago each answer was kept. `None` when the cache keeps
+/// no finder's answer to it.
+///
+/// What a front end that ran the search as a command line reads what the
+/// line found from, as the TUI does once the line is over, rather than
+/// reading the line's output back or asking the finders again on the
+/// thread that draws, as [`crate::registry::kept`] reads a registry's.
+/// No token is sent, and none was kept: what GitHub's code search answered
+/// a token is no answer kept, so it is skipped here, and only the finders
+/// that need none are read again. A finder whose answer is not kept is
+/// left out, as one that was never asked.
+pub fn kept(
+    cache: Cache,
+    query: &str,
+    finders: &[Finder],
+    at: &[(Finder, String)],
+) -> Option<Found> {
+    let client = Client::new(&Unsent).with_cache(cache.fresh_for(Duration::MAX));
+    let search = at
+        .iter()
+        .fold(Search::new(&client), |search, (finder, base)| {
+            search.at(*finder, base.clone())
+        });
+    let mut found = search.run(query, finders).ok()?;
+    let unkept = |failure: &Failure| {
+        matches!(
+            failure,
+            Failure::Failed {
+                error: HttpError::Unavailable { .. },
+                ..
+            }
+        )
+    };
+    let missing: Vec<Finder> = found
+        .failures
+        .iter()
+        .filter(|failure| unkept(failure))
+        .map(Failure::finder)
+        .collect();
+    found.failures.retain(|failure| !unkept(failure));
+    let read = finders
+        .iter()
+        .any(|finder| !finder.needs_token() && !missing.contains(finder));
+    read.then_some(found)
+}
+
 /// The URL of `segments` below `base`, with `query`, each value escaped as
 /// the value it is: a finder's address may have a path of its own, as a
 /// GitHub Enterprise server's API does (`/api/v3`).
@@ -650,6 +700,17 @@ pub enum Failure {
         name: Option<String>,
         why: Redacted,
     },
+}
+
+impl Failure {
+    /// The finder it is of.
+    pub fn finder(&self) -> Finder {
+        match self {
+            Failure::Failed { finder, .. }
+            | Failure::Unreadable { finder, .. }
+            | Failure::Dropped { finder, .. } => *finder,
+        }
+    }
 }
 
 codes!(Failure {
