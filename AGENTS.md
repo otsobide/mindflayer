@@ -258,7 +258,11 @@ under `apps/` with its own `Makefile`:
   (`http/cache.rs`); the official MCP Registry is read through it, its
   `/v0.1` API searched, a server's version fetched and what changed since
   a time listed, a server at a time, at the address its caller names
-  (`registry`, its JSON's shapes in `registry/server.rs`)). Each, as the ledger's store and the clock, goes
+  (`registry`, its JSON's shapes in `registry/server.rs`), and a server
+  version mapped to a definition, written nowhere: its first package that
+  maps a program, or its first remote an address, its inputs read from the
+  environment, and what nothing here starts a coded manual step
+  (`ServerVersion::import`, `registry/import.rs`)). Each, as the ledger's store and the clock, goes
   through a port (`port`: a `Remote` a gather fetches through, an `Http` a
   client sends through, a `LedgerStore` the ledger keeps its records in, a
   `Clock` it stamps them by), each
@@ -1189,7 +1193,21 @@ These are easy to break from a single file without noticing.
     the folders it names held to the repository
     (`gathered_manifest_outside`), and its MCP files are named, never
     imported. What a catalog says reaches a terminal through `printable`,
-    as a gather's failures do.
+    as a gather's failures do (`text::printable`, core's, which the CLI's
+    rows use too).
+  - The MCP Registry's answers are read a server at a time (`registry`):
+    one that does not read is said beside the rest
+    (`registry_server_unreadable`), a key it does not know passed over, a
+    name or a version no list shows as it is no server's, and every other
+    string made printable before a front end is handed it or a definition
+    holds it. What it maps to (`ServerVersion::import`) is held to the
+    strict function a definition `add` writes is, and holds no value the
+    registry gives for a secret, a default, an example or a fixed one,
+    each left out and said (`registry_secret_dropped`, D-11); an
+    identifier, a version or a variable's name a command line would read
+    as an option or as more than one word is never written into one, and a
+    package of another registry than the one its program reads is never
+    started as one of the same name (each a `registry::Manual`).
   - Symlinks are followed only inside the source (`copy::tree`'s `within`),
     and a rule offered for install that leads out of the workspace offering
     it is refused (`InstallError::Outside`). A gathered skill's licence

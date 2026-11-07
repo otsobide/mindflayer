@@ -927,9 +927,10 @@ holds it whole as `body`. A definition is written by `add` from how a
 command line says the server is started or reached, or from a template
 ([adding one](#adding-an-mcp-server)), and installing one writes an entry
 into each agent's config file ([installing an MCP
-server](#installing-an-mcp-server)); gathering one and adopting one wait.
-One core makes rather than a command line describes, imported from a
-registry first, is written out whole (`McpDefinition::text`,
+server](#installing-an-mcp-server)); one is mapped from a server the MCP
+Registry lists ([importing one](#importing-one-from-the-mcp-registry)),
+and gathering one and adopting one wait. One core makes rather than a
+command line describes, imported from a registry first, is written out whole (`McpDefinition::text`,
 `mcp/file.rs`): every key the format defines that it holds, a comment above
 each part as `add` writes one, and `fetched_at` as the TOML date and time
 it reads as, which `parse` reads back as the definition it is. Written from
@@ -1304,6 +1305,108 @@ a form changed in nothing would otherwise rewrite a file `add` wrote in
 the order typed, and say it was edited. The grammar refuses the options beside an editor or contents, as beside a
 template, through the group clap gives `ServerOptions`, which `--template`,
 `--editor` and `--contents` each conflict with.
+
+### Importing one from the MCP Registry
+
+A server version read from the registry ([the MCP
+Registry](#the-mcp-registry)) maps to a definition
+(`ServerVersion::import`, in `apps/core/src/registry/import.rs`), which
+#106 returns with what was said on the way and writes nowhere: writing it
+into a library is #107's command. The registry says how a server is
+started, a package of a registry type, or reached, a remote at an address;
+a definition says one transport (D-10). So the first package that maps to
+a definition becomes a program, in the order the registry lists them, and
+failing every one the first remote that maps to one becomes an address: a
+program first, since every agent is given one, where Codex and OpenCode
+are given no server over sse. What comes before the one taken is an
+alternative nobody needs, and is said nowhere; when none maps, each says
+why, as a manual step.
+
+| Registry type | Started as |
+|---|---|
+| `npm` | `npx -y ID@VERSION`, or `npx -y ID` when the package says no version |
+| `pypi` | `uvx ID==VERSION`, or `uvx ID` |
+| `oci` | `docker run -i --rm` and `-e NAME` for each environment variable, then the image as its identifier names it, tag included |
+| `nuget` | `dnx ID@VERSION`, or `dnx ID` |
+| `mcpb`, `cargo`, any other | a manual step: `registry_package_mcpb`, `registry_package_cargo`, `registry_package_type_unknown` |
+
+A package's runtime arguments go after the program's own words and before
+the package, and its package arguments after it: a positional one as its
+value, a named one as its flag and its value. A container is given none of
+`docker`'s environment but what `-e` passes on, each by its name alone, so
+its value is read from `docker`'s, which the agent sets, and never written
+into an argument. An image the 2025-12-11 schema names whole, registry and
+tag, is run as it is; one the 2025-09-29 schema named apart, its registry in
+`registryBaseUrl` and its tag in `version`, is put together, the registry
+before it, since one left out would have `docker` pull an image of the same
+name from Docker Hub. A remote over `streamable-http` is an address over
+`http`; over `sse`, one over `sse`, said (`registry_remote_sse`); over
+anything else, a manual step (`registry_remote_type_unknown`).
+
+Nothing is guessed at. A package of a type nothing here starts, one that
+serves at an address once started, which no single definition can say
+(`registry_package_not_stdio`), and a server with neither packages nor
+remotes (`registry_server_unrunnable`) are manual steps, each a `Manual`
+with a code, and no definition. So is an identifier, a version or an
+environment variable's name a command line would read as an option or as
+other than one word (`registry_package_unfit`): an identifier of
+`--privileged` would be `docker`'s option rather than an image, and a name
+holding `=` would be `-e`'s value. And so is an npm, PyPI or NuGet package
+the registry says is in another registry than the one `npx`, `uvx` or `dnx`
+reads (`registry_package_elsewhere`), which they would start as a package
+of the same name from theirs. An optional argument the registry gives no
+value for is left out and said (`registry_argument_left_out`), since the
+server starts without it.
+
+Every value somebody supplies is an input read from an environment
+variable, never a value the definition holds (D-11). An environment
+variable, a header or a required argument the registry gives no value for
+is an input whole, named after it (a flag without its dashes, a hint with
+each character no placeholder holds made an underscore) and read from the
+variable of its name, an environment variable's own when every agent can
+refer to it, otherwise its name in capitals; a `{variable}` in a value the
+registry does give, a URL's variables (2025-12-11) among them, is an input
+where it stands, its `kind` the place it is written in. One the registry
+gives a fixed value for, and that is no secret, is that value written in
+its place. `isRequired` is `required`, and `isSecret` is `secret`, a
+variable of a secret value a secret too. Nothing the registry gives for a
+secret is written: a `default`, a `placeholder` (its example), or a fixed
+value, each left out and said (`registry_secret_dropped`), the secret read
+from the environment as one given no value is. A default or an example of
+what is no secret is left out unsaid: format 1 has no key for either, and
+neither is a value anybody keeps.
+
+What the mapping makes is named after the last part of what the registry
+names the server (`weather` for `io.github.acme/weather`), every character
+no agent keys a server by a hyphen, unless a name is given, and held to the
+strict function every definition Mindweaver writes is held to: its name to
+the names a server may be given ([which names an MCP server is
+given](#which-names-an-mcp-server-is-given)), so `io.github.acme/workspace`
+is refused for Claude's `workspace` (`registry_name_unfit`, a name to give
+it instead, said once, since every way of starting it would be given it),
+and the rest to every problem `validate` reports
+(`registry_definition_invalid`, and the next package or remote tried), so a
+token the registry wrote as a value that is no secret is refused as `add`
+refuses it, said by where it is and what it starts with. Where it came from is its `provenance`: the
+registry's address, what the registry names it, its version, when it was
+fetched, and the status the registry gave it, `deprecated` or `deleted`
+carried with it. Every string the registry gave that the definition, or
+what is said beside it, holds is printable, a URL without a credential.
+
+`Imported` serializes as the definition's text (`McpDefinition::text`),
+each manual step and each warning as a `code::Said`, every name pinned by a
+test. Its tests run on a fake transport answering with fixtures written by
+hand to the registry's `server.json` schemas of 2025-09-29 and 2025-12-11
+and to the `/v0.1` API's wrapper, under `apps/core/tests/fixtures/registry`,
+rather than recorded from the registry, which the owner may record later:
+a mapping for each registry type, a missing version among them, a URL's
+variables, headers and environment variables with `isSecret`, a remote
+over sse, a bundle, a crate and an unknown type as manual steps, and what a
+refresh deprecated and deleted. Every definition each fixture maps to reads
+back through `McpDefinition::parse` as itself and has no issue, and none
+holds any value a fixture gives for a secret, nor a token put together at
+run time ([a secret is an environment
+reference](#a-secret-is-an-environment-reference)).
 
 ### Adding a third kind
 
@@ -4228,7 +4331,9 @@ limits, whichever transport brought it. The default transport is
 `adapter::reqwest::Reqwest`, the reqwest gix's HTTP transport already
 builds, with rustls, so a catalog adds no crate and no second TLS. It is
 handed to the client as a parameter, never found in a global or the
-environment, and no catalog uses it yet: #106 and #108 are the first.
+environment. The MCP Registry is the first catalog read through it (#106,
+[the MCP Registry](#the-mcp-registry)), and the skill directories wait
+(#108).
 
 Everything blocks, as the rest of core does. A blocking client fits a
 synchronous core, and the server already runs what its backend does on
@@ -12361,7 +12466,11 @@ takes out only the entries it recorded that nobody changed since
 commands' words: a server named bare as every kind is, what each agent
 will run said from its renderer's own entry, and one from elsewhere than
 the library written only with `--yes`, on the command line and from the
-install screen alike.
+install screen alike. #106 maps a server the MCP Registry lists to a
+definition, its packages and remotes to the one transport a definition
+says, its inputs to inputs read from the environment, and where it came
+from to its `provenance`, the registry's status with it ([importing
+one](#importing-one-from-the-mcp-registry)).
 
 Checking it, #18 added MCP checks to `scripts/agent-probe`, run by hand.
 Claude Code's and OpenCode's ran on 2026-11-05; Codex's were not run, since
@@ -12556,6 +12665,15 @@ by number as far as a bound, and keeps answers in `.mindweaver/cache/http`;
 and `adapter::reqwest::Reqwest`, the default transport, on the reqwest
 `Cargo.lock` already held, with a connect timeout and the request's own
 total timeout. No catalog uses it yet.
+
+#106 is the first catalog read through it ([the MCP
+Registry](#the-mcp-registry)): `registry::Registry`, handed the client,
+reads the registry's `/v0.1` API at the address its caller names, the
+official one by default, a search paged by the cursor each page carries
+(`Paging::Cursor`, added for it) as far as a bound, one server's version,
+and what changed since a time, the deleted among it; and maps a server
+version to a definition (`ServerVersion::import`), writing nothing, which
+#107's commands will.
 
 ### D-15: Skill search is GitHub plus opt-in finders
 
@@ -13074,11 +13192,25 @@ it once as it closes.
 - **An imported value holding its own placeholder as text.** Format 1 has
   no escape, and needs none while a definition's author chooses its inputs'
   names ([what an MCP server's definition
-  declares](#what-an-mcp-servers-definition-declares)). A registry entry
-  (#106) whose value holds `{name}` as text while it declares a variable of
-  that name is the one case an author does not choose: the import renames
-  the input, or the format gains an escape, which an older build would read
-  as text.
+  declares](#what-an-mcp-servers-definition-declares)). The registry has
+  none either, so a `{name}` in a value whose variables name `name` is that
+  variable in the registry too, and #106's import writes it as the input
+  ([importing one](#importing-one-from-the-mcp-registry)); the case stays
+  open for a catalog whose format has an escape, which the import would
+  then rename the input for, or the format gain one, which an older build
+  would read as text.
+- **What the registry gives that the import leaves to somebody.** An
+  argument's `isRepeated`, an input's `format` and `choices`, a package's
+  `runtimeHint` and an MCP bundle's `fileSha256` are read past: a
+  definition has no key for any, and the program each registry type is
+  started with is the import's (`npx`, `uvx`, `docker`, `dnx`), whatever
+  hint the package gives. A named argument the registry gives no value for
+  is written as its flag and an input, which a flag taking none (a
+  `boolean` one) is not; and an input that is not required is given every
+  agent as a reference all the same, which the renderers write as they
+  write every input (#90 to #92). Each waits for a server that needs it;
+  and which package or remote is taken when a server lists several is the
+  first that maps, until #107 lets whoever imports one choose.
 
 - **A known workspace that has gone is offered nothing.** The page of
   loads and the header's switcher list it, with why it does not open, and

@@ -20,8 +20,11 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use mindweaver_core::http::{Answer, Cache, Client, Headers, HttpError, Request};
-use mindweaver_core::registry::{Registry, ServerVersion, Status, OFFICIAL};
-use mindweaver_core::{Clock, Http};
+use mindweaver_core::mcp::{Input, InputKind, Transport, Upstream};
+use mindweaver_core::mother::McpMother;
+use mindweaver_core::registry::{Imported, Registry, ServerVersion, Status, Warning, OFFICIAL};
+use mindweaver_core::value::{InputName, Redacted, VariableName};
+use mindweaver_core::{Clock, Http, McpDefinition};
 use tempfile::TempDir;
 
 // ---------------------------------------------------------------------------
@@ -440,4 +443,608 @@ fn a_refresh_is_read_page_by_page_to_an_empty_cursor() {
         statuses,
         [Some(&Status::Deprecated), Some(&Status::Deleted)]
     );
+}
+
+// ---------------------------------------------------------------------------
+// A server version, mapped to a definition
+// ---------------------------------------------------------------------------
+
+/// Every server the 2025-09-29 search lists, over its two pages.
+fn listed_2025_09_29() -> Vec<ServerVersion> {
+    let second = format!(
+        "{}&cursor=io.github.acme%2Fdotnet-weather%3A2.1.0",
+        searched("acme")
+    );
+    let fake = Fake::new()
+        .answering(&searched("acme"), &fixture("2025-09-29", "search-1.json"))
+        .answering(&second, &fixture("2025-09-29", "search-2.json"));
+    let client = Client::new(&fake);
+    Registry::new(&client)
+        .at(REGISTRY)
+        .stamped_by(clock())
+        .search("acme")
+        .unwrap()
+        .servers
+}
+
+/// Every server the 2025-12-11 search lists.
+fn listed_2025_12_11() -> Vec<ServerVersion> {
+    let fake = Fake::new().answering(&searched("acme"), &fixture("2025-12-11", "search.json"));
+    let client = Client::new(&fake);
+    Registry::new(&client)
+        .at(REGISTRY)
+        .stamped_by(clock())
+        .search("acme")
+        .unwrap()
+        .servers
+}
+
+fn named(servers: &[ServerVersion], name: &str) -> ServerVersion {
+    servers
+        .iter()
+        .find(|server| server.name == name)
+        .cloned()
+        .unwrap_or_else(|| panic!("no {name}"))
+}
+
+/// The definition `imported` holds, held to what every definition the
+/// mapping makes is: its text reads back as it, and `validate` finds
+/// nothing wrong with it.
+fn held(imported: &Imported) -> McpDefinition {
+    let definition = imported
+        .definition
+        .clone()
+        .unwrap_or_else(|| panic!("no definition: {:?}", imported.manual));
+    assert_eq!(imported.manual, []);
+    let text = definition.text();
+    let read = McpDefinition::parse(&text).unwrap_or_else(|error| panic!("{error}\n{text}"));
+    assert_eq!(read, definition, "{text}");
+    assert_eq!(read.issues(), [], "{text}");
+    definition
+}
+
+fn program(definition: &McpDefinition) -> (&str, Vec<&str>, Vec<(&str, &str)>) {
+    let Transport::Stdio(stdio) = &definition.transport else {
+        panic!("{:?}", definition.transport);
+    };
+    (
+        stdio.command.as_str(),
+        stdio.args.iter().map(String::as_str).collect(),
+        stdio
+            .env
+            .iter()
+            .map(|(key, value)| (key.as_str(), value.as_str()))
+            .collect(),
+    )
+}
+
+fn address(definition: &McpDefinition) -> (&str, Vec<(&str, &str)>) {
+    let (Transport::Http(endpoint) | Transport::Sse(endpoint)) = &definition.transport else {
+        panic!("{:?}", definition.transport);
+    };
+    (
+        endpoint.url.as_str(),
+        endpoint
+            .headers
+            .iter()
+            .map(|(key, value)| (key.as_str(), value.as_str()))
+            .collect(),
+    )
+}
+
+fn input(name: &str, kind: InputKind, variable: &str) -> Input {
+    Input {
+        name: InputName::from(name),
+        kind,
+        description: None,
+        required: false,
+        secret: false,
+        env_var: Some(VariableName::from(variable)),
+    }
+}
+
+fn codes<'a>(warnings: impl IntoIterator<Item = &'a Warning>) -> Vec<(&'static str, String)> {
+    warnings
+        .into_iter()
+        .map(|warning| (warning.code(), warning.to_string()))
+        .collect()
+}
+
+/// npm, at the version the registry gives: `npx -y id@version`, its
+/// arguments after it, every environment variable an input read from a
+/// variable of its name, and what is left out said.
+#[test]
+fn an_npm_package_is_started_with_npx_at_its_version() {
+    let weather = named(&listed_2025_09_29(), "io.github.acme/weather");
+
+    let imported = weather.import(None);
+
+    let definition = held(&imported);
+    assert_eq!(definition.name, "weather");
+    assert_eq!(definition.description, "Forecasts and alerts for any city");
+    assert_eq!(
+        program(&definition),
+        (
+            "npx",
+            vec![
+                "-y",
+                "@acme/weather-mcp@1.0.2",
+                "--units",
+                "metric",
+                "{city}"
+            ],
+            vec![
+                ("WEATHER_API_KEY", "{WEATHER_API_KEY}"),
+                ("WEATHER_ENDPOINT", "https://{region}.api.acme.example"),
+                ("WEATHER_LOG_LEVEL", "{WEATHER_LOG_LEVEL}"),
+            ]
+        )
+    );
+    assert_eq!(
+        definition.inputs,
+        [
+            Input {
+                description: Some(String::from("The key the forecasts are fetched with")),
+                required: true,
+                secret: true,
+                ..input("WEATHER_API_KEY", InputKind::Env, "WEATHER_API_KEY")
+            },
+            Input {
+                description: Some(String::from("How much it logs")),
+                ..input("WEATHER_LOG_LEVEL", InputKind::Env, "WEATHER_LOG_LEVEL")
+            },
+            Input {
+                description: Some(String::from("The region closest to you")),
+                required: true,
+                ..input("region", InputKind::Env, "REGION")
+            },
+            Input {
+                description: Some(String::from("The city forecasts are for")),
+                required: true,
+                ..input("city", InputKind::Arg, "CITY")
+            },
+        ]
+    );
+    assert_eq!(
+        codes(&imported.warnings),
+        [
+            (
+                "registry_secret_dropped",
+                String::from(
+                    "packages[0].environmentVariables[0]: the registry gives a default for a \
+                     secret, which is left out: its value is read from the environment variable \
+                     its input names"
+                )
+            ),
+            (
+                "registry_secret_dropped",
+                String::from(
+                    "packages[0].environmentVariables[0]: the registry gives a placeholder for a \
+                     secret, which is left out: its value is read from the environment variable \
+                     its input names"
+                )
+            ),
+            (
+                "registry_argument_left_out",
+                String::from(
+                    "packages[0].packageArguments[2]: an optional argument with no value, left \
+                     out: add it to `args` by hand if the server is wanted with it"
+                )
+            ),
+        ]
+    );
+    assert_eq!(
+        definition.provenance,
+        Some(Upstream {
+            registry: Some(Redacted::new(REGISTRY)),
+            upstream_name: Some(String::from("io.github.acme/weather")),
+            version: Some(String::from("1.0.2")),
+            fetched_at: Some(String::from("2026-11-07T09:30:00Z")),
+            status: Some(String::from("active")),
+        })
+    );
+}
+
+#[test]
+fn an_npm_package_with_no_version_is_started_with_npx_as_it_is_named() {
+    let notes = named(&listed_2025_12_11(), "io.github.acme/notes");
+
+    let definition = held(&notes.import(None));
+
+    assert_eq!(definition.name, "notes");
+    assert_eq!(
+        program(&definition),
+        ("npx", vec!["-y", "@acme/notes-mcp"], vec![])
+    );
+    assert_eq!(definition.inputs, []);
+}
+
+#[test]
+fn a_pypi_package_is_started_with_uvx_at_its_version_or_as_it_is_named() {
+    let pinned = held(&named(&listed_2025_09_29(), "io.github.acme/pyweather").import(None));
+    let unpinned = held(&named(&listed_2025_12_11(), "io.github.acme/pynotes").import(None));
+
+    assert_eq!(
+        program(&pinned),
+        (
+            "uvx",
+            vec!["acme-weather-mcp==0.4.1"],
+            vec![("WEATHER_API_KEY", "{WEATHER_API_KEY}")]
+        )
+    );
+    assert!(pinned.inputs[0].secret);
+    assert_eq!(program(&unpinned), ("uvx", vec!["acme-notes"], vec![]));
+}
+
+#[test]
+fn a_nuget_package_is_started_with_dnx_at_its_version_or_as_it_is_named() {
+    let pinned = held(&named(&listed_2025_09_29(), "io.github.acme/dotnet-weather").import(None));
+    let unpinned = held(&named(&listed_2025_12_11(), "io.github.acme/notes-dotnet").import(None));
+
+    assert_eq!(
+        program(&pinned),
+        ("dnx", vec!["Acme.Weather.Mcp@2.1.0"], vec![])
+    );
+    assert_eq!(program(&unpinned), ("dnx", vec!["Acme.Notes.Mcp"], vec![]));
+}
+
+/// The 2025-12-11 schema names an image whole, its registry and its tag;
+/// the 2025-09-29 one named its registry and its tag apart, put together
+/// here, since one left out would pull an image of the same name from
+/// Docker Hub. A container is passed each variable by its name alone.
+#[test]
+fn an_oci_image_is_run_with_docker_as_its_reference_names_it() {
+    let whole = held(&named(&listed_2025_12_11(), "io.github.acme/notes-image").import(None));
+    let apart = held(&named(&listed_2025_09_29(), "io.github.acme/weather-docker").import(None));
+
+    assert_eq!(
+        program(&whole),
+        (
+            "docker",
+            vec![
+                "run",
+                "-i",
+                "--rm",
+                "-e",
+                "NOTES_TOKEN",
+                "--mount",
+                "type=bind,src={notes_dir},dst=/notes",
+                "ghcr.io/acme/notes-mcp:2.0.0",
+            ],
+            vec![("NOTES_TOKEN", "{NOTES_TOKEN}")]
+        )
+    );
+    assert_eq!(
+        whole.inputs,
+        [
+            Input {
+                description: Some(String::from("The token your notes are read with")),
+                required: true,
+                secret: true,
+                ..input("NOTES_TOKEN", InputKind::Env, "NOTES_TOKEN")
+            },
+            Input {
+                description: Some(String::from("The folder your notes are in")),
+                required: true,
+                ..input("notes_dir", InputKind::Arg, "NOTES_DIR")
+            },
+        ]
+    );
+    assert_eq!(
+        program(&apart),
+        (
+            "docker",
+            vec![
+                "run",
+                "-i",
+                "--rm",
+                "-e",
+                "WEATHER_API_KEY",
+                "docker.io/acme/weather-mcp:1.0.2",
+            ],
+            vec![("WEATHER_API_KEY", "{WEATHER_API_KEY}")]
+        )
+    );
+}
+
+/// A header the registry writes a variable into is that variable an input
+/// where it stands; one it gives no value for is an input whole; each a
+/// secret when the registry says so.
+#[test]
+fn a_remotes_headers_are_inputs_and_its_secrets_stay_secrets() {
+    let remote = named(&listed_2025_09_29(), "io.github.acme/weather-remote");
+
+    let imported = remote.import(None);
+
+    let definition = held(&imported);
+    assert_eq!(definition.transport.slug(), "http");
+    assert_eq!(
+        address(&definition),
+        (
+            "https://mcp.acme.example/weather",
+            vec![
+                ("Authorization", "Bearer {api_key}"),
+                ("X-Acme-Region", "{X-Acme-Region}"),
+            ]
+        )
+    );
+    assert_eq!(
+        definition.inputs,
+        [
+            Input {
+                description: Some(String::from("Your Acme key")),
+                required: true,
+                secret: true,
+                ..input("api_key", InputKind::Header, "API_KEY")
+            },
+            Input {
+                description: Some(String::from("The region closest to you")),
+                ..input("X-Acme-Region", InputKind::Header, "X_ACME_REGION")
+            },
+        ]
+    );
+    assert_eq!(
+        codes(&imported.warnings),
+        [(
+            "registry_secret_dropped",
+            String::from(
+                "remotes[0].headers[0].variables.api_key: the registry gives a placeholder for a \
+                 secret, which is left out: its value is read from the environment variable its \
+                 input names"
+            )
+        )]
+    );
+}
+
+/// A remote's URL variables (2025-12-11) are inputs of the URL, one with a
+/// fixed value written as it, and a secret header's default is left out.
+#[test]
+fn a_remotes_url_variables_are_inputs_of_its_url() {
+    let cloud = named(&listed_2025_12_11(), "io.github.acme/notes-cloud");
+
+    let imported = cloud.import(None);
+
+    let definition = held(&imported);
+    assert_eq!(
+        address(&definition),
+        (
+            "https://{tenant}.notes.acme.example/mcp/v2",
+            vec![("X-Notes-Key", "{X-Notes-Key}")]
+        )
+    );
+    assert_eq!(
+        definition.inputs,
+        [
+            Input {
+                description: Some(String::from("Your workspace at Acme")),
+                required: true,
+                ..input("tenant", InputKind::UrlVar, "TENANT")
+            },
+            Input {
+                description: Some(String::from("Your notes key")),
+                required: true,
+                secret: true,
+                ..input("X-Notes-Key", InputKind::Header, "X_NOTES_KEY")
+            },
+        ]
+    );
+    assert_eq!(
+        imported.warnings,
+        [Warning::SecretDropped {
+            at: String::from("remotes[0].headers[0]"),
+            what: "default",
+        }]
+    );
+}
+
+#[test]
+fn a_remote_over_server_sent_events_is_mapped_and_warned_of() {
+    let events = named(&listed_2025_09_29(), "io.github.acme/weather-events");
+
+    let imported = events.import(None);
+
+    let definition = held(&imported);
+    assert_eq!(definition.transport.slug(), "sse");
+    assert_eq!(
+        address(&definition),
+        ("https://mcp.acme.example/weather/sse", vec![])
+    );
+    assert_eq!(
+        codes(&imported.warnings),
+        [(
+            "registry_remote_sse",
+            String::from(
+                "remotes[0]: reached over server-sent events, which the MCP specification has \
+                 replaced with streamable HTTP, and which Codex and OpenCode are not given"
+            )
+        )]
+    );
+}
+
+/// What a server maps to when it maps to no definition: none, and each
+/// step by its code and what it says.
+type Stepped = (Option<McpDefinition>, Vec<(&'static str, String)>);
+
+/// What nothing here starts is a manual step, coded, and no definition.
+#[test]
+fn an_mcp_bundle_a_crate_and_an_unknown_type_are_manual_steps() {
+    let servers = listed_2025_12_11();
+
+    let steps: Vec<Stepped> = [
+        "io.github.acme/notes-bundle",
+        "io.github.acme/notes-crate",
+        "io.github.acme/notes-brew",
+    ]
+    .iter()
+    .map(|name| {
+        let imported = named(&servers, name).import(None);
+        let said = imported
+            .manual
+            .iter()
+            .map(|step| (step.code(), step.to_string()))
+            .collect();
+        (imported.definition, said)
+    })
+    .collect();
+
+    assert_eq!(
+        steps,
+        [
+            (
+                None,
+                vec![(
+                    "registry_package_mcpb",
+                    String::from(
+                        "packages[0]: an MCP bundle at \
+                         https://downloads.acme.example/notes-2.0.0.mcpb, which no agent is given \
+                         as a command: install it by hand into an agent that takes bundles"
+                    )
+                )]
+            ),
+            (
+                None,
+                vec![(
+                    "registry_package_cargo",
+                    String::from(
+                        "packages[0]: the Rust crate `acme-notes-mcp`, which nothing here \
+                         installs: install it with cargo, then add the server it starts with \
+                         `add mcp --command`"
+                    )
+                )]
+            ),
+            (
+                None,
+                vec![(
+                    "registry_package_type_unknown",
+                    String::from(
+                        "packages[0]: a `brew` package (`acme/tap/notes-mcp`), which this build \
+                         does not know how to start: start it by hand"
+                    )
+                )]
+            ),
+        ]
+    );
+}
+
+/// A refresh lists what the registry deprecated and deleted, and a
+/// definition imported from one carries what it said.
+#[test]
+fn what_a_refresh_says_was_deprecated_or_deleted_is_carried_into_the_definition() {
+    let since = format!("{REGISTRY}/v0.1/servers?updated_since=2025-11-01T00%3A00%3A00Z&limit=100");
+    let fake = Fake::new().answering(&since, &fixture("2025-09-29", "updated-since.json"));
+    let client = Client::new(&fake);
+    let listing = Registry::new(&client)
+        .at(REGISTRY)
+        .stamped_by(clock())
+        .updated_since(1_761_955_200)
+        .unwrap();
+
+    let carried: Vec<(String, Option<String>, Option<String>)> = listing
+        .servers
+        .iter()
+        .map(|server| {
+            let upstream = held(&server.import(None)).provenance.unwrap();
+            (server.name.clone(), upstream.version, upstream.status)
+        })
+        .collect();
+
+    assert_eq!(
+        carried,
+        [
+            (
+                String::from("io.github.acme/weather"),
+                Some(String::from("1.0.1")),
+                Some(String::from("deprecated"))
+            ),
+            (
+                String::from("io.github.acme/forecast-old"),
+                Some(String::from("0.3.0")),
+                Some(String::from("deleted"))
+            ),
+        ]
+    );
+}
+
+/// Every value the fixtures give for a secret, a default, an example or a
+/// fixed value, which no definition may hold.
+const SECRET_VALUES: [&str; 4] = [
+    "change-me-in-production",
+    "your-weather-key-here",
+    "acme-key-goes-here",
+    "notes-key-that-ships-with-the-docs",
+];
+
+/// Every server of every fixture that maps to a definition maps to one
+/// that reads back as itself and that `validate` finds nothing wrong
+/// with, and none holds a value the registry gave for a secret.
+#[test]
+fn no_definition_holds_a_value_given_for_a_secret() {
+    let servers: Vec<ServerVersion> = listed_2025_09_29()
+        .into_iter()
+        .chain(listed_2025_12_11())
+        .collect();
+
+    let mut mapped = 0;
+    for server in &servers {
+        let imported = server.import(None);
+        let said = serde_json::to_string(&imported).unwrap();
+        for secret in SECRET_VALUES {
+            assert!(!said.contains(secret), "{}: {said}", server.name);
+        }
+        if imported.definition.is_some() {
+            held(&imported);
+            mapped += 1;
+        }
+    }
+    assert_eq!(mapped, servers.len() - 3, "all but the three manual steps");
+}
+
+/// A token is put together at run time ([`McpMother::tokens`]), so no file
+/// holds one: written as a secret's value, it is left out and said; written
+/// as a value that is no secret, what it maps to is no definition, said by
+/// where the token is and what it starts with, never whole.
+#[test]
+fn a_token_the_registry_gives_is_never_written_nor_said_whole() {
+    for (prefix, token) in McpMother::tokens() {
+        let page = format!(
+            r#"{{"servers":[
+                {{"server":{{"name":"io.github.acme/secret","description":"Given a secret","version":"1",
+                  "remotes":[{{"type":"streamable-http","url":"https://mcp.acme.example",
+                    "headers":[{{"name":"X-Key","value":"{token}","isSecret":true}}]}}]}}}},
+                {{"server":{{"name":"io.github.acme/plain","description":"Given a token as text","version":"1",
+                  "remotes":[{{"type":"streamable-http","url":"https://mcp.acme.example",
+                    "headers":[{{"name":"X-Key","value":"{token}"}}]}}]}}}}
+            ]}}"#
+        );
+        let fake = Fake::new().answering(&searched("acme"), &page);
+        let client = Client::new(&fake);
+        let servers = Registry::new(&client)
+            .at(REGISTRY)
+            .search("acme")
+            .unwrap()
+            .servers;
+
+        let secret = servers[0].import(None);
+        let plain = servers[1].import(None);
+
+        let definition = held(&secret);
+        assert_eq!(address(&definition).1, [("X-Key", "{X-Key}")], "{prefix}");
+        assert_eq!(
+            secret.warnings,
+            [Warning::SecretDropped {
+                at: String::from("remotes[0].headers[0]"),
+                what: "value",
+            }]
+        );
+        assert_eq!(plain.definition, None);
+        assert_eq!(plain.manual.len(), 1);
+        assert_eq!(plain.manual[0].code(), "registry_definition_invalid");
+        let said = plain.manual[0].to_string();
+        assert!(said.contains("transport.headers.X-Key"), "{said}");
+        assert!(said.contains(prefix), "{said}");
+        for imported in [&secret, &plain] {
+            let json = serde_json::to_string(imported).unwrap();
+            assert!(!json.contains(&token), "{json}");
+        }
+    }
 }

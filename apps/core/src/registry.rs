@@ -21,8 +21,9 @@
 //! not printable as it is, which a front end would show as another, is no
 //! server's at all.
 //!
-//! Nothing is written here: a server is read, and writing what it maps to
-//! into a library is a command's (#107).
+//! A server version read is mapped to a definition by
+//! [`ServerVersion::import`] (`registry/import.rs`), which writes nothing
+//! either: writing what it maps to into a library is a command's (#107).
 
 use std::fmt;
 use std::sync::Arc;
@@ -38,7 +39,10 @@ use crate::port::Clock;
 use crate::text::{printable, Utc};
 use crate::value::Redacted;
 
+mod import;
 mod server;
+
+pub use import::{Imported, Manual, Warning};
 
 /// Where the official registry is: what a [`Registry`] reads unless it is
 /// told another.
