@@ -201,6 +201,34 @@ pub(crate) fn plan(
         }
         Start::Scratch | Start::Template(_) | Start::Server(_) | Start::Definition(_) => {}
     }
+    let twins = named(project, kind, name)?;
+    let description = description.trim();
+    check_description(kind, description)?;
+
+    let directory = project.required_directory(kind)?;
+    let template = match start {
+        Start::Template(template) => Some(template),
+        Start::Scratch | Start::Server(_) | Start::Definition(_) => None,
+    };
+    // Matched on the kind rather than its layout, so a third kind has to say
+    // how it is scaffolded before it compiles.
+    match kind {
+        Kind::Skill => plan_skill(&directory, name, description, template),
+        Kind::Rule => plan_rule(&directory, name, description, template),
+        Kind::Mcp => plan_mcp(&directory, name, description, start, &twins),
+    }
+}
+
+/// `name` held to what `add` takes as the name of a `kind` in `project`,
+/// and on success the definitions named as it is in another case, which
+/// a server's is held to beside them: refused as [`plan`] refuses it, so
+/// a change that names an artifact before it has the rest of it, an
+/// import with a name typed for it, refuses it as `add` does.
+pub(crate) fn named(
+    project: &MindProject,
+    kind: Kind,
+    name: &str,
+) -> Result<Vec<ArtifactName>, CreateError> {
     // Matched on the kind, as `rename` holds a name: a server's to the keys
     // an agent takes and to what sits beside it, read off the folder it is
     // written in as discovery reads it, the others' to kebab-case.
@@ -218,26 +246,13 @@ pub(crate) fn plan(
         Kind::Skill | Kind::Rule => artifact::name_issues(name),
         Kind::Mcp => artifact::mcp_name_strict_issues(name, &twins),
     };
-    if !issues.is_empty() {
-        return Err(CreateError::Name {
+    if issues.is_empty() {
+        Ok(twins)
+    } else {
+        Err(CreateError::Name {
             name: name.to_owned(),
             issues,
-        });
-    }
-    let description = description.trim();
-    check_description(kind, description)?;
-
-    let directory = project.required_directory(kind)?;
-    let template = match start {
-        Start::Template(template) => Some(template),
-        Start::Scratch | Start::Server(_) | Start::Definition(_) => None,
-    };
-    // Matched on the kind rather than its layout, so a third kind has to say
-    // how it is scaffolded before it compiles.
-    match kind {
-        Kind::Skill => plan_skill(&directory, name, description, template),
-        Kind::Rule => plan_rule(&directory, name, description, template),
-        Kind::Mcp => plan_mcp(&directory, name, description, start, &twins),
+        })
     }
 }
 

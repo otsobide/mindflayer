@@ -4062,7 +4062,8 @@ error: `io.github.acme/notes-bundle` 2.0.0: nothing it names maps to a definitio
 ```
 
 A name the library holds is refused as `add` refuses it, and what holds it
-is left as it is: `--name` gives the server another. `--registry` reads a
+is left as it is: `--name` gives the server another, refused as `add`
+refuses a name when it breaks the same rules. `--registry` reads a
 registry of your own that speaks the same API, over https, or http on this
 machine, and never with a credential in its address. A front end with no
 terminal runs neither command, as it runs no gather; in the TUI, `r` on

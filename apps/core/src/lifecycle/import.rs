@@ -47,6 +47,14 @@ pub fn importing(
     server: &ServerVersion,
     name: Option<&str>,
 ) -> Result<Importing, ImportError> {
+    // A name typed for it is held to `add`'s rules before the version is
+    // mapped, so one they refuse is refused as `add` refuses it, rather
+    // than as a version nothing maps, which it is not. One made from what
+    // the registry names it is the mapping's, said as a step by hand.
+    let own = workspace.own();
+    if let Some(name) = name {
+        create::named(&own, Kind::Mcp, name)?;
+    }
     let imported = server.import(name);
     let Some(definition) = imported.definition else {
         return Err(ImportError::Unmapped {
@@ -56,7 +64,7 @@ pub fn importing(
         });
     };
     let planned = create::plan(
-        &workspace.own(),
+        &own,
         Kind::Mcp,
         &definition.name,
         &definition.description,
@@ -134,7 +142,8 @@ pub enum ImportError {
         manual: Vec<Manual>,
     },
     /// What `add` refuses of a definition, refused by its checks: a name
-    /// the library holds among it, which is left as it is.
+    /// the library holds among it, which is left as it is, and a name
+    /// typed for it that `add` would not take.
     #[error(transparent)]
     Create(#[from] CreateError),
 }

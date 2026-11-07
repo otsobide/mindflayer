@@ -391,6 +391,33 @@ fn a_name_the_library_holds_is_refused_and_left_as_it_is() {
     assert_eq!(kept(dir.path()), before);
 }
 
+/// A name typed for it that `add` refuses is refused as `add` refuses it,
+/// by the dry run and by the write alike, rather than as a version nothing
+/// maps, and nothing is written.
+#[test]
+fn a_name_add_refuses_is_refused_as_add_refuses_it() {
+    let dir = workspace();
+    let registry = FixtureRegistry::start();
+    let before = kept(dir.path());
+
+    for args in [
+        &["add", "--name", "Bad Name", "io.github.acme/weather"][..],
+        &[
+            "add",
+            "--yes",
+            "--name",
+            "Bad Name",
+            "io.github.acme/weather",
+        ][..],
+    ] {
+        let failure = mcp(dir.path(), &registry, args).unwrap_err();
+
+        assert_eq!(failure.error.code(), "add_name_unfit", "{args:?}");
+        assert!(failure.warnings.is_empty(), "{args:?}");
+    }
+    assert_eq!(kept(dir.path()), before);
+}
+
 /// A bundle, which nothing here starts, is refused, each step to take by
 /// hand said with its code, and nothing is written.
 #[test]

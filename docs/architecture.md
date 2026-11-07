@@ -1428,7 +1428,10 @@ outlived its copy dropped (`lifecycle::import`, in
 definition is refused whole, each manual step carried in the refusal for a
 front end to say (`registry_import_unmapped`), rather than written in part,
 and a name the library holds is refused as `add` refuses it
-(`add_exists`), what holds it left as it is. `lifecycle::importing` is the
+(`add_exists`), what holds it left as it is. A name given for it is held
+to `add`'s rules (`create::named`, the check `create::plan` makes) before
+the version is mapped, so one they refuse is `add_name_unfit`, as it is for
+`add`, and not a version nothing maps. `lifecycle::importing` is the
 dry run: the same mapping and plan, and whether the name is taken, with
 nothing written and nothing made, not even the library's folder, so it
 says what the write would.
