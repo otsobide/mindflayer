@@ -31,6 +31,7 @@ pub(crate) fn run_gather(
         GatherCommand::Git {
             url,
             path,
+            kind,
             reference,
             name,
             pin,
@@ -40,6 +41,7 @@ pub(crate) fn run_gather(
             // contradict is refused with nothing opened, let alone made.
             let request = Request::addressed(url, reference.clone(), path.clone())
                 .map_err(CliError::from)?
+                .gathering(kind.unwrap_or(Kind::Skill))
                 .named(name.clone())
                 .pinned(pin.clone())
                 .watched_by(watch.clone());
@@ -307,10 +309,10 @@ fn failed_again(
 }
 
 /// What removing a source would do, `done` or not: the source, by its name
-/// and where it was gathered from, and what it holds on the shelf, then
-/// each folder deleted, then each copy a project the workspace links
-/// installed from it, left there with its record and orphaned, by the name
-/// it is installed as and its project.
+/// and where it was gathered from, and the skills or rules it holds on the
+/// shelf, then each folder deleted, then each copy a project the workspace
+/// links installed from it, left there with its record and orphaned, by the
+/// name it is installed as and its project.
 ///
 /// Not refused without `--yes`, as `remove` of an artifact is: the dry run
 /// says what would go and what would be left orphaned, which is what it is
@@ -338,7 +340,7 @@ fn removing(removal: &Removal, done: bool) -> Outcome {
             "{would} the source {}, gathered from {}, and the {} it {held} on the shelf\n",
             printable(&removal.source.name),
             printable(&removal.source.origin()),
-            plural(removal.artifacts, "skill"),
+            plural(removal.artifacts, removal.source.gathers.noun()),
         )
     });
     // Each plugin of a marketplace as a source of its own goes, before it,
@@ -410,9 +412,9 @@ fn sources(
 /// Each source by the name `--from` takes and `gather update` and `gather
 /// remove` are given, then its URL, the branch or tag asked for and the
 /// commit it is pinned to, each in a column that earns its place only once
-/// a source has one, how many skills it holds, and when it was last
-/// gathered, in UTC, the one zone a time can be told in without a
-/// database of them.
+/// a source has one, how many skills or rules it holds, as it gathers one
+/// or the other, and when it was last gathered, in UTC, the one zone a
+/// time can be told in without a database of them.
 ///
 /// A marketplace says how many plugins of it are gathered where a source
 /// says its skills, and each of them is under it, its name indented, in
@@ -457,7 +459,7 @@ fn sources_listing(listed: &[SourceListing]) -> String {
                         .count(),
                     "plugin",
                 ),
-                SourceKind::Git => plural(it.artifacts, "skill"),
+                SourceKind::Git => plural(it.artifacts, it.source.gathers.noun()),
             });
             row.push(it.gathered_at.map_or_else(
                 || String::from("never gathered"),
@@ -487,9 +489,10 @@ fn shelf(workspace: &WeaverWorkspace, found: &mut Option<Vec<Offer>>) -> Result<
     let mut offers: Vec<Offer> = loads.offers;
     let mut stderr = stderr;
     for gathered in ledger.gathered().map_err(CliError::from)? {
-        // Listed only if it could be installed: a name that is not one folder
-        // name never can be, wherever it came from.
-        if mindweaver_core::install::is_folder_name(&gathered.name) {
+        // Listed only if it could be installed: a skill's name that is not
+        // one folder name, or a rule's route no name a rule can have, never
+        // can be, wherever it came from.
+        if mindweaver_core::install::is_installable_name(gathered.kind, &gathered.name) {
             offers.push(Offer::Shelf(Box::new(gathered)));
         } else {
             stderr.push(
@@ -650,7 +653,7 @@ pub(super) fn gathered(url: &str, report: &Report) -> Outcome {
         let _ = writeln!(
             stdout,
             "\n{}: {} added, {} updated, {} unchanged{removed}",
-            plural(report.total(), "skill"),
+            plural(report.total(), report.kind.noun()),
             report.added.len(),
             report.updated.len(),
             report.unchanged.len()
@@ -693,9 +696,9 @@ fn said_of(failures: &[gather::Failure], warnings: &[gather::Warning]) -> Vec<Wa
 }
 
 /// What a dry run of a gather found: the source, by the URL it would be
-/// gathered from and the commit it is at, then each skill it would take,
-/// by its name and where it is in the repository, then the count, and that
-/// nothing was gathered.
+/// gathered from and the commit it is at, then each skill or rule it would
+/// take, by its name and where it is in the repository, then the count of
+/// its kind, and that nothing was gathered.
 ///
 /// Its warnings are a gather's: what could not be taken, and what is wrong
 /// with what would be, each failing the command as it would fail a gather,
@@ -720,7 +723,7 @@ fn previewed(url: &str, preview: &Preview) -> Outcome {
         let _ = writeln!(
             stdout,
             "\n{} to gather; nothing gathered: run it again without --dry-run to gather them",
-            plural(preview.found.len(), "skill")
+            plural(preview.found.len(), preview.kind.noun())
         );
     }
     let stderr = said_of(&preview.failures, &preview.warnings);

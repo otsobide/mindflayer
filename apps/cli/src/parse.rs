@@ -1487,10 +1487,19 @@ pub enum GatherCommand {
         /// branch and a folder too.
         url: String,
 
-        /// The folder inside the repository to search for skills, instead
-        /// of the whole of it.
+        /// The folder inside the repository to search for skills, or for
+        /// rules, instead of the whole of it.
         #[arg(long, value_name = "DIR")]
         path: Option<String>,
+
+        /// What to take: `skills`, each folder holding a `SKILL.md`, or
+        /// `rules`, each `.md` file of the folder, named by its route from
+        /// there, but for its README and its licence [default: skills].
+        ///
+        /// A folder gathered for each is a source for each, called by a
+        /// name of its own.
+        #[arg(long, value_name = "KIND")]
+        kind: Option<Kind>,
 
         /// A branch or tag to take, instead of the repository's default.
         #[arg(long = "ref", value_name = "REF")]
@@ -1514,9 +1523,10 @@ pub enum GatherCommand {
         #[arg(long, value_name = "SHA")]
         pin: Option<String>,
 
-        /// Say what would be gathered, each skill by its name and where it
-        /// is in the repository, and gather nothing: no source recorded,
-        /// nothing put on the shelf, and the clone made to look taken away.
+        /// Say what would be gathered, each skill or rule by its name and
+        /// where it is in the repository, and gather nothing: no source
+        /// recorded, nothing put on the shelf, and the clone made to look
+        /// taken away.
         #[arg(long)]
         dry_run: bool,
     },

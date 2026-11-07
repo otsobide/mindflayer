@@ -537,6 +537,159 @@ fn a_cancelled_gather_says_so_and_leaves_the_shelf_as_it_was() {
 }
 
 // ---------------------------------------------------------------------------
+// rules (#111)
+// ---------------------------------------------------------------------------
+
+/// A workspace in a temporary folder, and a repository whose `rules` folder
+/// holds a collection of rules: nested, with its README and its licence, and
+/// a file whose route no rule can be named by.
+fn rules_collection() -> (TempDir, TempDir, String) {
+    let source = repository(&[
+        ("rules/git/commits.md", "Imperative subjects.\n"),
+        ("rules/style.md", "# Write plainly\n"),
+        ("rules/README.md", "# Our rules\n"),
+        ("rules/LICENSE.md", "MIT License\n"),
+        ("rules/Bad_Name.md", "Shouting.\n"),
+    ]);
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+    let url = source.path().to_string_lossy().into_owned();
+    (dir, source, url)
+}
+
+#[test]
+fn gather_kind_rule_takes_each_rule_by_its_route_and_counts_rules() {
+    let (dir, _source, url) = rules_collection();
+
+    let outcome = weaver(
+        dir.path(),
+        &[
+            "gather", "git", &url, "--kind", "rule", "--path", "rules", "--name", "team",
+        ],
+    )
+    .unwrap();
+
+    let lines: Vec<&str> = outcome.stdout.lines().collect();
+    assert!(
+        lines[0].starts_with(&format!("team: {url} at ")),
+        "{}",
+        outcome.stdout
+    );
+    assert_eq!(
+        lines[1..],
+        [
+            "  added  git/commits  Imperative subjects.",
+            "  added  style        Write plainly",
+            "",
+            "2 rules: 2 added, 0 updated, 0 unchanged",
+        ],
+        "{}",
+        outcome.stdout
+    );
+    // The README and the licence are the collection's, and said nowhere;
+    // a route no rule can be named by is a warning, which fails the exit.
+    assert_eq!(outcome.stderr.len(), 1, "{:?}", outcome.stderr);
+    assert_eq!(outcome.stderr[0].code, Some("gathered_route_invalid"));
+    assert!(
+        outcome.stderr[0]
+            .text
+            .contains("the rule `Bad_Name` cannot be named by its route"),
+        "{:?}",
+        outcome.stderr
+    );
+    assert!(!outcome.ok);
+
+    let listed = weaver(dir.path(), &["gather", "list"]).unwrap();
+    assert!(listed.ok, "{:?}", listed.stderr);
+    assert_eq!(
+        listed.stdout,
+        "git/commits  team  MIT License  Imperative subjects.\n\
+         style        team  MIT License  Write plainly\n"
+    );
+    let sources = weaver(dir.path(), &["gather", "sources"]).unwrap();
+    assert!(sources.stdout.contains(" 2 rules "), "{}", sources.stdout);
+}
+
+#[test]
+fn a_dry_run_of_gather_kind_rule_says_each_rule_and_writes_nothing() {
+    let (dir, _source, url) = rules_collection();
+
+    let outcome = weaver(
+        dir.path(),
+        &[
+            "gather",
+            "git",
+            &url,
+            "--kind",
+            "rules",
+            "--path",
+            "rules",
+            "--dry-run",
+        ],
+    )
+    .unwrap();
+
+    let lines: Vec<&str> = outcome.stdout.lines().collect();
+    assert_eq!(
+        lines[1..],
+        [
+            "  git/commits  rules/git/commits.md",
+            "  style        rules/style.md",
+            "",
+            "2 rules to gather; nothing gathered: run it again without --dry-run to gather them",
+        ],
+        "{}",
+        outcome.stdout
+    );
+    let codes: Vec<Option<&str>> = outcome.stderr.iter().map(|it| it.code).collect();
+    assert_eq!(codes, [Some("gathered_route_invalid")]);
+    let weaver_dir = dir.path().join(WEAVER_DIR);
+    assert!(!weaver_dir.join("rules").exists());
+    assert!(!weaver_dir.join("cache").exists());
+    assert!(!weaver_dir.join(mindweaver_core::LEDGER_FILE).exists());
+}
+
+#[test]
+fn a_gathered_rule_installs_into_a_project_s_agents_md_by_its_route() {
+    let (dir, _source, url) = rules_collection();
+    weaver(
+        dir.path(),
+        &["gather", "git", &url, "--kind", "rule", "--path", "rules"],
+    )
+    .unwrap();
+    let root = dir.path().join("app");
+    fs::create_dir(&root).unwrap();
+    new_project(&root);
+    weaver(dir.path(), &["link", "app"]).unwrap();
+
+    let outcome = weaver(dir.path(), &["install", "-p", "app", "git/commits"]).unwrap();
+
+    assert!(outcome.ok, "{:?}", outcome.stderr);
+    let agents_md = fs::read_to_string(root.join("AGENTS.md")).unwrap();
+    assert!(
+        agents_md.contains("<!-- mindweaver:rule git/commits -->\nImperative subjects.\n"),
+        "{agents_md}"
+    );
+}
+
+#[test]
+fn gather_kind_mcp_is_refused_and_gathers_nothing() {
+    let (dir, _source, url) = rules_collection();
+
+    let refused = weaver(dir.path(), &["gather", "git", &url, "--kind", "mcp"]).unwrap_err();
+
+    assert_eq!(refused.error.code(), "kind_not_gatherable");
+    assert_eq!(
+        refused.error.to_string(),
+        "MCP servers are not gathered from a repository: `mindweaver gather mcp` imports one \
+         from the MCP Registry"
+    );
+    let weaver_dir = dir.path().join(WEAVER_DIR);
+    assert!(!weaver_dir.join("cache").exists(), "nothing fetched");
+    assert!(!weaver_dir.join("mcp").exists());
+}
+
+// ---------------------------------------------------------------------------
 // credentials an older build stored
 // ---------------------------------------------------------------------------
 

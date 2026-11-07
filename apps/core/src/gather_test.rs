@@ -619,7 +619,11 @@ fn a_gather_of_mcp_servers_is_refused_and_fetches_nothing() {
         matches!(refused, GatherError::NotGatherable { kind: Kind::Mcp }),
         "{refused:?}"
     );
-    assert_eq!(refused.to_string(), "MCP servers cannot be gathered yet");
+    assert_eq!(
+        refused.to_string(),
+        "MCP servers are not gathered from a repository: `mindweaver gather mcp` imports one \
+         from the MCP Registry"
+    );
     assert_eq!(*remote.asked.lock().unwrap(), 0);
     assert!(ledger.sources().unwrap().is_empty());
 }

@@ -4784,7 +4784,7 @@ fn a_skill_the_search_found_is_taken_as_the_gather_line_naming_it() {
     assert!(take.runs_apart() && take.cancellable() && take.writes());
     assert!(matches!(
         gather_line(&take),
-        GatherCommand::Git { url: given, path: Some(path), reference: None, name: None, pin: None, dry_run: false }
+        GatherCommand::Git { url: given, path: Some(path), kind: None, reference: None, name: None, pin: None, dry_run: false }
             if given == url && path == "skills/docx"
     ));
     tui::step(&mut app, take);

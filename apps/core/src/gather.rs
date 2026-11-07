@@ -2677,7 +2677,12 @@ pub enum GatherError {
          (a branch or a tag goes after --ref)"
     )]
     PinInvalid { pin: String },
-    #[error("{} cannot be gathered yet", .kind.plural())]
+    /// A kind no gather takes out of a repository: an MCP server, which
+    /// `gather mcp` imports from a registry instead.
+    #[error(
+        "{} are not gathered from a repository: `mindweaver gather mcp` imports one from the MCP Registry",
+        .kind.plural()
+    )]
     NotGatherable { kind: Kind },
     /// The address names one branch or tag (`owner/repo@ref`, a tree URL)
     /// and `--ref` another ([`Request::addressed`]).
