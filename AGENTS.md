@@ -6,8 +6,8 @@ Mindweaver manages the skills and rules coding agents read, the way git manages
 code. A **mind project** (`.mind/settings.toml`) holds artifacts beside its
 code; a **weaver workspace** (`.mindweaver/weaver.toml`, or the
 `.mindflayer/flayer.toml` a Mindflayer build made) links mind projects,
-holds artifacts of its own, gathers skills from git onto a shelf and installs
-them into projects. `README.md` is the first page a newcomer reads: short,
+holds artifacts of its own, gathers skills and rules from git onto a shelf and
+installs them into projects. `README.md` is the first page a newcomer reads: short,
 friendly and centred on the control panel (`mindweaver ui`), with screenshots
 `make docs/screenshots` takes and no command's output but two, what an MCP
 server's install prints (#95) and what one the MCP Registry lists would be
@@ -668,7 +668,16 @@ These are easy to break from a single file without noticing.
   run, which registers, shelves, records and logs nothing, takes no lock of
   the workspace's, and leaves no clone, but for the folder of one a Ctrl-C
   ends, which the next dry run or gather takes away once no run holds its
-  lock (`gather::DryRun`).
+  lock (`gather::DryRun`). A gather of rules (`gather git --kind rule`,
+  `Request::gathering`) takes every `.md` file of the folder searched, as
+  far as `gather::SEARCH_DEPTH`, past `gather::PASSED_OVER`, what is hidden
+  and the README and licence at its root (`gather::files`,
+  `about_the_rules`), each named by its route from there by the function
+  a project's rules are named by (`catalog::route`), never a second one; a
+  route no rule can be named by is a failure (`gathered_route_invalid`)
+  and the rest are taken, each filed at `rules/<source>/<route>.md`
+  (`copy::replace_file`) and taken off by its route (`filed_on_shelf`,
+  `take_away`).
 - **Output is built, then printed.** Commands return an `Outcome` (stdout
   text, stderr lines, ok), so tests assert on the exact text a user sees.
   The two that run until they are stopped write as they run, the TUI its
@@ -1087,7 +1096,8 @@ These are easy to break from a single file without noticing.
   `artifact::strict_issues`
   (what `ValidationIssue::is_strict` picks out), so change the rules there and
   nowhere else; gathering
-  takes such a skill with a `warning:` per problem, and `validate` reports
+  takes such a skill with a `warning:` per problem, and a rule whose front
+  matter is left unread with one too, and `validate` reports
   everything (`mindweaver validate` without `-p` reads the shelf too) but calls
   an artifact invalid only for what is not `ValidationIssue::is_warning`. Keys the format does not define pass through
   untouched. A rule's front matter is optional (`rule::RuleManifest`): read
@@ -1241,7 +1251,10 @@ These are easy to break from a single file without noticing.
     copy resolved it and followed nowhere else. A gathered skill's folder
     that is a link is taken from where it leads only inside the clone, and
     refused otherwise (`gathered_link_outside`): the copy's bound includes
-    the folder it copies, so it would follow such a link anywhere.
+    the folder it copies, so it would follow such a link anywhere. So is a
+    gathered rule's file, before anything of it is read
+    (`gather::read_rule`), and its licence file is read from the clone only
+    where it is a file, never through a link (`gather::license_above`).
   - A project's artifact directories must stay inside the project, and so
     must the folders its `targets` name, outside `.mind` and any
     `.mindweaver` too (`misplaced_target`): refused when a change names one,

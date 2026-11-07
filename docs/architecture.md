@@ -834,7 +834,10 @@ so the block and those files never disagree on it.
 - **Warned about** when gathering, which takes the skill anyway, as the
   agentskills.io client guide advises for skills written for other agents. The
   shelf is a record of what a source holds, and leaving a skill off it would
-  hide the problem along with the skill.
+  hide the problem along with the skill. So is a rule whose front matter is
+  left unread, or that says nothing ([gathering rules](#gathering-rules)):
+  its name is its route, which no front matter changes, so one whose route
+  no rule can be named by is not taken at all.
 - **Reported** by `validate`, in full, and at the workspace level for the shelf
   too, so what gathering warned about can be found again later. Only a
   problem makes an artifact invalid and the exit non-zero; what an agent reads
@@ -2733,8 +2736,7 @@ type derives `Serialize` from the start:
   (`skill`, `rule`), and so on each shelf row's source, on each of the
   snapshot's `sources` and in what `gather sources --json` and `gather list
   --json` print: a name added, which moves neither `ENVELOPE_VERSION` nor
-  `view::FORMAT` ([everything is namespaced by its
-  source](#everything-is-namespaced-by-its-source)).
+  `view::FORMAT` ([gathering rules](#gathering-rules)).
 - **Not yet**, being older than the rule and handed to no front end so far:
   the ledger's record of an install (`InstallRecord`), and what an update or
   a change of agents would do as each plans it (`update::Plan`,
@@ -3260,6 +3262,7 @@ the workspace and belonging to no project yet.
   cache/<source>/            the clone
   cache/http/                answers fetched over HTTP, never a source's
   skills/<source>/<name>/    what was taken out of it
+  rules/<source>/<route>.md  the rules of a folder of it (#111)
 ```
 
 Gathering fills that shelf and stops. Nothing is written into a mind project,
@@ -3472,6 +3475,75 @@ kept in a folder of its own, nothing would ever take it away. So its
 failures are said by their route in the repository
 (`Failure::in_repository`), its warnings too, since the clone they were met
 in is gone by the time they are read.
+
+### Gathering rules
+
+`gather git --kind rule` gathers rules (#111): every `.md` file of the folder
+`--path` names, or of the repository from its root without one, as a
+skill's gather searches its root, each a rule named by its route from that
+folder without its extension, `git/commits` for `rules/git/commits.md`
+gathered with `--path rules`. That is the name a project's rules are given
+from its rules folder, by the one function that gives it
+(`catalog::route`), asked of a folder that is not a project's: what the
+route is relative to, which was an open question until #111, is the folder
+a person named, since that is the collection's root as its repository lays
+it out. Relative to the repository's root was the other way, and is
+rejected: every rule of such a collection would be named `rules/...`, and
+one gathered from a tree URL's folder would be named after where the
+collection happens to sit.
+
+It is searched as a skill's gather is (`gather::files`): as far as
+`SEARCH_DEPTH`, a rule's file as deep as a skill's folder may be, never
+into `.git`, `node_modules` (`PASSED_OVER`) or a folder that is a link, and
+past whatever is hidden, which discovery passes over in a project's rules
+folder and so would never read back from the shelf. A `README` and a
+licence at the folder's root, in any case and with any extension, the
+licence by the names `gather::license_of` finds one by, are the
+collection's own and are left out (`about_the_rules`); one further down is
+a file like any other, and a README's route no rule's name. A file whose
+route breaks the rules every name is held to (`install::is_installable_name`:
+lowercase words joined by single hyphens, and slashes) is a failure of its
+own (`gathered_route_invalid`) and is not taken, while the rest are:
+renaming it on the way in would gather it under a name its source does not
+give it. A file that is a link is taken as what it leads to, held inside
+the clone before anything of it is read, and refused otherwise
+(`gathered_link_outside`), as a skill's folder is. Its front matter is read
+as a project's rules' is (`rule::RuleManifest`): what it leaves unread, or
+a rule that says nothing, is a warning, and the rule is taken.
+
+The shelf files each at `rules/<source>/<route>.md`, the file as it is
+written, through a temporary beside it and a rename (`copy::replace_file`),
+left alone when it holds those bytes already, so a second gather says what
+moved. A rule is recorded as a skill is ([what each artifact is recorded
+with](#what-each-artifact-is-recorded-with)): its `upstream_path` is its
+file in the repository, its `content_hash` `hash::bytes` of what the shelf
+holds, the hash a rule's install keeps of what it writes, and its licence
+what a licence file names in its own folder or the nearest above it, as
+far as the folder searched, the collection's at its root among them, read
+from the clone, since the shelf keeps no file of a rule's but the rule;
+`license_of` reads only a file that is one, never a link. A gather again
+takes off what its source no longer holds, by its route as the shelf files
+it (`gather::take_off`, `filed_on_shelf`), with the folders its route made
+that are left empty, and its dry run lists each rule by its route and file
+and writes nothing, as for a skill.
+
+What a source gathers is part of what it is (`ledger::Source::gathers`,
+schema 10): one folder of one repository gathered for skills and for rules
+is two sources, each called by a name of its own, so `gather update`
+gathers each again for what it took, and `gather remove` takes the one it
+names, its clone and its folder on the rules' shelf. One source holding
+both was the other way, and is rejected: its next gather would have to be
+told which kind to take, or take both where it was asked for one.
+
+A rule on the shelf is offered as every gathered artifact is, by its route,
+`--from` taking its source's name, and installs as the workspace's own
+rules do ([installing rules](#installing-rules)): a section of the block in
+a project's `AGENTS.md`, a file in Claude's rules folder where #45 puts
+one, or a copy filed by its route in a project a `mind.toml` marks. Its
+installation points at its source, as a skill's does, so removing the
+source leaves it orphaned and says so. Cursor's `.mdc` rules, whose front
+matter is Cursor's own, are not gathered: they are not `.md`, and
+converting what they declare is a question of its own.
 
 ### The clone is kept, and re-made
 
@@ -3898,7 +3970,9 @@ than the clone, since a link in the clone is what the copy resolved and the
 hash refuses a link; and its `license`, as written. One that cannot be read
 back to be hashed is recorded with no hash and said with a failure of its
 own (`gathered_unhashed`), as an install records a copy it cannot read
-back, rather than not at all.
+back, rather than not at all. A rule's `upstream_path` is its file, and its
+hash `hash::bytes` of it, a rule's install's recipe, and its licence is
+read as [gathering rules](#gathering-rules) says.
 
 The licence is the skill's `license`, as its manifest states it, whatever
 it says (a name, an SPDX expression, `Complete terms in LICENSE.txt`); else
@@ -4263,9 +4337,8 @@ constant beside it:
 10. On `sources`, `gathers`, the kind of artifact a source's gather takes,
     `skill` or `rule`, held by `sources_by_identity` beside the rest, so
     one folder of one repository gathered for skills and for rules is two
-    sources, each gathered again for what it took ([everything is
-    namespaced by its source](#everything-is-namespaced-by-its-source),
-    #111). A source of rules keeps its branch in
+    sources, each gathered again for what it took ([gathering
+    rules](#gathering-rules), #111). A source of rules keeps its branch in
     `reference_key` alone, as a plugin does, for the reason version 9
     gives: version 1's `UNIQUE` would refuse it beside a source of skills
     from the same folder at the same branch, typed alike.
@@ -14468,10 +14541,6 @@ it once as it closes.
   where no workspace was made yet, empty once that folder goes. A
   handler that cancels the watch would make the command line stop where the
   TUI's `esc` does.
-- **Gathering rules.** Only skills are gatherable. A rule is a loose file at any
-  depth, so harvesting one means deciding what its name is relative to: the
-  same question `Catalog::take_files` answers inside a project, asked of a
-  folder that is not one.
 - **Private repositories.** Mindweaver gives `gix` no credentials of its own,
   so a private source gets through only when a git-config helper (or, for an
   ssh URL, ssh itself) has them, and otherwise the gather fails and says how to

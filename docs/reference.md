@@ -519,10 +519,10 @@ mindweaver load <path>...  # offer another workspace's own skills and rules,
                            # read live
 mindweaver unload <path>...  # stop offering them
 
-mindweaver gather git <URL> [--name NAME] [--pin SHA]
-                           # collect skills from a repository onto the shelf,
-                           # under a name --from takes, at one commit when
-                           # pinned
+mindweaver gather git <URL> [--kind KIND] [--name NAME] [--pin SHA]
+                           # collect skills, or with --kind rule a folder's
+                           # rules, from a repository onto the shelf, under
+                           # a name --from takes, at one commit when pinned
 mindweaver gather marketplace <SOURCE> --list|--plugin NAME...|--all [--yes]
                            # list a Claude Code or Codex marketplace's
                            # plugins, or gather the ones named, each into
@@ -791,8 +791,8 @@ folder outright.
 
 ## Gathering skills from elsewhere
 
-A workspace has a **shelf**: skills collected from somewhere else, held by the
-workspace and belonging to no project yet.
+A workspace has a **shelf**: skills and rules collected from somewhere else,
+held by the workspace and belonging to no project yet.
 
 ```
 $ mindweaver gather git https://github.com/acme/skills
@@ -1102,6 +1102,65 @@ note: https://github.com/acme/skills: the same repository as the source `acme-sk
 
 `--from https://github.com/acme/skills` still names it, with the warning
 above.
+
+### Gathering rules
+
+`--kind rule` gathers rules rather than skills: every `.md` file of the
+folder `--path` names, and of the folders in it, as far down as a skill's
+folder is looked for, each a rule named by its route from that folder
+without `.md`, as a project's own rules are named from its `rules` folder.
+Without `--path` it is the repository's root. A `README` and a licence
+beside the rules, at the folder's root, are the collection's own and are
+not taken, nor is anything hidden, in `.git` or in `node_modules`.
+
+```
+$ mindweaver gather git https://github.com/acme/rules --kind rule --path rules --dry-run
+https://github.com/acme/rules at a1b2c3d
+  git/commits        rules/git/commits.md
+  git/no-force-push  rules/git/no-force-push.md
+  review/tone        rules/review/tone.md
+
+3 rules to gather; nothing gathered: run it again without --dry-run to gather them
+warning: rules/TODO.md: the rule `TODO` cannot be named by its route (`TODO` is not usable as a name: it has to be lowercase letters and digits, joined by single hyphens), so it is not gathered
+
+$ mindweaver gather git https://github.com/acme/rules --kind rule --path rules
+acme-rules: https://github.com/acme/rules at a1b2c3d
+  added  git/commits        Write commit subjects in the imperative
+  added  git/no-force-push  Never force-push a branch somebody else may have pulled.
+  added  review/tone        Say what a change does before what is wrong with it.
+
+3 rules: 3 added, 0 updated, 0 unchanged
+warning: /home/you/Projects/.mindweaver/cache/github.com-acme-rules/rules/TODO.md: the rule `TODO` cannot be named by its route (`TODO` is not usable as a name: it has to be lowercase letters and digits, joined by single hyphens), so it is not gathered
+```
+
+A file whose route is no rule's name, a capital letter or an underscore in
+it, is a warning and not taken, while the rest are; one that is a link is
+taken as what it leads to inside the repository, and refused with a warning
+when that is outside it. A rule's front matter is read as a project's
+rule's is, so one it cannot read is taken, with a warning. Each lands on
+the shelf at `.mindweaver/rules/<source>/<route>.md`, as it is written,
+and is recorded with its file in the repository, the commit, the hash of
+what was put on the shelf and the licence a licence file names beside it
+or in a folder above it, as far as the folder gathered:
+
+```
+$ mindweaver gather list
+git/commits        acme-rules  MIT License  Write commit subjects in the imperative
+git/no-force-push  acme-rules  MIT License  Never force-push a branch somebody else may have pulled.
+review/tone        acme-rules  MIT License  Say what a change does before what is wrong with it.
+
+$ mindweaver install -p app git/commits
+installed rule git/commits into app, from https://github.com/acme/rules
+```
+
+It installs as one of the workspace's own rules does ([installing into a
+project](#installing-into-a-project)), into the block of the project's
+`AGENTS.md`, or Claude's rules folder, or as a copy in a project a
+`mind.toml` marks, and `gather update` and `gather remove` work on its
+source as on one of skills: a rule the source no longer holds is taken off
+the shelf and said `removed`, and an install of it reads `orphaned`. A folder gathered for skills and again for rules is two sources,
+each with a name of its own, gathered again for what it took. Cursor's
+`.mdc` rules are not taken.
 
 ### From a plugin marketplace
 
@@ -1430,6 +1489,8 @@ with space and gather with enter.
   lock            held by a command while it changes the workspace
   cache/<source>/ the clone, kept so a gather can be looked at afterwards
   skills/<source>/<name>/SKILL.md
+  rules/<source>/<route>.md
+                  what was gathered, by its source
   templates/      templates for every project it manages, if you add any
 ```
 
