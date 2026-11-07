@@ -32,7 +32,7 @@ use crate::workspace::HTTP_CACHE_DIR;
 /// Refused if the file on disk is newer, for the same reason a marker file is:
 /// an old binary silently misreading a newer database is the failure that has
 /// no error message.
-pub const SCHEMA_VERSION: u32 = 9;
+pub const SCHEMA_VERSION: u32 = 10;
 
 /// The SQLite store, over one connection to the ledger's file, or to one in
 /// memory.
@@ -334,6 +334,11 @@ impl Sqlite {
                 )
             })?;
         }
+        if found < 10 {
+            transaction.execute_batch(SCHEMA_V10).map_err(|source| {
+                self.failed("noting the kind of artifact each source gathers", source)
+            })?;
+        }
 
         transaction
             .pragma_update(None, "user_version", SCHEMA_VERSION)
@@ -492,19 +497,21 @@ impl LedgerStore for Sqlite {
         url: &str,
         reference: Option<&str>,
         subdirectory: &str,
+        gathers: Kind,
     ) -> Result<Option<Source>, LedgerError> {
         self.connection
             .query_row(
                 &format!(
                     "SELECT {SOURCE_COLUMNS} FROM sources
                       WHERE kind = ?1 AND canonical_url = ?2 AND reference_key = ?3
-                        AND subdirectory = ?4 AND parent_id IS NULL"
+                        AND subdirectory = ?4 AND gathers = ?5 AND parent_id IS NULL"
                 ),
                 rusqlite::params![
                     kind.slug(),
                     canonical(url),
                     reference.unwrap_or_default(),
-                    subdirectory
+                    subdirectory,
+                    gathers.slug()
                 ],
                 read_source,
             )
@@ -518,9 +525,10 @@ impl LedgerStore for Sqlite {
         url: &str,
         reference: Option<&str>,
         subdirectory: &str,
+        gathers: Kind,
     ) -> Result<Source, LedgerError> {
         let url = redacted(url);
-        if let Some(existing) = self.source(kind, &url, reference, subdirectory)? {
+        if let Some(existing) = self.source(kind, &url, reference, subdirectory, gathers)? {
             return Ok(existing);
         }
 
@@ -528,22 +536,31 @@ impl LedgerStore for Sqlite {
         let known_by = canonical(&url);
         let name = self.free_name(&SourceName::derived(&known_by))?;
         let at = self.now();
+        // A source gathering anything but skills keeps its branch in
+        // `reference_key` alone, for the reason [`SCHEMA_V10`] gives: one
+        // gathering skills from the same folder at the same branch, as typed,
+        // would otherwise be refused by version 1's `UNIQUE`.
+        let stored = match gathers {
+            Kind::Skill => reference,
+            Kind::Rule | Kind::Mcp => None,
+        };
         self.connection
             .execute(
                 "INSERT INTO sources
                      (kind, url, reference, subdirectory, revision, directory, first_seen, last_seen,
-                      name, canonical_url, reference_key)
-                 VALUES (?1, ?2, ?3, ?4, NULL, ?5, ?6, ?6, ?7, ?8, ?9)",
+                      name, canonical_url, reference_key, gathers)
+                 VALUES (?1, ?2, ?3, ?4, NULL, ?5, ?6, ?6, ?7, ?8, ?9, ?10)",
                 rusqlite::params![
                     kind.slug(),
                     url.as_ref(),
-                    reference,
+                    stored,
                     subdirectory,
                     directory,
                     at,
                     name.as_str(),
                     known_by,
-                    reference.unwrap_or_default()
+                    reference.unwrap_or_default(),
+                    gathers.slug()
                 ],
             )
             .map_err(|source| self.failed("registering a source", source))?;
@@ -558,6 +575,7 @@ impl LedgerStore for Sqlite {
             directory,
             name,
             pin: None,
+            gathers,
             parent_id: None,
             entry: None,
         })
@@ -656,6 +674,7 @@ impl LedgerStore for Sqlite {
             directory,
             name,
             pin: None,
+            gathers: Kind::Skill,
             parent_id: Some(parent.id),
             entry: Some(entry.to_owned()),
         })
@@ -830,7 +849,7 @@ impl LedgerStore for Sqlite {
                         s.id, s.kind, s.url, coalesce(s.reference, nullif(s.reference_key, '')),
                         s.subdirectory, s.revision, s.directory,
                         s.name, a.upstream_path, a.content_hash, a.license, s.pin,
-                        s.parent_id, s.entry
+                        s.parent_id, s.entry, s.gathers
                    FROM artifacts a
                    JOIN sources s ON s.id = a.source_id
                   ORDER BY a.kind, a.name, s.url",
@@ -864,6 +883,7 @@ impl LedgerStore for Sqlite {
                     pin: row.get(17)?,
                     parent_id: row.get(18)?,
                     entry: row.get(19)?,
+                    gathers: row.get(20)?,
                 })
             })
             .map_err(|source| self.failed("listing what was gathered", source))?;
@@ -871,9 +891,10 @@ impl LedgerStore for Sqlite {
         let mut found = Vec::new();
         for row in rows {
             let row = row.map_err(|source| self.failed("reading a gathered artifact", source))?;
-            let (Ok(kind), Some(source_kind)) = (
+            let (Ok(kind), Some(source_kind), Ok(gathers)) = (
                 row.kind.parse::<Kind>(),
                 SourceKind::parse(&row.source_kind),
+                row.gathers.parse::<Kind>(),
             ) else {
                 continue;
             };
@@ -894,6 +915,7 @@ impl LedgerStore for Sqlite {
                     directory: row.directory,
                     name: SourceName::recorded(row.source_name),
                     pin: row.pin,
+                    gathers,
                     parent_id: row.parent_id,
                     entry: row.entry,
                 },
@@ -915,23 +937,24 @@ impl LedgerStore for Sqlite {
             .query_map([], |row| {
                 let slug: String = row.get(1)?;
                 let url: String = row.get(2)?;
-                Ok(
-                    SourceKind::parse(&slug).map(|kind| -> rusqlite::Result<Source> {
-                        Ok(Source {
-                            id: row.get(0)?,
-                            kind,
-                            url: Redacted::new(&url),
-                            reference: row.get(3)?,
-                            subdirectory: row.get(4)?,
-                            revision: row.get(5)?,
-                            directory: row.get(6)?,
-                            name: SourceName::recorded(row.get(7)?),
-                            pin: row.get(8)?,
-                            parent_id: row.get(9)?,
-                            entry: row.get(10)?,
-                        })
-                    }),
-                )
+                let gathers: String = row.get(11)?;
+                let kinds = SourceKind::parse(&slug).zip(gathers.parse::<Kind>().ok());
+                Ok(kinds.map(|(kind, gathers)| -> rusqlite::Result<Source> {
+                    Ok(Source {
+                        id: row.get(0)?,
+                        kind,
+                        url: Redacted::new(&url),
+                        reference: row.get(3)?,
+                        subdirectory: row.get(4)?,
+                        revision: row.get(5)?,
+                        directory: row.get(6)?,
+                        name: SourceName::recorded(row.get(7)?),
+                        pin: row.get(8)?,
+                        gathers,
+                        parent_id: row.get(9)?,
+                        entry: row.get(10)?,
+                    })
+                }))
             })
             .map_err(failed)?;
         let mut sources = Vec::new();
@@ -2055,6 +2078,7 @@ struct Row {
     pin: Option<Revision>,
     parent_id: Option<i64>,
     entry: Option<String>,
+    gathers: String,
 }
 
 /// Where a ledger at `path` is copied before a schema step takes it on from
@@ -2184,11 +2208,12 @@ fn journal_of(path: &Path) -> PathBuf {
 }
 
 /// The columns of `sources` [`read_source`] reads, in its order: the branch
-/// from `reference_key` for a marketplace's plugin, whose `reference` is
-/// left `NULL` ([`SCHEMA_V9`]), and from `reference` for every other
-/// source, whose `reference_key` says the same.
+/// from `reference_key` for a marketplace's plugin and a source gathering
+/// rules, whose `reference` is left `NULL` ([`SCHEMA_V9`], [`SCHEMA_V10`]),
+/// and from `reference` for every other source, whose `reference_key` says
+/// the same.
 const SOURCE_COLUMNS: &str = "id, kind, url, coalesce(reference, nullif(reference_key, '')),
-    subdirectory, revision, directory, name, pin, parent_id, entry";
+    subdirectory, revision, directory, name, pin, parent_id, entry, gathers";
 
 /// What a `SELECT` of [`SOURCE_COLUMNS`] maps to.
 fn read_source(row: &rusqlite::Row<'_>) -> rusqlite::Result<Source> {
@@ -2204,6 +2229,14 @@ fn read_source(row: &rusqlite::Row<'_>) -> rusqlite::Result<Source> {
         )
     })?;
     let url: String = row.get(2)?;
+    let gathers: String = row.get(11)?;
+    let gathers = gathers.parse::<Kind>().map_err(|unknown| {
+        rusqlite::Error::FromSqlConversionFailure(
+            11,
+            rusqlite::types::Type::Text,
+            unknown.to_string().into(),
+        )
+    })?;
     Ok(Source {
         id: row.get(0)?,
         kind,
@@ -2214,6 +2247,7 @@ fn read_source(row: &rusqlite::Row<'_>) -> rusqlite::Result<Source> {
         directory: row.get(6)?,
         name: SourceName::recorded(row.get(7)?),
         pin: row.get(8)?,
+        gathers,
         parent_id: row.get(9)?,
         entry: row.get(10)?,
     })
@@ -2669,6 +2703,36 @@ DROP INDEX sources_by_identity;
 CREATE UNIQUE INDEX sources_by_identity
     ON sources (kind, canonical_url, reference_key, subdirectory) WHERE parent_id IS NULL;
 CREATE UNIQUE INDEX sources_by_entry ON sources (parent_id, entry) WHERE parent_id IS NOT NULL;
+";
+
+/// The tenth schema: the kind of artifact a source's gather takes (#111).
+///
+/// A source gains `gathers`, the kind's slug, `skill` for every source a
+/// version before it holds, since no build before this one gathered
+/// anything else, and `rule` for one gathering a folder's markdown files.
+/// It is part of what makes the source, so `sources_by_identity` holds it
+/// beside the rest: one folder of one repository gathered for skills and
+/// for rules is two sources, each called by a name of its own and gathered
+/// again for what it took, rather than one whose next gather would have to
+/// guess which kind to take, or be refused the other.
+///
+/// Version 1's `UNIQUE (kind, url, reference, subdirectory)`, which no
+/// `ALTER` drops, would still refuse the second of the two when a branch
+/// is typed, so a source gathering rules keeps its branch in
+/// `reference_key` alone, its `reference` left `NULL`, as a marketplace's
+/// plugin does ([`SCHEMA_V9`] says why the table is not made again), and
+/// it is read back from there ([`SOURCE_COLUMNS`]). A skill's source keeps
+/// both, as it always has.
+///
+/// Nothing older is filled in but by the column's default: every row is a
+/// source of skills.
+const SCHEMA_V10: &str = "
+ALTER TABLE sources ADD COLUMN gathers TEXT NOT NULL DEFAULT 'skill';
+
+DROP INDEX sources_by_identity;
+CREATE UNIQUE INDEX sources_by_identity
+    ON sources (kind, canonical_url, reference_key, subdirectory, gathers)
+    WHERE parent_id IS NULL;
 ";
 
 /// What the step to schema 7 is handed of one source: what no SQL can work

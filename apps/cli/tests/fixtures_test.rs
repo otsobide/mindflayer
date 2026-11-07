@@ -25,7 +25,7 @@ use common::*;
 use mindweaver_cli::backend::{PanelBackend, Query};
 use mindweaver_core::hash;
 use mindweaver_core::ledger::{Action, Outcome as Logged, Upstream};
-use mindweaver_core::{SourceKind, DEFAULT_SUBDIRECTORY};
+use mindweaver_core::{Kind, SourceKind, DEFAULT_SUBDIRECTORY};
 use mindweaver_server::Backend;
 use serde_json::{json, Value};
 
@@ -488,7 +488,13 @@ fn shelve(root: &Path) {
     let workspace = WeaverWorkspace::open(root).unwrap();
     let ledger = workspace.ledger().unwrap();
     let source = ledger
-        .source_for(SourceKind::Git, SOURCE, None, DEFAULT_SUBDIRECTORY)
+        .source_for(
+            SourceKind::Git,
+            SOURCE,
+            None,
+            DEFAULT_SUBDIRECTORY,
+            Kind::Skill,
+        )
         .unwrap();
     ledger.saw_source(source.id, Some(REVISION), None).unwrap();
     // One with a licence file beside it, which a gather reads its first

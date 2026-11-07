@@ -32,7 +32,7 @@ fn a_plugins_folder_is_its_entry_after_its_marketplaces_whatever_the_entry_spell
     let ledger = Sqlite::in_memory().unwrap();
     let url = "https://github.com/acme/market";
     let market = ledger
-        .source_for(SourceKind::Marketplace, url, None, "")
+        .source_for(SourceKind::Marketplace, url, None, "", Kind::Skill)
         .unwrap();
 
     // Each of them, read as a URL is, keeps what follows its `@` or its
@@ -66,10 +66,10 @@ fn a_plugins_folder_is_its_entry_after_its_marketplaces_whatever_the_entry_spell
 fn registering_the_same_source_twice_returns_the_same_row() {
     let ledger = Sqlite::in_memory().unwrap();
     let first = ledger
-        .source_for(SourceKind::Git, "https://h/a", None, "skills")
+        .source_for(SourceKind::Git, "https://h/a", None, "skills", Kind::Skill)
         .unwrap();
     let again = ledger
-        .source_for(SourceKind::Git, "https://h/a", None, "skills")
+        .source_for(SourceKind::Git, "https://h/a", None, "skills", Kind::Skill)
         .unwrap();
     assert_eq!(first, again);
 }
@@ -79,10 +79,10 @@ fn two_urls_with_one_readable_name_get_separate_directories() {
     let ledger = Sqlite::in_memory().unwrap();
     // Both reduce to `h-a`, and both hold files, so they cannot share one.
     let first = ledger
-        .source_for(SourceKind::Git, "https://h/a", None, "skills")
+        .source_for(SourceKind::Git, "https://h/a", None, "skills", Kind::Skill)
         .unwrap();
     let second = ledger
-        .source_for(SourceKind::Git, "ssh://h/a", None, "skills")
+        .source_for(SourceKind::Git, "ssh://h/a", None, "skills", Kind::Skill)
         .unwrap();
     assert_eq!(first.directory, "h-a");
     assert_eq!(second.directory, "h-a-2");
@@ -92,7 +92,7 @@ fn two_urls_with_one_readable_name_get_separate_directories() {
 fn a_forgotten_source_frees_its_directory_and_takes_its_artifacts() {
     let ledger = Sqlite::in_memory().unwrap();
     let source = ledger
-        .source_for(SourceKind::Git, "https://h/a", None, "skills")
+        .source_for(SourceKind::Git, "https://h/a", None, "skills", Kind::Skill)
         .unwrap();
     ledger
         .record(
@@ -111,13 +111,13 @@ fn a_forgotten_source_frees_its_directory_and_takes_its_artifacts() {
     assert!(ledger.gathered().unwrap().is_empty());
     assert_eq!(
         ledger
-            .source(SourceKind::Git, "https://h/a", None, "skills")
+            .source(SourceKind::Git, "https://h/a", None, "skills", Kind::Skill)
             .unwrap(),
         None
     );
     // The name it had is free for the next source to reduce to it.
     let next = ledger
-        .source_for(SourceKind::Git, "ssh://h/a", None, "skills")
+        .source_for(SourceKind::Git, "ssh://h/a", None, "skills", Kind::Skill)
         .unwrap();
     assert_eq!(next.directory, "h-a");
 }
@@ -126,10 +126,22 @@ fn a_forgotten_source_frees_its_directory_and_takes_its_artifacts() {
 fn a_reference_is_part_of_what_makes_a_source() {
     let ledger = Sqlite::in_memory().unwrap();
     let main = ledger
-        .source_for(SourceKind::Git, "https://h/a", Some("main"), "skills")
+        .source_for(
+            SourceKind::Git,
+            "https://h/a",
+            Some("main"),
+            "skills",
+            Kind::Skill,
+        )
         .unwrap();
     let next = ledger
-        .source_for(SourceKind::Git, "https://h/a", Some("next"), "skills")
+        .source_for(
+            SourceKind::Git,
+            "https://h/a",
+            Some("next"),
+            "skills",
+            Kind::Skill,
+        )
         .unwrap();
     assert_ne!(main.id, next.id);
 }
@@ -141,10 +153,16 @@ fn a_reference_is_part_of_what_makes_a_source() {
 fn a_sources_origin_is_its_address_with_the_branch_asked_for() {
     let ledger = Sqlite::in_memory().unwrap();
     let head = ledger
-        .source_for(SourceKind::Git, "https://h/a", None, "skills")
+        .source_for(SourceKind::Git, "https://h/a", None, "skills", Kind::Skill)
         .unwrap();
     let main = ledger
-        .source_for(SourceKind::Git, "https://h/a", Some("main"), "skills")
+        .source_for(
+            SourceKind::Git,
+            "https://h/a",
+            Some("main"),
+            "skills",
+            Kind::Skill,
+        )
         .unwrap();
 
     assert_eq!(head.origin(), "https://h/a");
@@ -155,10 +173,10 @@ fn a_sources_origin_is_its_address_with_the_branch_asked_for() {
 fn one_name_from_two_sources_is_two_rows() {
     let ledger = Sqlite::in_memory().unwrap();
     let a = ledger
-        .source_for(SourceKind::Git, "https://h/a", None, "skills")
+        .source_for(SourceKind::Git, "https://h/a", None, "skills", Kind::Skill)
         .unwrap();
     let b = ledger
-        .source_for(SourceKind::Git, "https://h/b", None, "skills")
+        .source_for(SourceKind::Git, "https://h/b", None, "skills", Kind::Skill)
         .unwrap();
     ledger
         .record(
@@ -191,7 +209,7 @@ fn one_name_from_two_sources_is_two_rows() {
 fn gathering_the_same_name_again_updates_rather_than_duplicates() {
     let ledger = Sqlite::in_memory().unwrap();
     let source = ledger
-        .source_for(SourceKind::Git, "https://h/a", None, "skills")
+        .source_for(SourceKind::Git, "https://h/a", None, "skills", Kind::Skill)
         .unwrap();
     ledger
         .record(
@@ -311,14 +329,20 @@ fn stored(ledger: &Sqlite, table: &str) -> String {
 fn a_source_is_stored_and_found_without_the_credentials_in_its_url() {
     let ledger = Sqlite::in_memory().unwrap();
     let source = ledger
-        .source_for(SourceKind::Git, "https://me:hunter2@h/a", None, "skills")
+        .source_for(
+            SourceKind::Git,
+            "https://me:hunter2@h/a",
+            None,
+            "skills",
+            Kind::Skill,
+        )
         .unwrap();
 
     assert_eq!(source.url, "https://h/a");
     assert!(!stored(&ledger, "sources").contains("hunter2"));
     // The same place, asked for without them, is the same source.
     let again = ledger
-        .source_for(SourceKind::Git, "https://h/a", None, "skills")
+        .source_for(SourceKind::Git, "https://h/a", None, "skills", Kind::Skill)
         .unwrap();
     assert_eq!(again, source);
 }
@@ -416,7 +440,7 @@ fn a_scrubbed_source_leaves_no_copy_of_its_credentials_in_the_file() {
     assert_eq!(ledger.gathered().unwrap()[0].source.url, "https://h/a");
     // Found by its URL now, which is what the next gather looks it up by.
     assert!(ledger
-        .source(SourceKind::Git, "https://h/a", None, "skills")
+        .source(SourceKind::Git, "https://h/a", None, "skills", Kind::Skill)
         .unwrap()
         .is_some());
     ledger.scrub_log().unwrap();
@@ -494,7 +518,7 @@ fn the_step_to_seven_makes_two_spellings_of_one_url_one_source_the_fresher_kept(
     ] {
         assert_eq!(
             ledger
-                .source(SourceKind::Git, spelling, None, "skills")
+                .source(SourceKind::Git, spelling, None, "skills", Kind::Skill)
                 .unwrap()
                 .map(|source| source.id),
             Some(1),
@@ -523,14 +547,14 @@ fn a_folder_name_a_merge_is_kept_by_is_given_to_no_new_source_until_it_is_cleare
 
     // A new source whose readable name is `h-a` is given another folder.
     let held = ledger
-        .source_for(SourceKind::Git, "https://h-a", None, "skills")
+        .source_for(SourceKind::Git, "https://h-a", None, "skills", Kind::Skill)
         .unwrap();
     assert_eq!(held.directory, "h-a-3");
 
     // Once its folders are gone it is free, for another place there.
     ledger.cleared_merge("h-a").unwrap();
     let freed = ledger
-        .source_for(SourceKind::Git, "https://h-a", None, "agents")
+        .source_for(SourceKind::Git, "https://h-a", None, "agents", Kind::Skill)
         .unwrap();
     assert_eq!(freed.directory, "h-a");
 }
@@ -2047,6 +2071,7 @@ fn gathered_from(url: &str) -> Gathered {
             directory: String::from("github.com-acme-skills"),
             name: SourceName::recorded(String::from("acme-skills")),
             pin: Some(Revision::from("4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5e7b9d1f3")),
+            gathers: Kind::Skill,
             parent_id: None,
             entry: None,
         },
@@ -2073,7 +2098,7 @@ fn a_gathered_artifact_serializes_every_field_and_its_source() {
             r#""source":{"kind":"git","url":"https://github.com/acme/skills.git","#,
             r#""reference":"main","subdirectory":"skills","revision":"4f9c2a7","#,
             r#""directory":"github.com-acme-skills","name":"acme-skills","#,
-            r#""pin":"4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5e7b9d1f3"},"#,
+            r#""pin":"4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5e7b9d1f3","gathers":"skill"},"#,
             r#""upstream_path":"skills/deploy","#,
             r#""content_hash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","#,
             r#""license":"MIT"}"#,
@@ -2156,13 +2181,19 @@ fn an_action_log_entry_is_serialized_without_the_credentials_its_urls_carry() {
 fn every_source_is_listed_in_url_order_without_credentials() {
     let ledger = Sqlite::in_memory().unwrap();
     ledger
-        .source_for(SourceKind::Git, "https://h/b", None, "skills")
+        .source_for(SourceKind::Git, "https://h/b", None, "skills", Kind::Skill)
         .unwrap();
     ledger
-        .source_for(SourceKind::Git, "https://h/a", Some("main"), "skills")
+        .source_for(
+            SourceKind::Git,
+            "https://h/a",
+            Some("main"),
+            "skills",
+            Kind::Skill,
+        )
         .unwrap();
     ledger
-        .source_for(SourceKind::Git, "https://h/a", None, "skills")
+        .source_for(SourceKind::Git, "https://h/a", None, "skills", Kind::Skill)
         .unwrap();
     // What a Mindweaver from before the refusal could have stored.
     ledger

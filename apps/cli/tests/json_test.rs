@@ -982,6 +982,7 @@ struct Source {
     directory: String,
     name: String,
     pin: Option<String>,
+    gathers: String,
 }
 
 impl Offer {

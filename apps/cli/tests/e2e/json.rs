@@ -282,6 +282,7 @@ fn gather_list_json_says_where_each_offer_comes_from_as_from_takes_it() {
                 "directory": "..-src-acme-skills",
                 "name": "src-acme-skills",
                 "pin": null,
+                "gathers": "skill",
             },
             "upstream_path": "skills/review",
             "license": null,

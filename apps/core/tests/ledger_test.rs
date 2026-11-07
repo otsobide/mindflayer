@@ -95,6 +95,13 @@ const SOURCES_OF_SCHEMA_8: &str = "SELECT id, kind, url, reference, subdirectory
                                           canonical_url, reference_key, pin, parent_id
                                      FROM sources ORDER BY id";
 
+/// Every column of `sources` a version before 10 had, which schema 10 adds
+/// a column to and leaves as they were: what it keeps of each row.
+const SOURCES_OF_SCHEMA_9: &str = "SELECT id, kind, url, reference, subdirectory, revision,
+                                          directory, first_seen, last_seen, name,
+                                          canonical_url, reference_key, pin, parent_id, entry
+                                     FROM sources ORDER BY id";
+
 /// Every column of `artifacts` a version before 8 had, which schema 8 adds
 /// to: what a step after it keeps of each row it is not about.
 const ARTIFACTS_AS_WRITTEN: &str = "SELECT id, kind, name, source_id, path, summary, revision,
@@ -869,6 +876,7 @@ fn a_version_6_ledger_names_each_source_and_finds_it_by_any_spelling_of_its_url(
                 spelling,
                 reference,
                 "skills",
+                Kind::Skill,
             )
             .unwrap();
         assert_eq!(found.map(|source| source.id), Some(id), "{spelling}");
@@ -1400,6 +1408,7 @@ fn a_version_8_ledger_takes_two_plugins_of_one_repository_at_one_branch_beside_i
             url,
             Some("main"),
             "",
+            Kind::Skill,
         )
         .unwrap();
 
@@ -1414,6 +1423,119 @@ fn a_version_8_ledger_takes_two_plugins_of_one_repository_at_one_branch_beside_i
 
     assert_ne!(one.id, two.id);
     assert_eq!(ledger.children(market.id).unwrap(), [one, two]);
+}
+
+/// What schema 9 wrote, dumped from a ledger it made: two repositories
+/// gathered from their root, one pinned, a marketplace and the plugin it
+/// lists, and four skills installed from them into two projects.
+const VERSION_9: &str = include_str!("fixtures/ledger-v9.sql");
+
+#[test]
+fn a_version_9_ledger_keeps_every_row_and_says_each_source_gathers_skills() {
+    let dir = TempDir::new().unwrap();
+    let path = written_at(dir.path(), VERSION_9);
+    let before = as_written(VERSION_9);
+
+    Ledger::open(&path).unwrap();
+
+    let after = Connection::open(&path).unwrap();
+    assert_eq!(version_of(&after), SCHEMA_VERSION);
+    for query in [
+        SOURCES_OF_SCHEMA_9,
+        "SELECT * FROM artifacts ORDER BY id",
+        "SELECT * FROM actions ORDER BY id",
+        "SELECT * FROM installations ORDER BY id",
+        "SELECT * FROM installation_targets ORDER BY installation_id, path",
+        "SELECT * FROM projects ORDER BY id",
+    ] {
+        let kept = rows(&after, query);
+        assert_eq!(kept, rows(&before, query), "{query}");
+        assert!(!kept.is_empty(), "{query} reads nothing to compare");
+    }
+    // No build before it gathered anything but skills, a marketplace's
+    // plugin among them.
+    assert_eq!(
+        rows(&after, "SELECT id, gathers FROM sources ORDER BY id"),
+        [
+            [Value::Integer(1), text("skill")],
+            [Value::Integer(2), text("skill")],
+            [Value::Integer(3), text("skill")],
+            [Value::Integer(4), text("skill")],
+        ]
+    );
+    // What a source gathers is part of what makes it, among the sources
+    // gathered on their own.
+    assert_eq!(
+        rows(
+            &after,
+            "SELECT sql LIKE '%subdirectory, gathers)%', sql LIKE '%WHERE parent_id IS NULL%'
+               FROM sqlite_master WHERE name = 'sources_by_identity'"
+        ),
+        [[Value::Integer(1), Value::Integer(1)]]
+    );
+}
+
+#[test]
+fn a_version_9_ledger_is_copied_aside_and_the_copy_opens_at_version_9() {
+    let dir = TempDir::new().unwrap();
+    let path = written_at(dir.path(), VERSION_9);
+    let before = as_written(VERSION_9);
+
+    Ledger::open(&path).unwrap();
+
+    let backup = dir.path().join("mindweaver.db.v9.bak");
+    assert_eq!(backup_path(&path, 9), backup);
+    let copy = Connection::open(&backup).unwrap();
+    assert_eq!(version_of(&copy), 9);
+    for query in [
+        "SELECT * FROM sources ORDER BY id",
+        "SELECT * FROM artifacts ORDER BY id",
+        "SELECT * FROM actions ORDER BY id",
+        "SELECT * FROM installations ORDER BY id",
+        "SELECT type, name, sql FROM sqlite_master ORDER BY name",
+    ] {
+        assert_eq!(rows(&copy, query), rows(&before, query), "{query}");
+    }
+}
+
+#[test]
+fn a_version_9_ledger_takes_the_rules_of_a_folder_its_skills_are_gathered_from_beside_it() {
+    let dir = TempDir::new().unwrap();
+    let path = written_at(dir.path(), VERSION_9);
+    let ledger = Ledger::open(&path).unwrap();
+    let ops = ledger
+        .sources()
+        .unwrap()
+        .into_iter()
+        .find(|source| source.name == "ops")
+        .unwrap();
+
+    // The repository, the branch and the folder `ops` was gathered from,
+    // for rules: what version 1's `UNIQUE` would refuse at a branch.
+    let rules = ledger
+        .source_for(
+            mindweaver_core::SourceKind::Git,
+            ops.url.as_str(),
+            Some("main"),
+            &ops.subdirectory,
+            Kind::Rule,
+        )
+        .unwrap();
+    let skills = ledger
+        .source_for(
+            mindweaver_core::SourceKind::Git,
+            ops.url.as_str(),
+            Some("main"),
+            &ops.subdirectory,
+            Kind::Skill,
+        )
+        .unwrap();
+
+    assert_ne!(rules.id, ops.id);
+    assert_ne!(rules.id, skills.id);
+    assert_eq!(rules.gathers, Kind::Rule);
+    assert_eq!(rules.reference.as_deref(), Some("main"));
+    assert_eq!(ledger.sources().unwrap().len(), 6);
 }
 
 #[test]

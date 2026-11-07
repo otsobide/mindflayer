@@ -368,7 +368,7 @@ fn a_source_is_gathered_again_from_where_and_as_it_was_gathered_last() {
         assert_eq!(request.source.url(), source.url.as_str(), "{source:?}");
         assert_eq!(request.source.reference(), source.reference.as_deref());
         assert_eq!(request.subdirectory, source.subdirectory);
-        assert_eq!(request.kind, Kind::Skill);
+        assert_eq!(request.kind, source.gathers, "{source:?}");
         assert_eq!(
             request.pin.as_deref(),
             source.pin.as_ref().map(|pin| pin.as_str())

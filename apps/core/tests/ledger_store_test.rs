@@ -199,6 +199,7 @@ every_store![
     a_source_is_registered_once_and_found_by_its_coordinate,
     no_source_is_given_the_folder_the_http_cache_keeps,
     every_coordinate_is_a_source_of_its_own_with_a_folder_of_its_own,
+    one_folder_gathered_for_each_kind_is_a_source_for_each,
     a_source_remembers_the_revision_it_was_last_gathered_at,
     a_source_keeps_the_pin_its_last_gather_had_and_none_once_one_had_none,
     forgetting_a_source_takes_what_it_brought_and_frees_its_folder,
@@ -315,6 +316,7 @@ fn source(store: &Store, url: &str) -> Source {
             url,
             None,
             mindweaver_core::DEFAULT_SUBDIRECTORY,
+            Kind::Skill,
         )
         .unwrap()
 }
@@ -1452,14 +1454,26 @@ fn a_source_is_registered_once_and_found_by_its_coordinate(mut store: Store) {
     let (url, reference, folder) = coordinate();
     assert_eq!(
         store
-            .source(SourceKind::Git, &url, reference.as_deref(), &folder)
+            .source(
+                SourceKind::Git,
+                &url,
+                reference.as_deref(),
+                &folder,
+                Kind::Skill
+            )
             .unwrap(),
         None,
         "{url}"
     );
 
     let registered = store
-        .source_for(SourceKind::Git, &url, reference.as_deref(), &folder)
+        .source_for(
+            SourceKind::Git,
+            &url,
+            reference.as_deref(),
+            &folder,
+            Kind::Skill,
+        )
         .unwrap();
 
     store.reopen();
@@ -1471,14 +1485,26 @@ fn a_source_is_registered_once_and_found_by_its_coordinate(mut store: Store) {
     assert!(!registered.directory.is_empty(), "{registered:?}");
     assert_eq!(
         store
-            .source(SourceKind::Git, &url, reference.as_deref(), &folder)
+            .source(
+                SourceKind::Git,
+                &url,
+                reference.as_deref(),
+                &folder,
+                Kind::Skill
+            )
             .unwrap(),
         Some(registered.clone())
     );
     // Its folder is chosen once, and is where its files already are.
     assert_eq!(
         store
-            .source_for(SourceKind::Git, &url, reference.as_deref(), &folder)
+            .source_for(
+                SourceKind::Git,
+                &url,
+                reference.as_deref(),
+                &folder,
+                Kind::Skill
+            )
             .unwrap(),
         registered
     );
@@ -1493,7 +1519,7 @@ fn no_source_is_given_the_folder_the_http_cache_keeps(mut store: Store) {
         .into_iter()
         .map(|url| {
             store
-                .source_for(SourceKind::Git, url, None, "skills")
+                .source_for(SourceKind::Git, url, None, "skills", Kind::Skill)
                 .unwrap()
         })
         .collect();
@@ -1503,7 +1529,13 @@ fn no_source_is_given_the_folder_the_http_cache_keeps(mut store: Store) {
     let marketplace = Source {
         directory: String::from("http"),
         ..store
-            .source_for(SourceKind::Marketplace, &UrlMother::https(), None, "")
+            .source_for(
+                SourceKind::Marketplace,
+                &UrlMother::https(),
+                None,
+                "",
+                Kind::Skill,
+            )
             .unwrap()
     };
     let plugin = store
@@ -1544,7 +1576,13 @@ fn every_coordinate_is_a_source_of_its_own_with_a_folder_of_its_own(mut store: S
         .iter()
         .map(|(url, reference, folder)| {
             store
-                .source_for(SourceKind::Git, url, reference.as_deref(), folder)
+                .source_for(
+                    SourceKind::Git,
+                    url,
+                    reference.as_deref(),
+                    folder,
+                    Kind::Skill,
+                )
                 .unwrap()
         })
         .collect();
@@ -1557,13 +1595,71 @@ fn every_coordinate_is_a_source_of_its_own_with_a_folder_of_its_own(mut store: S
     for ((url, reference, folder), source) in coordinates.iter().zip(&registered) {
         assert_eq!(
             store
-                .source(SourceKind::Git, url, reference.as_deref(), folder)
+                .source(
+                    SourceKind::Git,
+                    url,
+                    reference.as_deref(),
+                    folder,
+                    Kind::Skill
+                )
                 .unwrap()
                 .as_ref(),
             Some(source)
         );
     }
     assert_eq!(store.sources().unwrap().len(), registered.len());
+}
+
+/// One folder of one repository, at one branch as typed, gathered for
+/// skills and for rules (#111): two sources, each found by the kind it
+/// gathers and handed back with its branch.
+fn one_folder_gathered_for_each_kind_is_a_source_for_each(mut store: Store) {
+    let url = UrlMother::https();
+    let reference = random::chance().then(random::word);
+    let folder = random::word();
+    let registered: Vec<Source> = [Kind::Skill, Kind::Rule]
+        .into_iter()
+        .map(|kind| {
+            store
+                .source_for(SourceKind::Git, &url, reference.as_deref(), &folder, kind)
+                .unwrap()
+        })
+        .collect();
+
+    store.reopen();
+    assert_ne!(registered[0].id, registered[1].id, "{registered:#?}");
+    assert_ne!(registered[0].name, registered[1].name, "{registered:#?}");
+    assert_ne!(
+        registered[0].directory, registered[1].directory,
+        "{registered:#?}"
+    );
+    for (kind, source) in [Kind::Skill, Kind::Rule].into_iter().zip(&registered) {
+        assert_eq!(source.gathers, kind, "{source:?}");
+        assert_eq!(source.reference, reference, "{source:?}");
+        assert_eq!(
+            store
+                .source(SourceKind::Git, &url, reference.as_deref(), &folder, kind)
+                .unwrap()
+                .as_ref(),
+            Some(source)
+        );
+    }
+    let mut listed = store.sources().unwrap();
+    listed.sort_by_key(|source| source.id);
+    assert_eq!(listed, registered);
+    // Neither is a source of MCP servers, which no gather takes.
+    assert_eq!(
+        store
+            .source(
+                SourceKind::Git,
+                &url,
+                reference.as_deref(),
+                &folder,
+                Kind::Mcp
+            )
+            .unwrap(),
+        None
+    );
 }
 
 fn a_source_remembers_the_revision_it_was_last_gathered_at(mut store: Store) {
@@ -1629,6 +1725,7 @@ fn a_source_keeps_the_pin_its_last_gather_had_and_none_once_one_had_none(mut sto
                 &url,
                 None,
                 mindweaver_core::DEFAULT_SUBDIRECTORY,
+                Kind::Skill,
             )
             .unwrap()
             .unwrap();
@@ -1665,7 +1762,8 @@ fn forgetting_a_source_takes_what_it_brought_and_frees_its_folder(mut store: Sto
                 SourceKind::Git,
                 &url,
                 None,
-                mindweaver_core::DEFAULT_SUBDIRECTORY
+                mindweaver_core::DEFAULT_SUBDIRECTORY,
+                Kind::Skill
             )
             .unwrap(),
         None
@@ -1739,7 +1837,13 @@ fn every_source_is_listed_by_url_then_branch_then_folder_even_with_nothing_gathe
         let (url, reference, folder) = coordinate();
         registered.push(
             store
-                .source_for(SourceKind::Git, &url, reference.as_deref(), &folder)
+                .source_for(
+                    SourceKind::Git,
+                    &url,
+                    reference.as_deref(),
+                    &folder,
+                    Kind::Skill,
+                )
                 .unwrap(),
         );
     }
@@ -2023,7 +2127,13 @@ fn no_credential_typed_into_a_url_comes_back_from_the_store(mut store: Store) {
         let quoted = UrlMother::quoted(url);
         let project = format!("project-{n}");
         let registered = store
-            .source_for(SourceKind::Git, &url.typed, Some("main"), "skills")
+            .source_for(
+                SourceKind::Git,
+                &url.typed,
+                Some("main"),
+                "skills",
+                Kind::Skill,
+            )
             .unwrap();
         store
             .record(
@@ -2072,7 +2182,13 @@ fn no_credential_typed_into_a_url_comes_back_from_the_store(mut store: Store) {
     for (n, url) in every.iter().enumerate() {
         let project = format!("project-{n}");
         let found = store
-            .source(SourceKind::Git, &url.typed, Some("main"), "skills")
+            .source(
+                SourceKind::Git,
+                &url.typed,
+                Some("main"),
+                "skills",
+                Kind::Skill,
+            )
             .unwrap()
             .unwrap_or_else(|| panic!("{} is not found by what was typed", url.clean));
         assert_eq!(found.url, url.clean.as_str());
@@ -2116,10 +2232,10 @@ fn a_url_typed_with_a_credential_and_without_it_is_one_source(mut store: Store) 
     let url = UrlMother::credentialed();
 
     let typed = store
-        .source_for(SourceKind::Git, &url.typed, None, "skills")
+        .source_for(SourceKind::Git, &url.typed, None, "skills", Kind::Skill)
         .unwrap();
     let clean = store
-        .source_for(SourceKind::Git, &url.clean, None, "skills")
+        .source_for(SourceKind::Git, &url.clean, None, "skills", Kind::Skill)
         .unwrap();
 
     store.reopen();
@@ -2173,7 +2289,7 @@ fn every_spelling_of_one_repository_is_one_source(mut store: Store) {
     ];
 
     let registered = store
-        .source_for(SourceKind::Git, &first, None, "skills")
+        .source_for(SourceKind::Git, &first, None, "skills", Kind::Skill)
         .unwrap();
 
     store.reopen();
@@ -2183,7 +2299,7 @@ fn every_spelling_of_one_repository_is_one_source(mut store: Store) {
     for spelling in &spellings {
         assert_eq!(
             store
-                .source(SourceKind::Git, spelling, None, "skills")
+                .source(SourceKind::Git, spelling, None, "skills", Kind::Skill)
                 .unwrap()
                 .as_ref(),
             Some(&registered),
@@ -2191,7 +2307,7 @@ fn every_spelling_of_one_repository_is_one_source(mut store: Store) {
         );
         assert_eq!(
             store
-                .source_for(SourceKind::Git, spelling, None, "skills")
+                .source_for(SourceKind::Git, spelling, None, "skills", Kind::Skill)
                 .unwrap(),
             registered,
             "{spelling}"
@@ -2199,7 +2315,13 @@ fn every_spelling_of_one_repository_is_one_source(mut store: Store) {
     }
     // At a branch, the remote's HEAD being one too, it is a place of its own.
     let main = store
-        .source_for(SourceKind::Git, &spellings[0], Some("main"), "skills")
+        .source_for(
+            SourceKind::Git,
+            &spellings[0],
+            Some("main"),
+            "skills",
+            Kind::Skill,
+        )
         .unwrap();
     assert_ne!(main.id, registered.id);
     assert_eq!(main.name, format!("{owner}-{repository}-2"));
@@ -2240,6 +2362,7 @@ fn marketplace(store: &Store, url: &str) -> Source {
             url,
             None,
             mindweaver_core::DEFAULT_SUBDIRECTORY,
+            Kind::Skill,
         )
         .unwrap()
 }
@@ -2274,7 +2397,9 @@ fn a_marketplace_s_plugin_is_registered_once_by_its_entry_and_never_by_its_coord
     // Its coordinate is a gather's of a source of its own, which finds no
     // plugin there, and nor does the marketplace's kind.
     assert_eq!(
-        store.source(SourceKind::Git, &url, None, &folder).unwrap(),
+        store
+            .source(SourceKind::Git, &url, None, &folder, Kind::Skill)
+            .unwrap(),
         None
     );
     assert_eq!(store.children(market.id).unwrap(), [registered]);
@@ -2286,7 +2411,7 @@ fn plugins_of_one_repository_are_sources_of_their_own_beside_one_gathered_on_its
     let url = UrlMother::https();
     let reference = Some(random::word());
     let alone = store
-        .source_for(SourceKind::Git, &url, reference.as_deref(), "")
+        .source_for(SourceKind::Git, &url, reference.as_deref(), "", Kind::Skill)
         .unwrap();
     let market = marketplace(&store, &url);
     let other = marketplace(&store, &UrlMother::https());
@@ -2316,7 +2441,7 @@ fn plugins_of_one_repository_are_sources_of_their_own_beside_one_gathered_on_its
     assert_eq!(folders.len(), 5, "each has a folder of its own");
     assert_eq!(
         store
-            .source(SourceKind::Git, &url, reference.as_deref(), "")
+            .source(SourceKind::Git, &url, reference.as_deref(), "", Kind::Skill)
             .unwrap(),
         Some(alone)
     );

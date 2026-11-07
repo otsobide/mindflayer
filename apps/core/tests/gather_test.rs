@@ -1726,7 +1726,7 @@ fn a_gather_that_finds_no_folder_leaves_the_revision_its_shelf_came_from() {
     let request = Request::git(url(&source)).from_subdirectory("skills");
     gather::gather(&workspace, &ledger, &request).unwrap();
     let before = ledger
-        .source(SourceKind::Git, &url(&source), None, "skills")
+        .source(SourceKind::Git, &url(&source), None, "skills", Kind::Skill)
         .unwrap();
 
     fs::remove_dir_all(source.path().join("skills")).unwrap();
@@ -1736,7 +1736,7 @@ fn a_gather_that_finds_no_folder_leaves_the_revision_its_shelf_came_from() {
 
     assert!(matches!(error, GatherError::NoSuchFolder { .. }), "{error}");
     let after = ledger
-        .source(SourceKind::Git, &url(&source), None, "skills")
+        .source(SourceKind::Git, &url(&source), None, "skills", Kind::Skill)
         .unwrap();
     assert_eq!(
         after.map(|source| source.revision),
@@ -1777,7 +1777,13 @@ fn the_log_records_a_gather_and_the_source_it_came_from() {
     assert_eq!(history[0].outcome, "ok");
 
     let recorded = ledger
-        .source(SourceKind::Git, &address, None, DEFAULT_SUBDIRECTORY)
+        .source(
+            SourceKind::Git,
+            &address,
+            None,
+            DEFAULT_SUBDIRECTORY,
+            Kind::Skill,
+        )
         .unwrap()
         .expect("the source was registered");
     assert!(recorded.revision.is_some());
@@ -1915,7 +1921,13 @@ fn a_flag_set_before_checkout_leaves_no_shelf_change_and_no_ledger_rows() {
     assert!(ledger.history(10).unwrap().is_empty(), "nothing logged");
     assert_eq!(
         ledger
-            .source(SourceKind::Git, &url(&source), None, DEFAULT_SUBDIRECTORY)
+            .source(
+                SourceKind::Git,
+                &url(&source),
+                None,
+                DEFAULT_SUBDIRECTORY,
+                Kind::Skill
+            )
             .unwrap(),
         None,
         "the source it registered is forgotten"
@@ -1933,7 +1945,13 @@ fn a_cancelled_gather_of_a_known_source_leaves_its_shelf_and_rows_as_they_were()
     let shelf = workspace.gathered_dir(Kind::Skill).join(&first.directory);
     let before = fs::read_to_string(shelf.join("deploy/SKILL.md")).unwrap();
     let recorded = ledger
-        .source(SourceKind::Git, &url(&source), None, DEFAULT_SUBDIRECTORY)
+        .source(
+            SourceKind::Git,
+            &url(&source),
+            None,
+            DEFAULT_SUBDIRECTORY,
+            Kind::Skill,
+        )
         .unwrap();
 
     write_files(
@@ -1969,7 +1987,13 @@ fn a_cancelled_gather_of_a_known_source_leaves_its_shelf_and_rows_as_they_were()
     assert_eq!(gathered[0].summary.as_deref(), Some("Ship it"));
     assert_eq!(
         ledger
-            .source(SourceKind::Git, &url(&source), None, DEFAULT_SUBDIRECTORY)
+            .source(
+                SourceKind::Git,
+                &url(&source),
+                None,
+                DEFAULT_SUBDIRECTORY,
+                Kind::Skill
+            )
             .unwrap(),
         recorded,
         "the revision it was gathered at is the one it still has"
@@ -2113,7 +2137,8 @@ fn a_url_with_a_token_in_it_is_refused_and_the_token_is_kept_nowhere() {
             SourceKind::Git,
             "https://example.com/acme/skills",
             None,
-            DEFAULT_SUBDIRECTORY
+            DEFAULT_SUBDIRECTORY,
+            Kind::Skill
         )
         .unwrap()
         .is_none());

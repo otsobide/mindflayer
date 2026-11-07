@@ -40,6 +40,7 @@ struct Listed {
     directory: String,
     name: String,
     pin: Option<String>,
+    gathers: String,
     gathered_at: Option<i64>,
     artifacts: usize,
     parent: Option<String>,
@@ -131,6 +132,7 @@ fn gather_sources_json_prints_each_source_in_the_envelope() {
     assert!(!listed.directory.is_empty());
     assert!(!listed.name.is_empty());
     assert_eq!(listed.pin, None);
+    assert_eq!(listed.gathers, "skill", "a gather takes skills unless told");
     assert!(listed.gathered_at.is_some_and(|at| at > 0), "{listed:?}");
     assert_eq!(listed.artifacts, 1);
     // A source gathered on its own, the plugin of no marketplace.

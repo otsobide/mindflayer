@@ -1678,6 +1678,7 @@ fn tainted(workspace: &WeaverWorkspace, ledger: &Ledger) -> PathBuf {
             "https://example.com/acme/skills",
             None,
             "skills",
+            Kind::Skill,
         )
         .unwrap();
     rusqlite::Connection::open(workspace.ledger_path())

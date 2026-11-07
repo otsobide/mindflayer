@@ -13,7 +13,7 @@ fn registered(urls: &[String]) -> (tempfile::TempDir, WeaverWorkspace, Ledger, V
     let ledger = workspace.ledger().unwrap();
     for url in urls {
         ledger
-            .source_for(SourceKind::Git, url, None, "skills")
+            .source_for(SourceKind::Git, url, None, "skills", Kind::Skill)
             .unwrap();
     }
     let sources = ledger.sources().unwrap();

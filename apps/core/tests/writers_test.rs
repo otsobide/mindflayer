@@ -636,6 +636,7 @@ fn tainted(workspace: &WeaverWorkspace) -> PathBuf {
             "https://example.com/acme/skills",
             None,
             "skills",
+            Kind::Skill,
         )
         .unwrap();
     drop(ledger);

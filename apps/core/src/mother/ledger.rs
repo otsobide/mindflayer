@@ -17,13 +17,17 @@ use crate::value::{ArtifactName, ContentHash, Origin, Redacted, Revision, Source
 pub struct SourceMother;
 
 impl SourceMother {
-    /// A git source, at a branch or not, last gathered at some revision.
+    /// A git source, at a branch or not, last gathered at some revision,
+    /// for skills or for rules.
     pub fn random() -> Source {
         let reference = random::chance().then(random::word);
-        Self::create(&UrlMother::clean(), reference.as_deref())
+        Source {
+            gathers: random::pick(&[Kind::Skill, Kind::Rule]),
+            ..Self::create(&UrlMother::clean(), reference.as_deref())
+        }
     }
 
-    /// A git source at `url`, asked for at `reference`.
+    /// A git source of skills at `url`, asked for at `reference`.
     pub fn create(url: &str, reference: Option<&str>) -> Source {
         Source {
             id: random::between(1, 1000) as i64,
@@ -35,6 +39,7 @@ impl SourceMother {
             directory: random::word(),
             name: SourceName::derived(&crate::url::canonical(url)),
             pin: random::chance().then(RevisionMother::random),
+            gathers: Kind::Skill,
             parent_id: None,
             entry: None,
         }

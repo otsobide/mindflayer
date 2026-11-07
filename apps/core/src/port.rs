@@ -209,7 +209,8 @@ pub trait LedgerStore: Debug + Send {
     /// The source at this coordinate, if it has been gathered before: the
     /// one whose URL is `url` however it was spelled
     /// ([`crate::url::canonical`]), at the same branch, or at the remote's
-    /// HEAD when `reference` is `None`, and from the same folder. Among the
+    /// HEAD when `reference` is `None`, from the same folder, gathered for
+    /// the same kind of artifact (`gathers`, [`Source::gathers`]). Among the
     /// sources gathered on their own alone: a marketplace's plugin is found
     /// by its entry ([`child`](Self::child)), wherever it is.
     fn source(
@@ -218,6 +219,7 @@ pub trait LedgerStore: Debug + Send {
         url: &str,
         reference: Option<&str>,
         subdirectory: &str,
+        gathers: Kind,
     ) -> Result<Option<Source>, LedgerError>;
 
     /// The source for this coordinate, registering it the first time, as
@@ -234,6 +236,7 @@ pub trait LedgerStore: Debug + Send {
         url: &str,
         reference: Option<&str>,
         subdirectory: &str,
+        gathers: Kind,
     ) -> Result<Source, LedgerError>;
 
     /// The plugin the marketplace `parent`, a source's row id, lists as

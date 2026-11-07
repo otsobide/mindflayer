@@ -2728,6 +2728,13 @@ type derives `Serialize` from the start:
   `gather search --json` prints; the panel reads none of it, so it has no
   TypeScript and no schema, and moves neither `ENVELOPE_VERSION` nor
   `view::FORMAT`.
+- **Named by #111**: the kind of artifact a source's gather takes, as
+  `gathers` on a `ledger::Source`, by the word a command line takes for it
+  (`skill`, `rule`), and so on each shelf row's source, on each of the
+  snapshot's `sources` and in what `gather sources --json` and `gather list
+  --json` print: a name added, which moves neither `ENVELOPE_VERSION` nor
+  `view::FORMAT` ([everything is namespaced by its
+  source](#everything-is-namespaced-by-its-source)).
 - **Not yet**, being older than the rule and handed to no front end so far:
   the ledger's record of an install (`InstallRecord`), and what an update or
   a change of agents would do as each plans it (`update::Plan`,
@@ -3289,8 +3296,9 @@ user ssh logs in as stays there, as `url::redacted` keeps it:
 `alice@host:skills` and `bob@host:skills` are two homes' folders, and one
 repository two logins reach being two sources is the way to be wrong that
 loses nothing. A relative path is an identity of its own, as typed: which folder it
-names depends on where it was typed, which a rule of text cannot know. With the branch, empty for the remote's HEAD, and the folder, that is
-the identity a unique index holds, so a second spelling gathers into the
+names depends on where it was typed, which a rule of text cannot know. With the branch, empty for the remote's HEAD, the folder, and the
+kind of artifact its gather takes (`ledger::Source::gathers`, #111),
+that is the identity a unique index holds, so a second spelling gathers into the
 source the first registered, from the URL typed this time: the spelling
 somebody asks for now, ssh where https needs a credential the helpers lack.
 `owner/repo` is fetched from GitHub (`url::fetched`), as `gh` and Claude
@@ -4182,7 +4190,7 @@ A source's shelf folder is stored rather than derived: two URLs can reduce to
 the same readable name, and where a source's files went is a fact about the
 past that must not move when the naming rule changes.
 
-The schema has had nine versions, each a block in the SQLite store's
+The schema has had ten versions, each a block in the SQLite store's
 migration (`adapter::sqlite::Sqlite::migrate`) and a
 constant beside it:
 
@@ -4252,6 +4260,15 @@ constant beside it:
    the switch that turns them off only outside a transaction, where every
    step runs, and renaming the old table away first follows it with every
    reference to it while they are on.
+10. On `sources`, `gathers`, the kind of artifact a source's gather takes,
+    `skill` or `rule`, held by `sources_by_identity` beside the rest, so
+    one folder of one repository gathered for skills and for rules is two
+    sources, each gathered again for what it took ([everything is
+    namespaced by its source](#everything-is-namespaced-by-its-source),
+    #111). A source of rules keeps its branch in
+    `reference_key` alone, as a plugin does, for the reason version 9
+    gives: version 1's `UNIQUE` would refuse it beside a source of skills
+    from the same folder at the same branch, typed alike.
 
 An older ledger is migrated step by step, so one made two versions ago ends
 where one made today begins, and two rules hold for every step:
@@ -4344,7 +4361,9 @@ but the shelf is a folder anybody can change, and a hash taken of it at the
 step would vouch for bytes no gather placed: the next gather of its source
 fills them in, as an install fills in a missing hash. Version 9 fills in
 nothing: no build before it gathered a marketplace, so every row is a
-source gathered on its own, the entry of none.
+source gathered on its own, the entry of none. Version 10 fills in nothing
+but by the column's default: no build before it gathered anything but
+skills.
 D-04's states (#47) took no step of their own: what tells them apart is the hash each copy was written with, which versions
 3 and 4 keep, and what the place it came from offers now, which is read where
 it is offered rather than kept. A record with no hash is held to its offer

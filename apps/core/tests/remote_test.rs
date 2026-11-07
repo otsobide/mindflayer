@@ -976,7 +976,8 @@ fn a_remote_that_says_it_was_cancelled_leaves_no_source_behind() {
                 SourceKind::Git,
                 &url,
                 None,
-                mindweaver_core::DEFAULT_SUBDIRECTORY
+                mindweaver_core::DEFAULT_SUBDIRECTORY,
+                Kind::Skill
             )
             .unwrap(),
         None,

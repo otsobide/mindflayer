@@ -1273,6 +1273,7 @@ pub fn recorded(
         &url,
         request.source.reference(),
         &request.subdirectory,
+        request.kind,
     )?
     else {
         return Ok(None);
@@ -1306,6 +1307,7 @@ fn recorded_now(
         url,
         request.source.reference(),
         &request.subdirectory,
+        request.kind,
     )?;
     let cache = workspace.cache_dir().join(gather::own_folder(&parent)?);
     let outcome = (|| {
@@ -1474,6 +1476,7 @@ pub fn again(
                 &url,
                 catalog.source.reference(),
                 &catalog.subdirectory,
+                catalog.kind,
             )? {
                 Some(parent) => ledger
                     .children(parent.id)?

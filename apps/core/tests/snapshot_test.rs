@@ -157,7 +157,7 @@ fn fixture() -> Fixture {
         .unwrap();
     let url = "https://github.com/acme/skills";
     let source = ledger
-        .source_for(SourceKind::Git, url, None, "skills")
+        .source_for(SourceKind::Git, url, None, "skills", Kind::Skill)
         .unwrap();
     let revision = "4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5e7b9d1f3";
     ledger.saw_source(source.id, Some(revision), None).unwrap();
@@ -730,7 +730,8 @@ const EXPECTED: &str = r#"{
         "revision": "4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5e7b9d1f3",
         "directory": "github.com-acme-skills",
         "name": "acme-skills",
-        "pin": null
+        "pin": null,
+        "gathers": "skill"
       },
       "upstream_path": "skills/lint",
       "content_hash": "e10778d016e70f703740d34bf328e7b589e0ef16afffed0391c736747c534e19",
@@ -748,6 +749,7 @@ const EXPECTED: &str = r#"{
       "directory": "github.com-acme-skills",
       "name": "acme-skills",
       "pin": null,
+      "gathers": "skill",
       "origin": "https://github.com/acme/skills"
     }
   ],

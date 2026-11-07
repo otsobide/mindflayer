@@ -3225,6 +3225,10 @@
             "description": "The folder this source owns under `.mindweaver/<kind folder>/`.\n\nStored rather than derived: two URLs can reduce to the same readable\nname, and where a source's files went is a fact about the past that\nmust not move when the naming rule changes.",
             "type": "string"
           },
+          "gathers": {
+            "$ref": "#/components/schemas/Kind",
+            "description": "The kind of artifact its gather takes (#111): skills, as every\nsource an older build gathered, or rules, the markdown files of a\nfolder. Part of what makes the source, as its folder is: one folder\nof one repository gathered for skills and for rules is two sources,\neach gathered again for what it took."
+          },
           "kind": {
             "$ref": "#/components/schemas/SourceKind"
           },
@@ -3275,6 +3279,7 @@
           "directory",
           "name",
           "pin",
+          "gathers",
           "origin"
         ],
         "type": "object"
@@ -3503,11 +3508,15 @@
         "type": "object"
       },
       "Source": {
-        "description": "A place artifacts have been gathered from.\n\nWhat it serializes to is a contract, as a status report's is: each field\nby its name, but the row id, and the URL only through [`redacted`]. Its\n`name` was added after the rest (#98), and its `pin` after that (#99),\nwhich moved no version.",
+        "description": "A place artifacts have been gathered from.\n\nWhat it serializes to is a contract, as a status report's is: each field\nby its name, but the row id, and the URL only through [`redacted`]. Its\n`name` was added after the rest (#98), its `pin` after that (#99), and\nwhat it `gathers` after that (#111), which moved no version.",
         "properties": {
           "directory": {
             "description": "The folder this source owns under `.mindweaver/<kind folder>/`.\n\nStored rather than derived: two URLs can reduce to the same readable\nname, and where a source's files went is a fact about the past that\nmust not move when the naming rule changes.",
             "type": "string"
+          },
+          "gathers": {
+            "$ref": "#/components/schemas/Kind",
+            "description": "The kind of artifact its gather takes (#111): skills, as every\nsource an older build gathered, or rules, the markdown files of a\nfolder. Part of what makes the source, as its folder is: one folder\nof one repository gathered for skills and for rules is two sources,\neach gathered again for what it took."
           },
           "kind": {
             "$ref": "#/components/schemas/SourceKind"
@@ -3554,7 +3563,8 @@
           "revision",
           "directory",
           "name",
-          "pin"
+          "pin",
+          "gathers"
         ],
         "type": "object"
       },

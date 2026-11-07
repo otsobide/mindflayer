@@ -105,8 +105,8 @@ crate::described::words! {
 ///
 /// What it serializes to is a contract, as a status report's is: each field
 /// by its name, but the row id, and the URL only through [`redacted`]. Its
-/// `name` was added after the rest (#98), and its `pin` after that (#99),
-/// which moved no version.
+/// `name` was added after the rest (#98), its `pin` after that (#99), and
+/// what it `gathers` after that (#111), which moved no version.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -146,6 +146,12 @@ pub struct Source {
     /// took whatever the branch was at. Not part of what makes the source:
     /// gathered at another pin, or none, it is the same source, moved.
     pub pin: Option<Revision>,
+    /// The kind of artifact its gather takes (#111): skills, as every
+    /// source an older build gathered, or rules, the markdown files of a
+    /// folder. Part of what makes the source, as its folder is: one folder
+    /// of one repository gathered for skills and for rules is two sources,
+    /// each gathered again for what it took.
+    pub gathers: Kind,
     /// The marketplace it is a plugin of, by that source's row id (#103):
     /// `None` for one gathered on its own. Not serialized, as the id is
     /// not; `gather sources` says the marketplace by its name.

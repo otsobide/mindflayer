@@ -619,7 +619,8 @@ These are easy to break from a single file without noticing.
   source is, and naming it.
 - **A gathered source is one repository, called by one name.** A source is
   found by `url::canonical` of its URL, credential-free, at its branch
-  (empty for the remote's HEAD) and from its folder, unique behind
+  (empty for the remote's HEAD), from its folder and for the kind of
+  artifact it gathers (`ledger::Source::gathers`), unique behind
   `sources_by_identity`, so every spelling of one repository gathers into
   one source (D-13); a gather fetches `url::fetched`, `owner/repo` as
   GitHub's. It is called by a `value::SourceName`, `owner-repo`

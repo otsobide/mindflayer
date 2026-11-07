@@ -277,9 +277,10 @@ impl Request {
     }
 
     /// Gather `source` again as the ledger records it was gathered last:
-    /// from its URL, at its branch or tag, out of its folder, at the commit
-    /// it is pinned to when it is one, and under the name it has, which a
-    /// request naming none leaves as it is.
+    /// from its URL, at its branch or tag, out of its folder, for the kind
+    /// of artifact it gathers, at the commit it is pinned to when it is
+    /// one, and under the name it has, which a request naming none leaves
+    /// as it is.
     ///
     /// At its pin, rather than at whatever the branch is at now: a pin is
     /// what the shelf is said to hold for good, moved only by a gather told
@@ -295,7 +296,8 @@ impl Request {
             SourceKind::Git | SourceKind::Marketplace => Request::git(source.url.as_str())
                 .from_subdirectory(source.subdirectory.clone())
                 .at(source.reference.clone())
-                .pinned(source.pin.as_ref().map(|pin| pin.as_str().to_owned())),
+                .pinned(source.pin.as_ref().map(|pin| pin.as_str().to_owned()))
+                .gathering(source.gathers),
         }
     }
 
@@ -325,6 +327,13 @@ impl Request {
     /// the branch is at.
     pub fn pinned(mut self, pin: Option<impl Into<String>>) -> Self {
         self.pin = pin.map(Into::into);
+        self
+    }
+
+    /// Take artifacts of `kind` from the folder searched, rather than
+    /// skills.
+    pub fn gathering(mut self, kind: Kind) -> Self {
+        self.kind = kind;
         self
     }
 
@@ -998,6 +1007,7 @@ pub(crate) fn checked_as(
         &url,
         request.source.reference(),
         &request.subdirectory,
+        request.kind,
     )?;
     // Refused before anything is registered: one name is one source, and
     // which of two a `--from` named is not something to guess.
@@ -1123,6 +1133,7 @@ fn harvest(
         &url,
         request.source.reference(),
         &request.subdirectory,
+        request.kind,
     )?;
     let was = source.name.clone();
     if let Some(name) = name.filter(|name| *name != source.name) {
