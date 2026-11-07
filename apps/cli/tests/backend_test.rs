@@ -306,9 +306,19 @@ fn a_task_shaped_to_escape_is_refused_with_a_code_and_nothing_runs() {
             "path_url",
         ),
         (
-            "a gather",
+            "a gather from a folder named by a file URL",
             json!({"type": "gather", "url": "file:///etc", "folder": "skills", "reference": null}),
-            "gather_unwatched",
+            "path_url",
+        ),
+        (
+            "a gather from a folder named relatively",
+            json!({"type": "gather", "url": "../elsewhere", "folder": "", "reference": null}),
+            "path_relative",
+        ),
+        (
+            "a marketplace inside a `.mindweaver`",
+            json!({"type": "list_plugins", "url": under(root, &[WEAVER_DIR, "cache", "x"]), "folder": "", "reference": null}),
+            "path_in_mindflayer",
         ),
         // What no front end without a terminal runs.
         (
@@ -852,6 +862,176 @@ fn a_task_of_the_local_disk_says_no_progress_and_takes_no_cancel() {
         running.cancel().map_err(|(condition, _)| condition),
         Err(Condition::RunUncancellable)
     );
+}
+
+/// A gather of the repository `source`, on this machine, named by its path
+/// as the panel names one.
+fn gather_of(source: &TempDir) -> Task {
+    task(json!({
+        "type": "gather",
+        "url": source.path().to_str().unwrap(),
+        "folder": "",
+        "reference": null,
+    }))
+}
+
+/// A run as the server hands one over, and every step it is told.
+fn heard() -> (Running, Arc<Mutex<Vec<Progress>>>) {
+    let heard = Arc::new(Mutex::new(Vec::new()));
+    let running = Running::new({
+        let heard = Arc::clone(&heard);
+        move |progress: &Progress| heard.lock().unwrap().push(progress.clone())
+    });
+    (running, heard)
+}
+
+/// A gather the panel sends runs, from a repository on this machine named
+/// by its path, saying each step it takes to the run the server hands it,
+/// connecting first and placing on the shelf last, each as the server
+/// carries it: past placing, a cancel is too late.
+#[test]
+fn a_gather_from_the_panel_says_each_step_it_takes() {
+    let source = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it"))]);
+    let dir = workspace_with_two();
+    let backend = backend(dir.path());
+    let (running, heard) = heard();
+
+    let outcome = Backend::run(&backend.0, gather_of(&source), &running).unwrap();
+
+    assert!(outcome.ok, "{outcome:?}");
+    let heard = heard.lock().unwrap();
+    let steps: Vec<&str> = heard
+        .iter()
+        .map(|progress| progress.step.as_str())
+        .collect();
+    assert_eq!(steps.first(), Some(&"connecting"), "{steps:?}");
+    assert!(steps.contains(&"harvesting"), "{steps:?}");
+    assert_eq!(
+        heard.last(),
+        Some(&Progress {
+            step: String::from("placing"),
+            message: String::from("placing on the shelf 1/1"),
+            done: 1,
+            total: Some(1),
+            cancellable: false,
+        })
+    );
+    for progress in heard.iter() {
+        assert_eq!(
+            progress.cancellable,
+            progress.step != "placing",
+            "{progress:?}"
+        );
+    }
+    let shelf = weaver(dir.path(), &["gather", "list"]).unwrap();
+    assert!(shelf.stdout.contains("deploy"), "{}", shelf.stdout);
+    assert_eq!(
+        running.cancel().map_err(|(condition, _)| condition),
+        Err(Condition::CancelTooLate)
+    );
+}
+
+/// What the shelf and the ledger hold, as the commands that read them say
+/// it, every file on the shelf, and the ledger's log of what was done.
+fn kept(dir: &Path) -> (String, String, BTreeMap<PathBuf, Vec<u8>>, String) {
+    let workspace = WeaverWorkspace::open(dir).unwrap();
+    let ledger = workspace.ledger_for_reading().unwrap();
+    (
+        weaver(dir, &["gather", "list", "--json"]).unwrap().stdout,
+        weaver(dir, &["gather", "sources", "--json"])
+            .unwrap()
+            .stdout,
+        files(&workspace.gathered_dir(Kind::Skill)),
+        format!("{:?}", ledger.history(100).unwrap()),
+    )
+}
+
+/// A cancel the server takes while a gather from the panel runs, as late
+/// as one is honoured, every folder read and nothing placed, stops it: the
+/// run says it was cancelled, and the shelf and the ledger are as they
+/// were, what each lists, every file on the shelf and the log.
+#[test]
+fn a_gather_from_the_panel_cancelled_as_it_goes_leaves_the_shelf_and_the_ledger_as_they_were() {
+    let first = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it"))]);
+    let dir = workspace_with_two();
+    let backend = backend(dir.path());
+    let outcome = Backend::run(&backend.0, gather_of(&first), &Running::default()).unwrap();
+    assert!(outcome.ok, "{outcome:?}");
+    let before = kept(dir.path());
+    let second = repository(&[(
+        "skills/review/SKILL.md",
+        &skill_file("review", "Look first"),
+    )]);
+    // The run asked to stop from where it is heard, as the server's cancel
+    // asks it from beside the writer thread.
+    let slot: Arc<Mutex<Option<Running>>> = Arc::default();
+    let asked = Arc::new(Mutex::new(Vec::new()));
+    let running = Running::new({
+        let (slot, asked) = (Arc::clone(&slot), Arc::clone(&asked));
+        move |progress: &Progress| {
+            if progress.step == "harvesting" && Some(progress.done) == progress.total {
+                let run = slot.lock().unwrap().clone().expect("the run");
+                asked
+                    .lock()
+                    .unwrap()
+                    .push(run.cancel().map_err(|(code, _)| code));
+            }
+        }
+    });
+    *slot.lock().unwrap() = Some(running.clone());
+
+    let outcome = Backend::run(&backend.0, gather_of(&second), &running).unwrap();
+
+    assert_eq!(*asked.lock().unwrap(), [Ok(())]);
+    assert!(!outcome.ok, "{outcome:?}");
+    let said = outcome.runs.last().and_then(|run| run.error.as_ref());
+    assert_eq!(
+        said.map(|said| said.code),
+        Some("gather_cancelled"),
+        "{outcome:?}"
+    );
+    assert_eq!(kept(dir.path()), before);
+}
+
+/// What stays refused from the panel whatever is lifted: a search that
+/// says no step and takes no cancel, and a line naming the address it
+/// fetches from, each before anything is asked of the network.
+#[test]
+fn a_search_and_an_address_a_page_picks_stay_refused_from_the_panel() {
+    let dir = workspace_with_two();
+    let backend = backend(dir.path());
+    let cases = [
+        (
+            json!({"type": "search_skills", "query": "pdf", "at": []}),
+            "gather_unwatched",
+        ),
+        (
+            json!({"type": "search_registry", "query": "weather", "registry": null}),
+            "gather_unwatched",
+        ),
+        (
+            json!({"type": "search_skills", "query": "pdf",
+                   "at": ["skills.sh=http://127.0.0.1:9/"]}),
+            "fetch_address_named",
+        ),
+        (
+            json!({"type": "search_registry", "query": "weather",
+                   "registry": "http://127.0.0.1:9/"}),
+            "fetch_address_named",
+        ),
+        (
+            json!({"type": "import_server", "server": "io.github.acme/weather",
+                   "version": null, "registry": "http://127.0.0.1:9/", "yes": true}),
+            "fetch_address_named",
+        ),
+    ];
+
+    for (sent, code) in cases {
+        let refused = backend.preview(&task(sent.clone())).unwrap_err();
+        assert_eq!(refused.code, code, "{sent}");
+        let refused = backend.run(task(sent.clone())).unwrap_err();
+        assert_eq!(refused.code, code, "{sent}");
+    }
 }
 
 /// Launched on the default workspace before anything made it, the backend

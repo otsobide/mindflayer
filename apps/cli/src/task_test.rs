@@ -1490,22 +1490,8 @@ fn a_front_end_with_no_terminal_refuses_what_draws_edits_activates_gathers_or_sh
         ),
         ("mindweaver activate", Refusal::Shell),
         ("mind weaver activate --shell fish work", Refusal::Shell),
-        (
-            "mindweaver gather git https://example.com/skills.git",
-            Refusal::Unwatched,
-        ),
-        ("mindweaver gather update acme", Refusal::Unwatched),
-        ("mind weaver gather update --all", Refusal::Unwatched),
-        // The catalog alone is the network all the same.
-        (
-            "mindweaver gather marketplace --list acme/market",
-            Refusal::Unwatched,
-        ),
-        (
-            "mind weaver gather marketplace --plugin pdf --plugin docx acme/market",
-            Refusal::Unwatched,
-        ),
-        // The registry's answers are the network too, a read among them.
+        // The registry's answers are the network, a read among them, with
+        // no step said and no cancel looked for.
         ("mindweaver gather mcp search weather", Refusal::Unwatched),
         // The one Mindweaver knows, named as it is, is no other.
         (
@@ -1601,6 +1587,15 @@ fn a_front_end_with_no_terminal_runs_everything_else() {
         "mindweaver gather sources --json",
         "mindweaver gather rename acme team",
         "mindweaver gather remove --yes acme",
+        // A gather says each step and takes a cancel through the watch it
+        // is run with, so it runs: from a repository, a source gathered
+        // again, a marketplace's catalog and its plugins (#112).
+        "mindweaver gather git https://example.com/skills.git",
+        "mind weaver gather git --dry-run --kind rule acme/rules",
+        "mindweaver gather update acme",
+        "mind weaver gather update --all",
+        "mindweaver gather marketplace --list acme/market",
+        "mind weaver gather marketplace --plugin pdf --plugin docx acme/market",
         "mindweaver install -p alpha deploy",
         "mindweaver install --all-projects deploy",
         // Half an install, which opens no screen: the command refuses it
@@ -1639,13 +1634,9 @@ fn a_task_is_refused_for_the_first_of_its_lines_that_is() {
                 registry: Some(_), ..
             } => Some(Refusal::Addressed),
             Task::SearchSkills { at, .. } if !at.is_empty() => Some(Refusal::Addressed),
-            Task::Gather { .. }
-            | Task::UpdateSource { .. }
-            | Task::ListPlugins { .. }
-            | Task::GatherPlugins { .. }
-            | Task::SearchRegistry { .. }
-            | Task::SearchSkills { .. }
-            | Task::ImportServer { .. } => Some(Refusal::Unwatched),
+            Task::SearchRegistry { .. } | Task::SearchSkills { .. } | Task::ImportServer { .. } => {
+                Some(Refusal::Unwatched)
+            }
             Task::Show { .. } => Some(Refusal::Unheld),
             _ => None,
         };

@@ -1365,9 +1365,12 @@ asks a finder at another address that speaks its API, over https, or http
 on this machine, such as a GitHub Enterprise server's
 (`github=https://ghe.example/api/v3`). Directories that need a key of their
 own (SkillsMP, Glama, skills.sh's v1 API) are not asked. A front end with no
-terminal runs no search, as it runs no gather; in the TUI, `f` on the shelf
-searches the finders listed, with no token, and `enter` on a result gathers
-it.
+terminal runs no search, which says nothing of how far it got and takes no
+cancel, where a gather says each step and stops on one, nor ever a line
+with `--finder-url` or `--token-env`, which would have the server fetch
+from an address a page picked or read its own environment; in the TUI, `f`
+on the shelf searches the finders listed, with no token, and `enter` on a
+result gathers it.
 
 ### Keeping the sources
 
@@ -3149,15 +3152,28 @@ Every change is a task, the command lines it is, as the panel's are: `POST
 asks you to confirm (`{"lines": [...], "confirm": [...]}`), `POST
 /api/v1/tasks` to run them, which asks nobody, answered with what each line
 said, `POST /api/v1/switch` with `{"path": "/home/you/Notes"}` to switch to
-a workspace `/api/v1/workspaces` lists, answered with its row, `GET
+a workspace `/api/v1/workspaces` lists, answered with its row, `POST
+/api/v1/commands/cancel` to stop the run under way, a gather, until it
+starts to place on the shelf, answered with the run's lines, `GET
 /api/v1/transcript` for everything the session ran, and `GET
 /api/v1/events` for what happens as it happens, as server-sent events:
 `resync`, to read everything again, first and whenever a reader fell
 behind; right after it `watching`, or `unwatched` with a `reason` when the
 server cannot watch everything, and either again whenever that changes;
 `changed` when something watched changed; `command_started` and
-`command_finished` around each run; and `switched` once the panel acts on
-another workspace, to read everything again.
+`command_finished` around each run, and between them `progress`, each
+step a gather takes, with whether a cancel still stops it; `busy` when a
+run or a switch is sent while a run is under way, and waits its turn
+behind it; and `switched` once the panel acts on another workspace, to
+read everything again.
+
+A gather runs from the API as from a terminal, one at a time on the
+thread every run takes its turn on: from a repository on another machine
+by its URL, or on this one by its absolute path, never a `file://` URL
+nor one with a credential in it. A search of the MCP Registry or the skill
+directories is refused (`gather_unwatched`), since it says nothing of how
+far it got and takes no cancel, and so is any line naming the address it
+fetches from (`fetch_address_named`).
 
 A POST sends its body as JSON, and says so in `Content-Type`, which curl's
 `-d` alone does not (it says a form):
@@ -3198,6 +3214,9 @@ Its status says which kind of thing went wrong, and the code which one:
 | 404 | `unknown_route` | a path no route names, `/api` without its version among them |
 | 404 | Mindweaver's | a read naming what is not there: `not_registered` for an entry, `not_found` for an artifact, `contents_missing` for a file, `browse_missing` for a folder |
 | 405 | `method_not_allowed` | a method the route does not take (with `Allow`) |
+| 409 | `nothing_running` | a cancel with no run under way |
+| 409 | `run_uncancellable` | a cancel of a run that takes none |
+| 409 | `cancel_too_late` | a cancel of a run past the point where one stops it |
 | 413 | `body_too_large` | a body larger than the server reads |
 | 415 | `json_required` | a body not sent as `application/json` |
 | 422 | `invalid_body` | JSON that is not what the route reads |
@@ -4227,9 +4246,10 @@ is left as it is: `--name` gives the server another, refused as `add`
 refuses a name when it breaks the same rules. `--registry` reads a
 registry of your own that speaks the same API, over https, or http on this
 machine, and never with a credential in its address. A front end with no
-terminal runs neither command, as it runs no gather; in the TUI, `r` on
-the shelf searches the registry, and `enter` on a server found shows its
-dry run, `y` writing it.
+terminal runs neither command, which says nothing of how far it got and
+takes no cancel, as a search of the finders does not, nor ever one with
+`--registry`; in the TUI, `r` on the shelf searches the registry, and
+`enter` on a server found shows its dry run, `y` writing it.
 
 ## Upgrading
 

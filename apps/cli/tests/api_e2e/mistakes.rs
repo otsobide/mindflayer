@@ -209,7 +209,25 @@ fn showing_an_artifact_whole_is_refused_for_reading_its_files_one_at_a_time() {
 }
 
 #[test]
-fn a_gather_is_refused_since_only_a_terminal_shows_a_fetch_as_it_goes() {
+fn a_search_is_refused_since_it_says_no_step_and_takes_no_cancel() {
+    let scenario = Scenario::projects(&["api"]);
+    let served = scenario.serve("~/Projects");
+
+    served
+        .post(
+            "/tasks",
+            json!({"type": "search_skills", "query": "pdf", "at": []}),
+        )
+        .refused(
+            422,
+            "gather_unwatched",
+            "`mindweaver gather search pdf` asks over the network with no step to say and no \
+             cancel to take, which only the TUI or a shell waits for",
+        );
+}
+
+#[test]
+fn a_gather_from_a_folder_named_by_a_file_url_is_refused_as_a_url() {
     let scenario = Scenario::projects(&["api"]);
     scenario.source(
         "~/src/acme-skills",
@@ -223,13 +241,13 @@ fn a_gather_is_refused_since_only_a_terminal_shows_a_fetch_as_it_goes() {
     served
         .post(
             "/tasks",
-            json!({"type": "gather", "url": "/home/you/src/acme-skills", "folder": "", "reference": null}),
+            json!({"type": "gather", "url": "file:///home/you/src/acme-skills", "folder": "", "reference": null}),
         )
         .refused(
             422,
-            "gather_unwatched",
-            "`mindweaver gather git /home/you/src/acme-skills` fetches over the network \
-             for as long as that takes, which only the TUI or a shell shows, and stops",
+            "path_url",
+            "`file:///home/you/src/acme-skills` is a URL, not a folder: name a folder by its \
+             absolute path",
         );
     scenario
         .run("~/Projects", "mindweaver gather list")

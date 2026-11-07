@@ -608,7 +608,13 @@ $ curl -s -H "Authorization: Bearer $token" "$api/project?entry=web" | jq .artif
 
 Every task the panel sends is one of these, `Task.json` in [the
 schemas](api/schemas) says each; a task that needs a terminal, one that
-opens an editor or a screen, is refused with a 422 and its code.
+opens an editor or a screen, or a search of the MCP Registry or the skill
+directories, which says nothing of how far it got and takes no cancel, is
+refused with a 422 and its code, and so is one naming the address a line
+fetches from (`fetch_address_named`). A gather names a repository on
+another machine by its URL, or one on this machine by its absolute path,
+never a `file://` URL (`path_url`), and none with a credential in it
+(`credentials_in_url`).
 
 ### What ran
 
@@ -633,9 +639,11 @@ preview are no runs, and are not there.
 
 `POST /commands/cancel` asks the run under way to stop, with no body: what
 it stops is the run [the stream](#following-what-happens) told started and
-has not told finished. A run that takes a cancel stops where it next looks
-for one, its outcome saying so, and the cancel is answered with its
-`lines`. One is refused with a 409, and nothing changes, when nothing runs
+has not told finished. A gather takes one, from a repository (`gather`), a
+source gathered again (`update_source`) or a marketplace (`list_plugins`,
+`gather_plugins`), until it starts to place what it read on the shelf: it
+then stops with nothing placed and nothing recorded, its outcome saying
+so (`gather_cancelled`), and the cancel is answered with its `lines`. One is refused with a 409, and nothing changes, when nothing runs
 (`nothing_running`), when the run under way takes no cancel
 (`run_uncancellable`), or when it is past the point where one stops it,
 as its last `progress` says (`cancel_too_late`):

@@ -92,13 +92,13 @@ impl Admission<'_> {
                 reference,
                 ..
             } => policy::gathered(url, folder, reference.as_deref())?,
-            // The MCP Registry, the network as a gather is, and refused as
-            // one: a server by the name the registry gives it, and a
-            // registry by its URL, name nothing on the disk.
+            // The MCP Registry, the network with no step to say, and refused
+            // for that (`Refusal::Unwatched`), a registry it names for
+            // being one a page picked (`Refusal::Addressed`): a server by
+            // the name the registry gives it names nothing on the disk.
             Task::SearchRegistry { .. } | Task::ImportServer { .. } => {}
-            // The skill directories, the network as a gather is, and
-            // refused as one: a query and a finder's address name nothing
-            // on the disk.
+            // The skill directories, refused as the registry is: a query
+            // and a finder's address name nothing on the disk.
             Task::SearchSkills { .. } => {}
             // A source by its name, which names nothing on the disk: core
             // finds it among those the ledger keeps, gathers it again from

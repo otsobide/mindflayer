@@ -1170,16 +1170,20 @@ pub enum Refusal {
     /// nothing anywhere else.
     #[error("prints code for a shell to run, which only a shell can")]
     Shell,
-    /// `mindweaver gather git`, `gather marketplace`, `gather update`,
-    /// `gather mcp` and `gather search`: the network, for as long as it
-    /// takes, which only a screen that shows how far it got and stops it on
-    /// a key can watch, until #112 brings them to the server. A
-    /// marketplace's `--list` among them, which fetches its catalog, the MCP
-    /// Registry's search and a server written from it, each of which
-    /// fetches what the registry says, and a search of the skill
-    /// directories, which asks each finder.
+    /// `mindweaver gather mcp search`, `gather mcp add` and `gather search`:
+    /// the network, each asking a registry or the skill directories and
+    /// waiting for its answer, within its client's limit, saying no step
+    /// and looking for no cancel, which only a terminal waits on, and stops
+    /// with a Ctrl-C. What is left of it once #112 brought the gathers to
+    /// the server: `gather git`, `gather update` and `gather marketplace`,
+    /// its `--list` among them, say each step through core's watch and
+    /// honour its cancel until they place, so a front end without a
+    /// terminal runs them, shows the steps and offers the cancel
+    /// ([`Task::cancellable`]). A search leaves it on the same terms, once
+    /// it says how far it got and stops on that cancel; `--take`, which
+    /// gathers what a search found, is refused with it.
     #[error(
-        "fetches over the network for as long as that takes, which only the TUI or a shell shows, and stops"
+        "asks over the network with no step to say and no cancel to take, which only the TUI or a shell waits for"
     )]
     Unwatched,
     /// `gather search --token-env`, which reads a token from the
@@ -1304,10 +1308,7 @@ impl Refusal {
                 McpCommand::Search { registry, .. } | McpCommand::Add { registry, .. },
             ))) if registry != registry::OFFICIAL => Some(Refusal::Addressed),
             Some(WeaverCommand::Gather(
-                GatherCommand::Git { .. }
-                | GatherCommand::Marketplace { .. }
-                | GatherCommand::Update { .. }
-                | GatherCommand::Mcp(McpCommand::Search { .. } | McpCommand::Add { .. })
+                GatherCommand::Mcp(McpCommand::Search { .. } | McpCommand::Add { .. })
                 | GatherCommand::Search { .. },
             )) => Some(Refusal::Unwatched),
             #[cfg(feature = "ui")]
@@ -1331,7 +1332,13 @@ impl Refusal {
                 | WeaverCommand::Unload { .. }
                 | WeaverCommand::Scan { .. }
                 | WeaverCommand::Gather(
-                    GatherCommand::List { .. }
+                    // Each says how far it got and takes a cancel through
+                    // the watch it is run with, which a front end without
+                    // a terminal hands over (#112).
+                    GatherCommand::Git { .. }
+                    | GatherCommand::Marketplace { .. }
+                    | GatherCommand::Update { .. }
+                    | GatherCommand::List { .. }
                     | GatherCommand::Sources { .. }
                     | GatherCommand::Rename { .. }
                     | GatherCommand::Remove { .. },

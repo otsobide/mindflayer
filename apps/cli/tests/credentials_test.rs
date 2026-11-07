@@ -347,8 +347,9 @@ mod panel {
         serde_json::from_value(sent.clone()).unwrap_or_else(|error| panic!("{sent}: {error}"))
     }
 
-    /// A gather is refused by a front end with no terminal, and the line its
-    /// refusal names is the one a shell would be shown; an install from a
+    /// A gather naming a source with a credential is refused before a line
+    /// of it is built, with the gather's own code, and said without it, so
+    /// nothing holding it is previewed, told or kept; an install from a
     /// source named with a credential is previewed and run without it.
     #[test]
     fn the_panel_says_no_credential_a_task_carries() {
@@ -363,7 +364,7 @@ mod panel {
                 "reference": random::chance().then(random::word),
             }));
             let refused = Backend::preview(&backend, &gather).unwrap_err();
-            assert_eq!(refused.code, "gather_unwatched", "{:?}", url.typed);
+            assert_eq!(refused.code, "credentials_in_url", "{:?}", url.typed);
             holds_no_secret(&refused.message, &url, "the refusal of a gather");
             assert!(
                 refused.message.contains(&url.clean),

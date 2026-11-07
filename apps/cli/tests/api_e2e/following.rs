@@ -60,6 +60,66 @@ fn a_run_is_told_as_it_starts_and_once_it_finishes_whoever_sent_it() {
     );
 }
 
+/// A gather from the panel says each step it takes between its start and
+/// its finish, each with its lines, connecting first and placing on the
+/// shelf last, past which a cancel is too late; how many of gix's counts
+/// come between is the clone's to say.
+#[test]
+fn a_gather_is_told_step_by_step_between_its_start_and_its_finish() {
+    let scenario = Scenario::projects(&["api"]);
+    scenario.source(
+        "~/src/acme-skills",
+        &[(
+            "pdf/SKILL.md",
+            "---\nname: pdf\ndescription: Read PDFs\n---\n",
+        )],
+    );
+    let served = scenario.serve("~/Projects");
+    let mut stream = served.events();
+    stream.opened();
+
+    served
+        .post(
+            "/tasks",
+            json!({"type": "gather", "url": "/home/you/src/acme-skills", "folder": "", "reference": null}),
+        )
+        .is(200)
+        .answers_at("/outcome/ok", json!(true));
+
+    let told: Vec<Value> = stream
+        .until(is("command_finished"))
+        .into_iter()
+        .filter(|event| event["type"] != "changed")
+        .collect();
+    let lines = json!(["mindweaver -W /home/you/Projects gather git /home/you/src/acme-skills"]);
+    assert_eq!(
+        told.first(),
+        Some(&json!({"type": "command_started", "lines": lines}))
+    );
+    assert_eq!(
+        told.last(),
+        Some(&json!({"type": "command_finished", "lines": lines}))
+    );
+    let steps = &told[1..told.len() - 1];
+    assert!(
+        steps
+            .iter()
+            .all(|event| event["type"] == "progress" && event["lines"] == lines),
+        "{steps:?}"
+    );
+    assert_eq!(steps[0]["progress"]["step"], "connecting");
+    assert_eq!(
+        steps.last().map(|event| &event["progress"]),
+        Some(&json!({
+            "step": "placing",
+            "message": "placing on the shelf 1/1",
+            "done": 1,
+            "total": 1,
+            "cancellable": false,
+        }))
+    );
+}
+
 #[test]
 fn a_change_made_in_a_terminal_is_told_by_the_project_it_reached() {
     let scenario = Scenario::projects(&["api"]);

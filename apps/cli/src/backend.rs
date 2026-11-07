@@ -30,8 +30,14 @@
 //!   and a folder not linked yet by an absolute, normalized path outside
 //!   every `.mindweaver`, shown verbatim.
 //! - **A task no front end without a terminal runs is refused**
-//!   ([`Task::refusal`]): a screen, an editor, a shell's code, a gather, and
-//!   `show`, which prints an artifact whole through any link.
+//!   ([`Task::refusal`]): a screen, an editor, a shell's code, a search of a
+//!   registry or the skill directories, which says no step and takes no
+//!   cancel, a line naming the address it fetches from or reading the
+//!   environment, and `show`, which prints an artifact whole through any
+//!   link.
+//! - **A gather says how far it got, and stops on a cancel**: its steps go
+//!   to the server as `progress`, and a cancel sets its watch's flag, which
+//!   core honours until it places ([`Backend::run`]).
 //! - **A scan walks only the folders the browser names**, each held to the
 //!   path policy as a folder to link is, and is only read: it is asked for
 //!   by hand ([`Query::Scan`]), never with the snapshot, which a live update
