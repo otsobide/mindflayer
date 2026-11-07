@@ -288,7 +288,9 @@ under `apps/` with its own `Makefile`:
   (workspaces, workspaces forget), `artifact` (add, edit, rename, remove,
   templates), `read` (list, show, validate), `status`, `doctor`, `settings`
   (agents, share, targets), `gather` (git, marketplace, list, sources,
-  rename, update, remove), `install`, `update` and `migrate`
+  rename, update, remove), `registry` (gather mcp, the MCP Registry read
+  through the one reqwest transport it builds and hands core),
+  `install`, `update` and `migrate`
   (each at both levels), `adopt` (mindweaver adopt) and `ui` (the panel, at
   both levels).
   `add mcp`'s options for how a server is started or reached are one
@@ -673,7 +675,7 @@ These are easy to break from a single file without noticing.
 - **Reading commands print JSON in one envelope, and its names are a
   contract.** A reading command's `--json` (`list`, `show`, `validate`,
   `templates`, `status` and `doctor` at both levels, `workspaces`, `scan`,
-  `gather list` and `gather sources`) prints `render::json`'s `{"version": 2, "data": ..., "warnings":
+  `gather list`, `gather sources` and `gather mcp search`) prints `render::json`'s `{"version": 2, "data": ..., "warnings":
   [...], "coded_warnings": [...]}`, never a shape of its own, with what its
   text says on stderr as `warning:` lines in `warnings`, the same lines
   with their codes in `coded_warnings`, and the exit status its text has;

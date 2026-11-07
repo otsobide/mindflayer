@@ -7,10 +7,12 @@
 #![allow(dead_code, unused_imports)]
 
 pub mod contract;
+pub mod mcp_registry;
 pub mod mother;
 pub mod panel;
 
 pub use clap::Parser;
+pub use mcp_registry::FixtureRegistry;
 pub use mindweaver_cli::install::state::{Focus, Screen, Step};
 pub use mindweaver_cli::install::{self as install_screen, ui};
 pub use mindweaver_cli::tui;

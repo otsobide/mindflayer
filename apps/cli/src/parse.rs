@@ -11,6 +11,7 @@ use clap::builder::{PossibleValuesParser, StringValueParser, TypedValueParser};
 use clap::error::ErrorKind;
 use clap::{ArgGroup, Args, Parser, Subcommand};
 use mindweaver_core::mcp::{self, Address, Program};
+use mindweaver_core::registry;
 use mindweaver_core::scan::DEFAULT_DEPTH;
 use mindweaver_core::value::{InputName, VariableName};
 use mindweaver_core::{Agent, Kind, Share, Shell};
@@ -1640,6 +1641,36 @@ pub enum GatherCommand {
     /// its URL, the branch or tag and the commit it is pinned to, how many
     /// skills it holds and when it was last gathered.
     Sources {
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Search the MCP Registry for servers.
+    #[command(subcommand)]
+    Mcp(McpCommand),
+}
+
+/// What `gather mcp` does with the MCP Registry, read from the official
+/// registry unless `--registry` names another.
+#[derive(Debug, Subcommand)]
+pub enum McpCommand {
+    /// List the servers the registry finds for a query: each by the name
+    /// the registry gives it, its latest version, its status and what it
+    /// is for.
+    ///
+    /// Nothing is written but the answers the workspace keeps, where it is
+    /// made, to ask whether they changed next time.
+    Search {
+        /// What to look for, which the registry matches against servers'
+        /// names; empty lists every server.
+        query: String,
+
+        /// The registry to read: https, or http on this machine.
+        #[arg(long, value_name = "URL", default_value = registry::OFFICIAL)]
+        registry: String,
+
         /// Print it as JSON, in the envelope every reading command's --json
         /// shares.
         #[arg(long)]

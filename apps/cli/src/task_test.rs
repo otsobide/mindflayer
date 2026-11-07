@@ -1459,6 +1459,12 @@ fn a_front_end_with_no_terminal_refuses_what_draws_edits_activates_gathers_or_sh
             "mind weaver gather marketplace --plugin pdf --plugin docx acme/market",
             Refusal::Unwatched,
         ),
+        // The registry's answers are the network too, a read among them.
+        ("mindweaver gather mcp search weather", Refusal::Unwatched),
+        (
+            "mind weaver gather mcp search --json --registry https://registry.example weather",
+            Refusal::Unwatched,
+        ),
         ("mind show deploy", Refusal::Unheld),
         ("mind -C alpha show --json rule:style", Refusal::Unheld),
         ("mindweaver show -p alpha deploy", Refusal::Unheld),
