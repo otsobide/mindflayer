@@ -366,6 +366,32 @@ with a warning. In the TUI, `m` on the shelf lists a marketplace's plugins
 to tick. [The reference](docs/reference.md#from-a-plugin-marketplace) has
 the rest.
 
+## Searching for skills
+
+`mindweaver gather search pdf` asks the skill directories your workspace
+lists what they find for `pdf`, and lists each skill by its name, its
+repository and folder, its installs or stars, and the directories that found
+it; `--take 2` gathers the second, from its repository's folder, as `gather
+git --path` would. A directory only helps find a skill: what is taken comes
+from git, so one that changes or goes away breaks nothing on the shelf.
+
+Each directory is off until `weaver.toml` lists it, and one not listed is
+never asked:
+
+```toml
+finders = ["github", "skills.sh", "claude-plugins.dev"]
+```
+
+`github` is GitHub's documented code search, asked only with a token:
+`--token-env GITHUB_TOKEN` names the variable holding one, which goes to
+GitHub alone and is never kept. `skills.sh` and `claude-plugins.dev` are
+**best-effort and unstable**: their APIs are undocumented, read as they
+answer today, so one that changes is a warning beside the others' results.
+Read each service's terms before you list it. In the TUI, `f` on the shelf
+searches, and `enter` gathers a result. [Searching the skill
+directories](docs/reference.md#searching-the-skill-directories) has the
+rest.
+
 ## MCP servers
 
 The library keeps the MCP servers your projects use beside its skills and

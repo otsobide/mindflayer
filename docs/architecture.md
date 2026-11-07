@@ -2376,7 +2376,11 @@ A key that an older build can read past without misreading anything moves no
 version: `known`, the list of [the workspaces this machine
 knows](#the-workspaces-this-machine-knows) that the default workspace keeps,
 says nothing about the workspace holding it, and every edit of a marker keeps
-a key it does not know.
+a key it does not know. Nor did `finders`, the skill directories `gather
+search` may ask ([the skill directories](#the-skill-directories)): a build
+from before it never searches, reads past it, and keeps it, with the
+comment somebody wrote above it, whenever it edits the marker through
+`toml_edit`.
 
 An older marker is read the way it was written, never refused, and moved
 forward only when somebody asks: a workspace's own folders by `mindweaver migrate
@@ -2465,7 +2469,8 @@ the shelf is filled from ([a source's own
 commands](#a-sources-own-commands)), and `gather mcp search --json` (#107)
 the MCP Registry's `registry::Listing` ([the MCP
 Registry](#the-mcp-registry)), a read type #106 made and pinned, so no
-name moved. One shape
+name moved, and `gather search --json` (#108) what the skill directories
+found, `finder::Found` ([the skill directories](#the-skill-directories)). One shape
 is one parser for a script, and for the panel's backend when it reads
 through the CLI.
 
@@ -2716,6 +2721,13 @@ type derives `Serialize` from the start:
   (#107) prints the `Listing` in the envelope, the one of them a command
   prints; the panel reads none, so they have no TypeScript and no schema,
   and move neither `ENVELOPE_VERSION` nor `view::FORMAT`.
+- **Found in the skill directories by #108**: what a search found
+  (`finder::Found`), each result (`finder::Hit`), a finder by its name
+  (`Finder::name`, serialized by hand), and what failed, each a
+  `code::Said` ([the skill directories](#the-skill-directories)), which
+  `gather search --json` prints; the panel reads none of it, so it has no
+  TypeScript and no schema, and moves neither `ENVELOPE_VERSION` nor
+  `view::FORMAT`.
 - **Not yet**, being older than the rule and handed to no front end so far:
   the ledger's record of an install (`InstallRecord`), and what an update or
   a change of agents would do as each plans it (`update::Plan`,
@@ -4381,8 +4393,8 @@ limits, whichever transport brought it. The default transport is
 builds, with rustls, so a catalog adds no crate and no second TLS. It is
 handed to the client as a parameter, never found in a global or the
 environment. The MCP Registry is the first catalog read through it (#106,
-[the MCP Registry](#the-mcp-registry)), and the skill directories wait
-(#108).
+[the MCP Registry](#the-mcp-registry)), and the skill directories the
+second (#108, [the skill directories](#the-skill-directories)).
 
 Everything blocks, as the rest of core does. A blocking client fits a
 synchronous core, and the server already runs what its backend does on
@@ -4645,6 +4657,104 @@ search as a command line reads what the line found, as the TUI does
 the line fetched, and the screen reads what it kept, rather than reading
 the line's text back or asking the registry again on the thread that
 draws. A workspace not made yet has no cache, so nothing is kept to read.
+
+### The skill directories
+
+`mindweaver gather search` asks the skill directories what they find for a
+query (#108, [D-15](#d-15-skill-search-is-github-plus-opt-in-finders)), each
+a **finder** (`finder::Finder`, in `apps/core/src/finder.rs`): GitHub's code
+search, for a `SKILL.md` matching the query, its documented REST API; and
+skills.sh's `/api/search` and api.claude-plugins.dev's
+`/api/skills/search`, marked unstable (`Finder::is_unstable`), since
+neither is documented and each is read as it answers today, from the shape
+the clients that use them read, written into this repository's fixtures by
+hand. A finder only helps find a skill: each result names a repository and
+a folder in it, and what is taken of it is gathered from git, as `gather
+git --path` gathers it, so a directory whose answers change, or that goes
+away, breaks nothing on the shelf, and its failure is a warning. A finder
+is never a source: nothing it says is recorded but what the gather that
+takes it records.
+
+**Off until listed.** A finder is asked only when the workspace's marker
+lists it, `finders = ["github", "skills.sh", "claude-plugins.dev"]`, which
+nothing but a person writes (`finder::enabled`), since two of them are
+services whose terms the person reads first (D-15). `--finder` asks those it
+names alone, each listed, one that is not refused before any is asked
+(`finder_not_enabled`), and none listed is refused too
+(`finder_none_enabled`). A name this build does not know is passed over and
+said (`finder_unknown`), rather than refused, so a marker a later build
+listed a finder of its own in still reads. The key moves no
+`WEAVER_FORMAT_VERSION`, as `known` did not ([formats are
+versioned](#formats-are-versioned)). Directories that need a key of their
+own, SkillsMP, Glama and skills.sh's v1 API, are not finders (D-15).
+
+**Through the client, a token only to GitHub.** Each finder is asked
+through the `Client` its caller hands over (`finder::Search`), one page of
+`PER_FINDER` results, twenty, at its own address unless the caller names
+another that speaks its API (`Search::at`, `--finder-url`, a GitHub
+Enterprise server's `/api/v3` among them, read by `finder::located`), so
+whether answers are kept, and over which transport, is the caller's, and a
+test's is a fake or a server on 127.0.0.1. GitHub's code search answers no
+request without a token, so it is asked only with one, which a front end
+supplies for one search as a `finder::Token`, a value with no `Display` and
+no `Serialize`, whose `Debug` says only that it is one: the CLI reads it
+from the variable `--token-env` names
+([D-16](#d-16-credentials-come-from-the-front-end-never-from-a-prompt)'s
+option, the one #110 gives `gather git`), since core never reads the
+environment, and core sends it as a credential (`Request::credential`),
+which goes to the origin the request named alone, past a redirect
+elsewhere, and keeps the request out of the cache both ways ([answers kept
+on disk](#answers-kept-on-disk)). Without one, GitHub is skipped, sent
+nothing, and said with a hint that fails nothing (`Found::skipped`); a
+variable named that is not set is a warning (`token_env_unset`). `gh auth
+token` is #110's.
+
+**What they answer is untrusted.** An answer is read a result at a time,
+as a registry's is: one whose shape this build does not read, an
+undocumented API that changed, is a failure of that finder alone
+(`finder_answer_unreadable`) beside what the others found; one that cannot
+be reached, is not JSON or is rate limited is the client's error, carried
+(`http_rate_limited` saying when the limit resets, when the answer says).
+A result is dropped and said (`finder_result_dropped`) unless it resolves
+to a git source `gather git` would take: a repository it names, read by
+`url::address` so a tree URL's branch and folder are its own, with no
+credential in it, which is never repeated, a folder that does not climb out
+of it (`gather::outside`), and none of them with a control character in
+it. A repository on this machine, a path, is taken from a finder on this
+machine alone (`http::on_this_machine`), one of a person's own or a test's:
+a service elsewhere naming one would have a gather put on the shelf whatever
+a folder here holds, as a marketplace's catalog may not. Every string a
+front end is handed is made printable. A result two finders name is listed
+once (`Found::add`), by its repository as `url::canonical` spells every
+spelling of it and its folder, with each finder that found it and the
+counts each gave; the results come in `Finder::ALL`'s order, GitHub's
+first, each finder's in the order it ranked them, which is what `--take N`
+counts by (`Found::take`). What was found serializes as `finder::Found`,
+its results each a `finder::Hit`, by name ([the read types
+serialize](#the-read-types-serialize)).
+
+`mindweaver gather search QUERY` prints a row a result, numbered, `--json`
+the `Found` in the envelope; a failure, a dropped result and the cache
+failing are each a warning with its code, which fails it as a failure
+collected does. It is a read, resolved without making the workspace, its
+answers kept only in the cache of one that is made, and builds the one
+reqwest transport `gather mcp` builds. `--take N` gathers the result listed
+`N` instead, a write that makes the workspace as a gather does, through the
+gather's own request (`Request::addressed`) and `gather::gather`, saying
+first the `gather git` line it amounts to, spelled by the task module
+(`Task::Gather`), so it can be read, or run again, without searching. The
+number is the result's as this search lists it, so a finder that answers
+differently can move it; one it does not list is refused
+(`search_result_missing`) before anything is written. A front end with no
+terminal runs neither, as it runs no gather (`Refusal::Unwatched`).
+
+A search made once is read again from the answers the cache kept of it
+(`finder::kept`), as a registry's is: the same finders, through a client
+whose transport sends nothing, every entry fresh. GitHub's answers to a
+token were never kept, so a search read again skips GitHub, and a finder
+whose answer the cache does not keep is left out; one keeping none is no
+listing at all. It is how the TUI reads what its search line found ([a
+skill search from the shelf](#a-skill-search-from-the-shelf)).
 
 ## Installing
 
@@ -6672,9 +6782,10 @@ editors.
 A gather is the network, and with a source gathered again from the
 shelf's page (`Task::UpdateSource`, `gather update`), a marketplace's
 catalog listed or the plugins ticked of it gathered (`Task::ListPlugins`,
-`Task::GatherPlugins`, `gather marketplace`), and the MCP Registry searched
+`Task::GatherPlugins`, `gather marketplace`), the MCP Registry searched
 or a server of it written (`Task::SearchRegistry`, `Task::ImportServer`,
-`gather mcp`), the one task that runs apart (`Task::runs_apart`). `step` starts its lines on a thread of their own and
+`gather mcp`), and the skill directories searched (`Task::SearchSkills`,
+`gather search`), the one task that runs apart (`Task::runs_apart`). `step` starts its lines on a thread of their own and
 returns at once, with a [watch](#following-a-gather-and-stopping-it) whose
 steps come back over a channel. Before each frame the loop calls `settle`,
 which takes in the last step and, once the task is over, shows what came of it
@@ -6743,6 +6854,39 @@ official one, which is all the form sends: the screen has no option for
 another, and a test names the one it serves on 127.0.0.1, so the whole
 path, the search, what it kept, the dry run and the write, runs offline
 through the lines the screen runs.
+
+### A skill search from the shelf
+
+The skill directories are searched from the shelf's page too (#108): `f`
+opens a form for what to look for, and enter runs `gather search <query>`
+(`Task::SearchSkills`), apart, asking every finder the marker lists. Once
+it is over, `conclude` reads what the search found through core, from the
+answers its line kept in the workspace's cache (`finder::kept`), as a
+registry search is read ([a registry search from the
+shelf](#a-registry-search-from-the-shelf)). Each result is listed by its
+number, name, repository, folder and finders, and enter on one runs the
+`gather git` line that names it exactly, its repository, its folder after
+`--path` and the branch a finder named after `--ref` (`Task::Gather`), the
+line `gather search --take` says it amounts to, apart, as any gather runs,
+cancellable as one is, and kept in the transcript. The line it runs names
+the result rather than its number: `gather search --take N` would search
+again, and a finder that answered differently would move the number to
+another skill than the one on screen.
+
+The search line sends no token, and the form asks for none: what GitHub's
+code search answers a token is never kept ([answers kept on
+disk](#answers-kept-on-disk)), so the screen could not read it back, and
+the line skips GitHub, saying so, which the screen counts among the lines
+beside what it lists. GitHub's search is the command line's, with
+`--token-env` (an [open question](#open-questions)). A workspace not made
+yet has no cache, nor one listing no finder anything to keep, and its
+search is shown as the line's text to read, with nothing to take. The
+search takes no cancel, as a registry's does not. A task carries the
+finders' addresses its line names (`--finder-url`), none from the form,
+so a test names the finders it serves on 127.0.0.1 and the search, what it
+kept and the take run offline through the lines the screen runs. The
+shelf's keys are said in a word or two each (`u update`, `U all`, `m
+plugins`) so `f skills` fits beside them on a terminal 110 columns wide.
 
 ### What it asks before it writes
 
@@ -12799,6 +12943,10 @@ and `adapter::reqwest::Reqwest`, the default transport, on the reqwest
 `Cargo.lock` already held, with a connect timeout and the request's own
 total timeout.
 
+#108 reads the skill directories through it too ([the skill
+directories](#the-skill-directories)), and adds what the client says of a
+rate limit (`http_rate_limited`, `http::Reset`).
+
 #106 is the first catalog read through it ([the MCP
 Registry](#the-mcp-registry)): `registry::Registry`, handed the client,
 reads the registry's `/v0.1` API at the address its caller names, the
@@ -12821,6 +12969,16 @@ finder only returns addresses that resolve to git sources, so an endpoint that
 changes breaks nothing already gathered, and its failure is a warning.
 Rejected: GitHub alone, and no finders at all, both of which leave the skill
 directories out (vision point 5). Unblocks #108.
+
+Carried out by #108 ([the skill directories](#the-skill-directories)): the
+three finders, each off until `weaver.toml` lists it in `finders`, GitHub
+asked only with a token `--token-env` names, sent to its origin alone and
+kept nowhere, and the other two marked unstable and read best-effort; a
+finder's failure, a changed shape or a rate limit a warning beside the
+rest; and a result taken (`--take`, the TUI's `enter`) gathered from its
+repository's folder as `gather git --path` gathers it. Nothing in the
+repository lists the two unstable ones, its examples and fixtures included:
+listing them is for whoever has read those services' terms.
 
 ### D-16: Credentials come from the front end, never from a prompt
 
@@ -13219,7 +13377,21 @@ it once as it closes.
   ([D-16](#d-16-credentials-come-from-the-front-end-never-from-a-prompt)),
   and waits for somebody behind one to say which settings it takes: `gather
   mcp` (#107), the first command that fetches over HTTP, reads none, and
-  neither will the skill directories (#108) until then.
+  neither does `gather search` (#108).
+- **The unstable finders' shapes.** skills.sh's and
+  api.claude-plugins.dev's answers are read in the shape their own clients
+  read today, and the fixtures are written by hand to it, since no test or
+  run here reaches either service ([the skill
+  directories](#the-skill-directories)): a real answer is the owner's to
+  record once the terms are read. An answer in another shape fails that
+  finder alone, with a warning, so the cost of being wrong is a search
+  that says so.
+- **GitHub's code search in the TUI.** The TUI's search sends no token,
+  since what a token unlocked is never kept and so could not be read back
+  ([a skill search from the shelf](#a-skill-search-from-the-shelf));
+  searching GitHub there waits for a way to hand the screen what the line
+  found that keeps nothing on disk, or for #110's providers to say where a
+  token comes from for a front end with no shell of its own.
 - **The ledger's port is shaped by the store it came from.** `LedgerStore`
   is the SQLite store's public methods as they were
   ([values, ports and adapters](#values-ports-and-adapters)), so a second

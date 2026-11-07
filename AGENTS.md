@@ -263,7 +263,13 @@ under `apps/` with its own `Makefile`:
   version mapped to a definition, written nowhere: its first package that
   maps a program, or its first remote an address, its inputs read from the
   environment, and what nothing here starts a coded manual step
-  (`ServerVersion::import`, `registry/import.rs`)). Each, as the ledger's store and the clock, goes
+  (`ServerVersion::import`, `registry/import.rs`); and the skill
+  directories `gather search` asks, each a finder, GitHub's code search
+  with a token and two unstable ones, off until the marker lists it in
+  `finders`, a result kept only when it names a git source `gather git`
+  would take, what two name listed once, and a search read again from
+  the cache (`finder`, `finder::kept`, each finder's request and the shape
+  it answers in under `finder/`)). Each, as the ledger's store and the clock, goes
   through a port (`port`: a `Remote` a gather fetches through, an `Http` a
   client sends through, a `LedgerStore` the ledger keeps its records in, a
   `Clock` it stamps them by), each
@@ -290,7 +296,9 @@ under `apps/` with its own `Makefile`:
   templates), `read` (list, show, validate), `status`, `doctor`, `settings`
   (agents, share, targets), `gather` (git, marketplace, list, sources,
   rename, update, remove), `registry` (gather mcp, the MCP Registry read
-  through the one reqwest transport it builds and hands core),
+  through the one reqwest transport it builds and hands core), `search`
+  (gather search, the skill directories asked through the same transport,
+  the token `--token-env` names read from the environment, and `--take`),
   `install`, `update` and `migrate`
   (each at both levels), `adopt` (mindweaver adopt) and `ui` (the panel, at
   both levels).
@@ -676,7 +684,7 @@ These are easy to break from a single file without noticing.
 - **Reading commands print JSON in one envelope, and its names are a
   contract.** A reading command's `--json` (`list`, `show`, `validate`,
   `templates`, `status` and `doctor` at both levels, `workspaces`, `scan`,
-  `gather list`, `gather sources` and `gather mcp search`) prints `render::json`'s `{"version": 2, "data": ..., "warnings":
+  `gather list`, `gather sources`, `gather mcp search` and `gather search`) prints `render::json`'s `{"version": 2, "data": ..., "warnings":
   [...], "coded_warnings": [...]}`, never a shape of its own, with what its
   text says on stderr as `warning:` lines in `warnings`, the same lines
   with their codes in `coded_warnings`, and the exit status its text has;
@@ -1213,6 +1221,17 @@ These are easy to break from a single file without noticing.
     as an option or as more than one word is never written into one, and a
     package of another registry than the one its program reads is never
     started as one of the same name (each a `registry::Manual`).
+  - What a skill directory answers (`finder`) is read a result at a time:
+    an answer in a shape this build does not read fails that finder alone
+    (`finder_answer_unreadable`), beside the others' results, and a result
+    is dropped and said (`finder_result_dropped`) unless it names a git
+    source `gather git` would take, a repository with no credential in it,
+    never repeated, and a folder that does not climb out of it; a folder on
+    this machine only from a finder on this machine
+    (`http::on_this_machine`). A finder is asked only when the marker
+    lists it (`finder::enabled`), and never asked otherwise, and a result
+    is taken by the `gather git` line that names it (`Task::Gather`),
+    never by what the finder says beyond its repository and folder.
   - Symlinks are followed only inside the source (`copy::tree`'s `within`),
     and a rule offered for install that leads out of the workspace offering
     it is refused (`InstallError::Outside`). A gathered skill's licence
@@ -1325,7 +1344,13 @@ These are easy to break from a single file without noticing.
   where the answer repeats it (a next page's `Link`), so a key goes in a
   header and never a query; it takes no answer to a request with a
   credential, and no source is given its folder (`LedgerStore::source_for`,
-  `gather::own_folder`).
+  `gather::own_folder`). A token a front end hands over (`finder::Token`,
+  GitHub's for its code search, read by the CLI from the variable
+  `--token-env` names) is such a credential, for one search: it has no
+  `Display` and no `Serialize`, is never printed, logged or kept, and the
+  TUI's search sends none, since what it unlocked could not be read back.
+  A rate limit is its own error (`http_rate_limited`), saying when it
+  resets if the answer says, never waited out.
 - **Formats are versioned.** Each marker carries its own `version`
   (`MIND_FORMAT_VERSION` for a project's, `WEAVER_FORMAT_VERSION` for
   `weaver.toml`, so bumping one never makes older builds refuse the other)
@@ -1353,7 +1378,8 @@ These are easy to break from a single file without noticing.
   reading old files the way they were written, and move one forward only
   when asked, never on a read (`mindweaver migrate --library`, `mind migrate`).
   A key an older build reads past without misreading anything moves no
-  version, as the default workspace's `known` did not.
+  version, as the default workspace's `known` did not, nor `finders`, the
+  skill directories `gather search` may ask, which only a person writes.
   - A ledger schema step is one more block in the SQLite store's migration
     (`adapter::sqlite::Sqlite::migrate`), which takes
     the write lock, copies the file to `mindweaver.db.v<old>.bak`
@@ -1817,7 +1843,13 @@ These are easy to break from a single file without noticing.
   in their own process (`common::FixtureRegistry`), named with
   `--registry` or a task's `registry`, so a command, the TUI's lines and a
   spawned binary alike reach nothing else, and none names the official
-  registry. A CLI fixture's project is a repository given
+  registry. The skill directories' are answered the same way: core's suite
+  by a fake `Http` that records every request it is sent, headers and all,
+  from fixtures written by hand in `tests/fixtures/finders/`, and the CLI's
+  by a server for each finder on 127.0.0.1 (`common::finders`), a port each so
+  each is an origin of its own, named with `--finder-url` or a task's `at`;
+  a test that sends a token spawns the binary with the variable set for it
+  alone, and the token is a word made up there, never a real one. A CLI fixture's project is a repository given
   `mind init` (`common::new_project`), so a local install keeps its copies out
   of git rather than saying on stderr that nothing does, and where an install
   puts its copies is asked of core (`common::copies`). A test about what a
