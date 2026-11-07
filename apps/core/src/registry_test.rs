@@ -286,3 +286,33 @@ fn a_listing_serializes_what_it_could_not_read_by_code() {
         })
     );
 }
+
+#[test]
+fn a_version_found_serializes_what_went_wrong_with_the_cache_by_code() {
+    let found = Found {
+        server: read(response(
+            json!({ "name": "io.github.acme/a", "version": "1", "description": "A" }),
+            json!({ "status": "active" }),
+        ))
+        .unwrap(),
+        warnings: vec![HttpError::CacheUnreadable {
+            path: std::path::PathBuf::from("cache/http/entry.json"),
+            detail: Redacted::new("not JSON"),
+        }],
+    };
+
+    let json = serde_json::to_value(&found).unwrap();
+
+    assert_eq!(
+        json.as_object().unwrap().keys().collect::<Vec<_>>(),
+        ["server", "warnings"]
+    );
+    assert_eq!(json["server"], serde_json::to_value(&found.server).unwrap());
+    assert_eq!(
+        json["warnings"],
+        json!([{
+            "code": "http_cache_unreadable",
+            "message": "cache/http/entry.json: a kept HTTP answer that cannot be read, so it is fetched again: not JSON",
+        }])
+    );
+}

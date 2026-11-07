@@ -256,12 +256,6 @@ pub struct Listing {
 /// name its field has.
 impl Serialize for Listing {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let said = |errors: &[HttpError]| -> Vec<Said> {
-            errors
-                .iter()
-                .map(|error| Said::of(error.code(), error))
-                .collect()
-        };
         let mut listing = serializer.serialize_struct("Listing", 4)?;
         listing.serialize_field("servers", &self.servers)?;
         listing.serialize_field(
@@ -285,8 +279,28 @@ impl Serialize for Listing {
 /// on the way.
 #[derive(Debug)]
 pub struct Found {
+    /// The server version.
     pub server: ServerVersion,
+    /// What went wrong with the cache on the way, which did not stop it.
     pub warnings: Vec<HttpError>,
+}
+
+/// By hand, as [`Listing`] is: what went wrong is errors, each a [`Said`].
+impl Serialize for Found {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut found = serializer.serialize_struct("Found", 2)?;
+        found.serialize_field("server", &self.server)?;
+        found.serialize_field("warnings", &said(&self.warnings))?;
+        found.end()
+    }
+}
+
+/// Each of `errors` as its code and its message.
+fn said(errors: &[HttpError]) -> Vec<Said> {
+    errors
+        .iter()
+        .map(|error| Said::of(error.code(), error))
+        .collect()
 }
 
 /// One version of one server, as the registry listed it.

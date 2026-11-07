@@ -2672,7 +2672,8 @@ type derives `Serialize` from the start:
 - **Read from the MCP Registry by #106**, for #107's commands to print: a
   server version as a listing shows it (`registry::ServerVersion`, its
   `registry::Status` by the registry's word, the `server.json` it was read
-  from serialized nowhere), a `registry::Listing`, and what one maps to
+  from serialized nowhere), a `registry::Listing`, one version fetched by
+  name (`registry::Found`), and what one maps to
   (`registry::Imported`, the definition as its file's text), each written
   by hand where a field is an error, a server that could not be read, a
   manual step or a warning, each a `code::Said` ([the MCP
@@ -4559,8 +4560,9 @@ the status in the server's own document, which is read when the metadata
 says none. Each server read is stamped with when it was read
 (`ServerVersion::fetched_at`, by a `Clock`), which what is imported says
 it was fetched at. A listing serializes as the read type it is
-(`ServerVersion`, `Listing`, each name pinned by a test), what it could
-not read and what went wrong as `code::Said`; the `server.json` it was
+(`ServerVersion`, `Listing`, and `Found` for one version, each name pinned
+by a test), what it could not read and what went wrong as `code::Said`;
+the `server.json` it was
 read from is kept beside it, for the mapping, and serialized nowhere.
 
 ## Installing
