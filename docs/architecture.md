@@ -1369,7 +1369,9 @@ registry does give, a URL's variables (2025-12-11) among them, is an input
 where it stands, its `kind` the place it is written in. One the registry
 gives a fixed value for, and that is no secret, is that value written in
 its place. `isRequired` is `required`, and `isSecret` is `secret`, a
-variable of a secret value a secret too. Nothing the registry gives for a
+variable of a secret value a secret too, and a variable two values of one
+place name one input, a secret or required when either says so, whichever
+the registry lists first. Nothing the registry gives for a
 secret is written: a `default`, a `placeholder` (its example), or a fixed
 value, each left out and said (`registry_secret_dropped`), the secret read
 from the environment as one given no value is. A default or an example of

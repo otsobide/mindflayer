@@ -450,14 +450,24 @@ struct Draft {
 
 impl Draft {
     /// Declare `input`, once: a variable the registry names in two values
-    /// of one place is one input.
+    /// of one place is one input, a secret when either says it is and
+    /// required when either does. Merged rather than the first kept, or the
+    /// order the registry lists them in would decide whether a secret is
+    /// one.
     fn declare(&mut self, input: Input) {
-        if !self
+        match self
             .inputs
-            .iter()
-            .any(|each| each.name == input.name && each.kind == input.kind)
+            .iter_mut()
+            .find(|each| each.name == input.name && each.kind == input.kind)
         {
-            self.inputs.push(input);
+            Some(declared) => {
+                declared.secret |= input.secret;
+                declared.required |= input.required;
+                if declared.description.is_none() {
+                    declared.description = input.description;
+                }
+            }
+            None => self.inputs.push(input),
         }
     }
 

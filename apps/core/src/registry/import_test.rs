@@ -442,6 +442,69 @@ fn a_variable_of_a_secret_is_a_secret_and_its_fixed_value_is_left_out() {
     assert!(!definition.text().contains("baked-into-the-registry"));
 }
 
+/// A variable two values name is one input, a secret when either says it
+/// is, whichever of them the registry lists first.
+#[test]
+fn a_variable_named_twice_is_a_secret_when_either_place_says_so() {
+    let remote = |headers: Value| {
+        version(json!({
+            "name": "io.github.acme/twice",
+            "description": "A server",
+            "version": "1",
+            "remotes": [{
+                "type": "streamable-http",
+                "url": "https://mcp.acme.example",
+                "headers": headers,
+            }],
+        }))
+    };
+    let plain = json!({
+        "name": "X-Api-Key",
+        "value": "{api_key}",
+        "variables": { "api_key": { "description": "The key" } },
+    });
+    let secret = json!({
+        "name": "Authorization",
+        "value": "Bearer {api_key}",
+        "isSecret": true,
+        "variables": { "api_key": { "isRequired": true } },
+    });
+    let packaged_env = |variables: Value| {
+        packaged(
+            "io.github.acme/twice",
+            json!([{
+                "registryType": "npm",
+                "identifier": "@acme/twice",
+                "environmentVariables": variables,
+            }]),
+        )
+    };
+    let whole = json!({ "name": "TOKEN", "description": "The token" });
+    let bearer = json!({
+        "name": "AUTH",
+        "value": "Bearer {TOKEN}",
+        "isSecret": true,
+        "variables": { "TOKEN": { "isRequired": true } },
+    });
+
+    for (server, name, description) in [
+        (remote(json!([plain, secret])), "api_key", "The key"),
+        (remote(json!([secret, plain])), "api_key", "The key"),
+        (packaged_env(json!([whole, bearer])), "TOKEN", "The token"),
+        (packaged_env(json!([bearer, whole])), "TOKEN", "The token"),
+    ] {
+        let imported = server.import(None);
+
+        let definition = imported.definition.as_ref().expect("a definition");
+        assert_eq!(definition.inputs.len(), 1, "{definition:?}");
+        let input = &definition.inputs[0];
+        assert_eq!(input.name, name);
+        assert!(input.secret, "{name}");
+        assert!(input.required, "{name}");
+        assert_eq!(input.description.as_deref(), Some(description));
+    }
+}
+
 #[test]
 fn a_variable_is_named_as_every_agent_refers_to_one() {
     for (name, variable) in [
