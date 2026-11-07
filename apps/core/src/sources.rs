@@ -418,8 +418,10 @@ fn folders_of(workspace: &WeaverWorkspace, source: &Source) -> Result<Vec<PathBu
     let mut folders = vec![workspace.cache_dir().join(&source.directory)];
     for kind in Kind::ALL {
         match kind {
-            Kind::Skill => folders.push(workspace.gathered_dir(kind).join(&source.directory)),
-            Kind::Rule | Kind::Mcp => {}
+            Kind::Skill | Kind::Rule => {
+                folders.push(workspace.gathered_dir(kind).join(&source.directory))
+            }
+            Kind::Mcp => {}
         }
     }
     folders.retain(|folder| folder.symlink_metadata().is_ok());

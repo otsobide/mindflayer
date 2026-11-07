@@ -380,6 +380,77 @@ fn a_removal_takes_its_folders_and_rows_and_leaves_what_was_installed_recorded()
         .is_file());
 }
 
+/// A source of rules (#111) is removed as one of skills is: its clone and
+/// its folder on the rules' shelf go, and a rule installed from it stays,
+/// recorded, its origin said and its source gone.
+#[test]
+fn a_source_of_rules_is_removed_with_its_shelf_and_leaves_what_was_installed_from_it() {
+    let rules = repository(&[("rules/git/no-force-push.md", "Never force-push.\n")]);
+    let (dir, mut workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    gather::gather(
+        &workspace,
+        &ledger,
+        &Request::git(url(&rules))
+            .from_subdirectory("rules")
+            .gathering(Kind::Rule)
+            .named(Some("team-rules")),
+    )
+    .unwrap();
+    let root = dir.path().join("collapse");
+    fs::create_dir(&root).unwrap();
+    let (project, _) =
+        MindProject::init_settings(&root, &Agent::ALL, Share::Shared, &Directories::default())
+            .unwrap();
+    workspace.link(&project).unwrap();
+    let parts = assign::install(
+        &workspace,
+        std::slice::from_ref(&project),
+        &Reference::parse("git/no-force-push"),
+        Some("team-rules"),
+        workspace.root(),
+        &AgentHomes::default(),
+        Edits::Kept,
+        Confirmed::Yes,
+    )
+    .unwrap()
+    .parts;
+    assert!(parts.iter().all(|part| part
+        .done
+        .as_ref()
+        .is_ok_and(|offered| offered.installed.is_ok())));
+    let source = sources::named(&ledger, "team-rules").unwrap();
+    let shelf = workspace.gathered_dir(Kind::Rule).join(&source.directory);
+
+    let planned = sources::plan_removal(&workspace, &ledger, "team-rules").unwrap();
+
+    assert_eq!(
+        planned.folders,
+        [workspace.cache_dir().join(&source.directory), shelf.clone()]
+    );
+    assert_eq!(planned.artifacts, 1);
+    let installed: Vec<(Kind, String)> = planned
+        .installed
+        .iter()
+        .map(|from| (from.kind, from.name.to_string()))
+        .collect();
+    assert_eq!(installed, [(Kind::Rule, String::from("git/no-force-push"))]);
+
+    sources::remove(&workspace, &ledger, "team-rules").unwrap();
+
+    assert!(!shelf.exists());
+    assert!(ledger.sources().unwrap().is_empty());
+    let record = ledger
+        .installation(project.name(), Kind::Rule, "git/no-force-push")
+        .unwrap()
+        .expect("still recorded");
+    assert_eq!(record.source_id, None);
+    assert_eq!(record.origin, Some(source.origin()));
+    assert!(fs::read_to_string(project.root().join("AGENTS.md"))
+        .unwrap()
+        .contains("Never force-push."));
+}
+
 #[test]
 fn a_folder_on_the_shelf_no_source_is_called_is_never_removed() {
     let (_dir, workspace, ledger, _acme, _other) = two_gathered();

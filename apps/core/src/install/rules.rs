@@ -709,6 +709,10 @@ struct Wanted {
     /// The rule's file as written, which its file for Claude holds whole.
     bytes: Vec<u8>,
     origin: Origin,
+    /// The source it was gathered from, for a rule on the shelf (#111), as
+    /// a skill's install points at one: what `gather remove` says it would
+    /// leave orphaned, and nulls when it goes.
+    source_id: Option<i64>,
     before: Option<InstallRecord>,
 }
 
@@ -729,10 +733,15 @@ impl Wanted {
                 source,
             })
         })?;
+        let source_id = match offer {
+            Offer::Shelf(gathered) => Some(gathered.source.id),
+            Offer::Workspace { .. } | Offer::Loaded { .. } => None,
+        };
         Ok(Wanted {
             artifact,
             bytes,
             origin: offer.origin(),
+            source_id,
             before,
         })
     }
@@ -773,7 +782,7 @@ impl Wanted {
         InstallRecord {
             kind: Kind::Rule,
             name: ArtifactName::from(self.name()),
-            source_id: None,
+            source_id: self.source_id,
             origin: Some(self.origin.clone()),
             content_hash: self
                 .before
@@ -1284,7 +1293,7 @@ fn render_held(
             InstallRecord {
                 kind: Kind::Rule,
                 name: ArtifactName::from(name),
-                source_id: None,
+                source_id: rule.source_id,
                 origin: Some(rule.origin.clone()),
                 content_hash,
                 targets,
@@ -1673,7 +1682,7 @@ fn copy_in_held(
         &InstallRecord {
             kind,
             name: name.clone(),
-            source_id: None,
+            source_id: rule.source_id,
             origin: Some(rule.origin.clone()),
             content_hash: Some(held.clone()),
             targets: targets

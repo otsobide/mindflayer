@@ -553,6 +553,43 @@ fn the_shelf_is_read_source_by_source_and_found_as_it_is_now() {
     assert!(Catalog::discover_gathered(&workspace, &[Kind::Rule]).is_empty());
 }
 
+/// Rules on the shelf (#111) are read source by source too, each named by
+/// its route from its source's folder, as a project's are from its rules
+/// folder.
+#[test]
+fn the_shelf_s_rules_are_read_source_by_source_each_named_by_its_route() {
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = mindweaver_core::WeaverWorkspace::init(dir.path()).unwrap();
+    let shelf = workspace.gathered_dir(Kind::Rule);
+    for (route, contents) in [
+        ("acme-rules/git/commits.md", "Imperative subjects.\n"),
+        ("acme-rules/style.md", "Write plainly.\n"),
+        ("other-rules/style.md", "Write briefly.\n"),
+    ] {
+        let file = shelf.join(route);
+        fs::create_dir_all(file.parent().unwrap()).unwrap();
+        fs::write(file, contents).unwrap();
+    }
+
+    let catalog = Catalog::discover_gathered(&workspace, &[Kind::Rule]);
+
+    let found: Vec<(&str, PathBuf)> = catalog
+        .artifacts()
+        .iter()
+        .map(|artifact| (artifact.name().as_str(), artifact.path().to_path_buf()))
+        .collect();
+    assert_eq!(
+        found,
+        [
+            ("git/commits", shelf.join("acme-rules/git/commits.md")),
+            ("style", shelf.join("acme-rules/style.md")),
+            ("style", shelf.join("other-rules/style.md")),
+        ]
+    );
+    assert!(catalog.failures().is_empty(), "{:?}", catalog.failures());
+    assert!(Catalog::discover_gathered(&workspace, &[Kind::Skill]).is_empty());
+}
+
 #[test]
 fn a_workspace_that_never_gathered_has_an_empty_shelf_and_no_failure() {
     let dir = TempDir::new().unwrap();

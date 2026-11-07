@@ -635,6 +635,149 @@ fn record(route: &str, source: &str, targets: Vec<Target>) -> InstallRecord {
     }
 }
 
+impl Fixture {
+    /// The rules of a repository holding `files`, gathered from its `rules`
+    /// folder onto the shelf as the source `team-rules` (#111): the
+    /// repository, kept for as long as the source is to be gathered again.
+    fn gathered(&self, files: &[(&str, &str)]) -> TempDir {
+        let source = common::repository(files);
+        mindweaver_core::gather::gather(
+            &self.workspace,
+            &self.ledger,
+            &mindweaver_core::gather::Request::git(common::url(&source))
+                .from_subdirectory("rules")
+                .gathering(Kind::Rule)
+                .named(Some("team-rules")),
+        )
+        .unwrap();
+        source
+    }
+}
+
+/// A rule gathered onto the shelf is installed as one of the workspace's
+/// own is (#45): a section of the block in `AGENTS.md`, or, about some
+/// files only, a file for Claude alone, recorded from where it was
+/// gathered, its source among it.
+#[test]
+fn a_shelf_rule_reaches_the_block_or_claude_s_folder_and_records_its_source() {
+    let fixture = fixture(Share::Shared, &Agent::ALL);
+    let _source = fixture.gathered(&[
+        ("rules/git/no-force-push.md", NO_FORCE_PUSH),
+        ("rules/rust/errors.md", SCOPED),
+    ]);
+    let source = mindweaver_core::sources::named(&fixture.ledger, "team-rules").unwrap();
+
+    let block = fixture.install("git/no-force-push");
+    let file = fixture.install("rust/errors");
+
+    assert!(
+        matches!(&block.installed, Installed::Added { paths, .. } if *paths == [fixture.agents_md()]),
+        "{block:?}"
+    );
+    assert!(
+        matches!(&file.installed, Installed::Added { name, .. } if name == "rust/errors"),
+        "{file:?}"
+    );
+    assert_eq!(
+        fixture.text(),
+        format!(
+            "<!-- mindweaver:begin -->\n\
+             <!-- mindweaver:rule git/no-force-push -->\n{NO_FORCE_PUSH}\
+             <!-- mindweaver:end -->\n"
+        )
+    );
+    assert_eq!(
+        fs::read_to_string(fixture.claude_file("rust/errors")).unwrap(),
+        SCOPED
+    );
+    let recorded: Vec<(String, Option<i64>, Option<String>)> = fixture
+        .records()
+        .into_iter()
+        .map(|record| {
+            (
+                record.name.to_string(),
+                record.source_id,
+                record.origin.map(|origin| origin.to_string()),
+            )
+        })
+        .collect();
+    let origin = Some(source.origin().to_string());
+    assert_eq!(
+        recorded,
+        [
+            (
+                String::from("git/no-force-push"),
+                Some(source.id),
+                origin.clone()
+            ),
+            (String::from("rust/errors"), Some(source.id), origin),
+        ]
+    );
+    assert_eq!(fixture.standing("git/no-force-push"), Standing::Current);
+    assert_eq!(fixture.standing("rust/errors"), Standing::Current);
+}
+
+/// What a source of rules gathers again moves an installed rule's standing,
+/// and an update brings it to what the shelf holds now, as a skill's does.
+#[test]
+fn a_shelf_rule_its_source_changed_is_outdated_until_an_update_and_orphaned_once_dropped() {
+    let fixture = fixture(Share::Shared, &Agent::ALL);
+    let source = fixture.gathered(&[
+        ("rules/git/no-force-push.md", NO_FORCE_PUSH),
+        ("rules/review/tone.md", TONE),
+    ]);
+    fixture.install("git/no-force-push");
+    fixture.install("review/tone");
+
+    fs::write(
+        source.path().join("rules/git/no-force-push.md"),
+        "Never force-push a shared branch.\n",
+    )
+    .unwrap();
+    fs::remove_file(source.path().join("rules/review/tone.md")).unwrap();
+    common::commit(source.path());
+    mindweaver_core::sources::update(
+        &fixture.workspace,
+        &fixture.ledger,
+        mindweaver_core::sources::Which::Every,
+        &mindweaver_core::gather::Watch::new(),
+    )
+    .unwrap();
+
+    assert_eq!(fixture.standing("git/no-force-push"), Standing::Outdated);
+    assert_eq!(fixture.standing("review/tone"), Standing::Orphaned);
+}
+
+/// A project a `mind.toml` marks is given a shelf rule as it is given one
+/// of the workspace's own: a copy, filed by its route.
+#[test]
+fn a_project_a_mind_toml_marks_gets_a_copy_of_a_shelf_rule_filed_by_its_route() {
+    let (_dir, workspace, project, ledger) = older();
+    let source = common::repository(&[("rules/git/no-force-push.md", NO_FORCE_PUSH)]);
+    mindweaver_core::gather::gather(
+        &workspace,
+        &ledger,
+        &mindweaver_core::gather::Request::git(common::url(&source))
+            .from_subdirectory("rules")
+            .gathering(Kind::Rule),
+    )
+    .unwrap();
+
+    let added = put(&workspace, &ledger, &project, "git/no-force-push");
+
+    let copy = copy_of(&project, "git/no-force-push");
+    assert!(
+        matches!(&added, Installed::Added { paths, .. } if *paths == [copy.clone()]),
+        "{added:?}"
+    );
+    assert_eq!(fs::read_to_string(copy).unwrap(), NO_FORCE_PUSH);
+    let record = ledger
+        .installation(project.name(), Kind::Rule, "git/no-force-push")
+        .unwrap()
+        .unwrap();
+    assert!(record.source_id.is_some(), "{record:?}");
+}
+
 #[test]
 fn two_rules_rendered_again_and_one_taken_out_leave_the_block_and_the_ledger_alike() {
     let fixture = fixture(Share::Shared, &Agent::ALL);
