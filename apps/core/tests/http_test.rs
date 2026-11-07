@@ -506,6 +506,86 @@ fn a_status_that_is_not_a_success_is_a_failure() {
     }
 }
 
+/// A `429` is a rate limit whatever else it says, and so is a `403` with no
+/// request left or a wait asked for, as GitHub's API answers each of its
+/// limits; when it resets is said as the answer says it, a wait before a
+/// time, and that it does not say when it says nothing.
+#[test]
+fn a_rate_limit_is_said_as_one_with_when_it_resets() {
+    // A status, the headers it comes with, and what is said of its reset.
+    type Case<'a> = (u16, &'a [(&'a str, &'a str)], &'a str);
+    let cases: [Case; 6] = [
+        (429, &[("Retry-After", "60")], ": it resets in 60 seconds"),
+        (429, &[("Retry-After", "1")], ": it resets in 1 second"),
+        (
+            403,
+            &[
+                ("X-RateLimit-Remaining", "0"),
+                ("X-RateLimit-Reset", "1794043800"),
+            ],
+            ": it resets at 2026-11-07T09:30:00Z",
+        ),
+        (
+            403,
+            &[("Retry-After", "30"), ("X-RateLimit-Reset", "1794043800")],
+            ": it resets in 30 seconds",
+        ),
+        (
+            429,
+            &[("Retry-After", "Sat, 07 Nov 2026 09:30:00 GMT\r\n")],
+            ": it resets at Sat, 07 Nov 2026 09:30:00 GMT",
+        ),
+        (429, &[], ", and the answer does not say until when"),
+    ];
+    for (status, headers, resets) in cases {
+        let reply = headers
+            .iter()
+            .fold(Reply::status(status, "{}"), |reply, (name, value)| {
+                reply.with(name, value)
+            });
+        let fake = Fake::new().answering(CATALOG, reply);
+
+        let error = Client::new(&fake)
+            .get(&Request::get(CATALOG))
+            .unwrap_err()
+            .error;
+
+        assert_eq!(error.code(), "http_rate_limited", "{status} {headers:?}");
+        assert_eq!(
+            error.to_string(),
+            format!("{CATALOG}: rate limited (HTTP {status}){resets}")
+        );
+    }
+}
+
+/// A `403` that says nothing of a limit is a refusal like any other: a
+/// token without the right is not one to wait out.
+#[test]
+fn a_403_with_requests_left_is_no_rate_limit() {
+    let cases: [&[(&str, &str)]; 2] = [
+        &[],
+        &[
+            ("X-RateLimit-Remaining", "12"),
+            ("X-RateLimit-Reset", "1794043800"),
+        ],
+    ];
+    for headers in cases {
+        let reply = headers
+            .iter()
+            .fold(Reply::status(403, "{}"), |reply, (name, value)| {
+                reply.with(name, value)
+            });
+        let fake = Fake::new().answering(CATALOG, reply);
+
+        let error = Client::new(&fake)
+            .get(&Request::get(CATALOG))
+            .unwrap_err()
+            .error;
+
+        assert_eq!(error.code(), "http_status_unsuccessful", "{headers:?}");
+    }
+}
+
 #[test]
 fn a_url_refused_is_never_sent() {
     let fake = Fake::new();

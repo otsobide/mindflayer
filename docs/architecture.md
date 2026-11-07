@@ -4449,8 +4449,17 @@ so a key in a header of a service's own naming would have gone along.
 Every failure is an `HttpError`, each with a code of its own (`http_*`): a
 timeout (`http_timed_out`), a body past the cap (`http_too_large`), a
 connection not made (`http_connect_failed`), a status that is not a success
-(`http_status_unsuccessful`), a redirect refused or one too many, a body
-that is not the JSON a caller declared (`http_json_invalid`). Every URL in
+(`http_status_unsuccessful`), a rate limit (`http_rate_limited`), a redirect
+refused or one too many, a body that is not the JSON a caller declared
+(`http_json_invalid`). A rate limit is a `429`, or a `403` that says it is
+one, no request left (`X-RateLimit-Remaining: 0`) or a wait asked for
+(`Retry-After`), as GitHub's API answers each of its limits; a `403` that
+says neither is a refusal like any other, a token without the right. When
+it resets is said as the answer says it, from `Retry-After`, a wait in
+seconds or a date, then `X-RateLimit-Reset`, seconds since the epoch, the
+order GitHub asks a caller to read them in, and that the answer does not
+say when it says neither (`http::Reset`). Said rather than waited out: a
+command that slept for an hour on a front end's behalf would look hung. Every URL in
 one, every word a transport or serde said among them, is a `Redacted`
 ([values, ports and adapters](#values-ports-and-adapters)): a transport's
 words can quote the URL it failed on, and serde's a string of the body

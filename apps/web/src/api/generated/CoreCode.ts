@@ -227,6 +227,7 @@ export type CoreCode =
   | "http_timed_out"
   | "http_too_large"
   | "http_status_unsuccessful"
+  | "http_rate_limited"
   | "http_redirect_refused"
   | "http_too_many_redirects"
   | "http_json_invalid"

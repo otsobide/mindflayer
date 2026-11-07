@@ -33,6 +33,7 @@ use thiserror::Error;
 
 use crate::code::codes;
 use crate::port::Http;
+use crate::text::{printable, Utc};
 use crate::url::carries_credentials;
 use crate::value::Redacted;
 
@@ -506,6 +507,13 @@ impl<'a> Client<'a> {
 
         let unchanged = asking && answer.status == 304;
         if !(200..300).contains(&answer.status) && !unchanged {
+            if let Some(resets) = rate_limited(&answer) {
+                return Err(HttpError::RateLimited {
+                    url: Redacted::new(url),
+                    status: answer.status,
+                    resets,
+                });
+            }
             return Err(HttpError::Status {
                 url: Redacted::new(url),
                 status: answer.status,
@@ -670,6 +678,80 @@ pub(crate) fn fetchable(url: &str) -> Result<Url, HttpError> {
     }
 }
 
+/// Whether `answer` is a rate limit, and when it resets if it says.
+///
+/// A `429` is one by its status (RFC 6585), and a `403` when it says it is:
+/// no request left (`X-RateLimit-Remaining: 0`), or a wait asked for
+/// (`Retry-After`), which is how GitHub's API answers a limit, its first
+/// and its second. A `403` that says neither is a refusal like any other,
+/// a token without the right, and said as the status it is.
+///
+/// When it resets is read from `Retry-After` first, a wait in seconds or a
+/// date, then from `X-RateLimit-Reset`, seconds since the epoch, the order
+/// GitHub asks a caller to read them in. Said rather than waited for: a
+/// command that slept for an hour on a front end's behalf would look like
+/// one that hung.
+fn rate_limited(answer: &Answer) -> Option<Option<Reset>> {
+    let none_left = answer
+        .headers
+        .get("x-ratelimit-remaining")
+        .is_some_and(|left| left.trim() == "0");
+    let retry_after = answer.headers.get("retry-after");
+    let limited =
+        answer.status == 429 || (answer.status == 403 && (none_left || retry_after.is_some()));
+    if !limited {
+        return None;
+    }
+    let after = retry_after
+        .map(str::trim)
+        .filter(|after| !after.is_empty())
+        .map(|after| match after.parse::<u64>() {
+            Ok(seconds) => Reset::After(seconds),
+            Err(_) => Reset::Said(printable(after)),
+        });
+    let at = || {
+        answer
+            .headers
+            .get("x-ratelimit-reset")
+            .and_then(|at| at.trim().parse::<i64>().ok())
+            .map(|at| Reset::At(Utc::of(at)))
+    };
+    Some(after.or_else(at))
+}
+
+/// When a rate limit lets a request through again, as its answer said.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Reset {
+    /// After this many seconds, as `Retry-After` counts them.
+    After(u64),
+    /// At this time, as `X-RateLimit-Reset` gives it, in seconds since the
+    /// epoch.
+    At(Utc),
+    /// At a date `Retry-After` gave as HTTP writes one, as it was written,
+    /// printable: read as what it says, rather than parsed into a time that
+    /// a date in another form would be said wrong as.
+    Said(String),
+}
+
+impl fmt::Display for Reset {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Reset::After(1) => f.write_str("in 1 second"),
+            Reset::After(seconds) => write!(f, "in {seconds} seconds"),
+            Reset::At(at) => write!(f, "at {at}"),
+            Reset::Said(said) => write!(f, "at {said}"),
+        }
+    }
+}
+
+/// What a rate limit's message says of when it resets.
+fn resetting(resets: &Option<Reset>) -> String {
+    match resets {
+        Some(resets) => format!(": it resets {resets}"),
+        None => String::from(", and the answer does not say until when"),
+    }
+}
+
 /// Where `answer` sends the request on to, if it is a redirect.
 ///
 /// A redirect status without a `Location` is no redirect: there is nowhere
@@ -762,6 +844,15 @@ pub enum HttpError {
     /// An answer whose status is not a success.
     #[error("{url}: the server answered HTTP {status}")]
     Status { url: Redacted, status: u16 },
+    /// An answer that says the server takes no more requests for now: a
+    /// `429`, or a `403` that says so (`rate_limited`), and when that
+    /// resets, when it says.
+    #[error("{url}: rate limited (HTTP {status}){}", resetting(.resets))]
+    RateLimited {
+        url: Redacted,
+        status: u16,
+        resets: Option<Reset>,
+    },
     /// A redirect `followed` refuses: to plain http elsewhere than this
     /// machine, to another scheme, to a URL with credentials in it, or to
     /// what is not a URL.
@@ -804,6 +895,7 @@ codes!(HttpError {
     Self::Timeout { .. } => "http_timed_out",
     Self::TooLarge { .. } => "http_too_large",
     Self::Status { .. } => "http_status_unsuccessful",
+    Self::RateLimited { .. } => "http_rate_limited",
     Self::Redirect { .. } => "http_redirect_refused",
     Self::TooManyRedirects { .. } => "http_too_many_redirects",
     Self::Json { .. } => "http_json_invalid",
